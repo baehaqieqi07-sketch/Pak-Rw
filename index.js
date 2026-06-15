@@ -1,0 +1,18790 @@
+// DNS FIX untuk MongoDB Atlas SRV di Windows / DisCloud
+try {
+  const dns = require("node:dns");
+  dns.setServers(["1.1.1.1", "8.8.8.8"]);
+  console.log("🌐 DNS resolver aktif untuk MongoDB Atlas.");
+} catch (err) {
+  console.log("⚠️ DNS resolver gagal diset:", err.message);
+}
+require("dotenv").config();
+
+const fs = require("fs");
+const path = require("path");
+const crypto = require("crypto");
+const axios = require("axios");
+
+const express = require("express");
+const {
+  Client,
+  GatewayIntentBits,
+  Events,
+  EmbedBuilder,
+  ActivityType,
+  ChannelType,
+  PermissionsBitField,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  AttachmentBuilder
+} = require("discord.js");
+
+const config = require("./config.json");
+
+let CanvasKit = null;
+try {
+  CanvasKit = require("@napi-rs/canvas");
+} catch {
+  CanvasKit = null;
+}
+
+const { askAI } = require("./ai/brain");
+const { isCooldown, getRemaining } = require("./utils/cooldown");
+const {
+  initMongoStore,
+  isMongoActive,
+  readStore,
+  writeStore,
+  saveMemberSnapshot,
+  markMemberLeft,
+  snapshotGuildMembers,
+  getMongoStatus
+} = require("./db/mongoStore");
+
+const app = express();
+
+
+app.use(express.urlencoded({ extended: true, limit: "8mb" }));
+app.use(express.json({ limit: "8mb" }));
+
+// DisCloud mode: dashboard dimatikan default agar bot Discord bisa stabil 24/7 tanpa web runtime.
+// Aktifkan lagi nanti dengan DASHBOARD_ENABLED=true.
+const isDashboardEnabled = String(process.env.DASHBOARD_ENABLED || "false").toLowerCase() === "true";
+
+
+const dashboardSecret = process.env.DASHBOARD_SECRET || process.env.DISCORD_TOKEN || "bekiw-dashboard-secret";
+const dashboardPassword = process.env.DASHBOARD_PASSWORD || "desatulus";
+const dashboardSessions = new Set();
+
+function makeSessionToken() {
+  return crypto.randomBytes(24).toString("hex");
+}
+
+function getCookie(req, name) {
+  const raw = req.headers.cookie || "";
+  const parts = raw.split(";").map((x) => x.trim());
+  const found = parts.find((x) => x.startsWith(`${name}=`));
+  return found ? decodeURIComponent(found.slice(name.length + 1)) : "";
+}
+
+function isDashboardAuth(req) {
+  const token = getCookie(req, "bekiw_dashboard");
+  return Boolean(token && dashboardSessions.has(token));
+}
+
+function requireDashboardAuth(req, res, next) {
+  if (isDashboardAuth(req)) return next();
+  return res.redirect("/login");
+}
+
+function getDashboardConfigPath() {
+  const localConfigPath = path.join(__dirname, "config.json");
+
+  const candidates = [
+    process.env.PAK_RW_CONFIG_PATH,
+    process.env.PAK_RW_DATA_DIR ? path.join(process.env.PAK_RW_DATA_DIR, "config.json") : null,
+    process.env.DATA_DIR ? path.join(process.env.DATA_DIR, "config.json") : null,
+    localConfigPath
+  ].filter(Boolean);
+
+  for (const filePath of candidates) {
+    try {
+      const dir = path.dirname(filePath);
+      fs.mkdirSync(dir, { recursive: true });
+
+      if (fs.existsSync(filePath)) return filePath;
+
+      // Kalau pakai folder persistent /data tapi config belum ada,
+      // copy config repo pertama kali supaya dashboard tetap punya isi awal.
+      if (filePath !== localConfigPath && fs.existsSync(localConfigPath)) {
+        fs.copyFileSync(localConfigPath, filePath);
+        return filePath;
+      }
+    } catch {
+      // Coba lokasi berikutnya
+    }
+  }
+
+  return localConfigPath;
+}
+
+function readConfigFile() {
+  try {
+    const configPath = getDashboardConfigPath();
+    return JSON.parse(fs.readFileSync(configPath, "utf8"));
+  } catch (err) {
+    console.log("READ CONFIG ERROR:", err.message);
+    return {};
+  }
+}
+
+function syncLiveConfig(data = {}) {
+  try {
+    for (const key of Object.keys(config)) delete config[key];
+    Object.assign(config, data);
+  } catch (err) {
+    console.log("SYNC CONFIG ERROR:", err.message);
+  }
+}
+
+function writeConfigFile(data) {
+  const configPath = getDashboardConfigPath();
+  fs.writeFileSync(configPath, JSON.stringify(data, null, 2), "utf8");
+  syncLiveConfig(data);
+  console.log(`✅ Dashboard config saved + live reloaded: ${configPath}`);
+}
+
+syncLiveConfig(readConfigFile());
+
+function escapeHtml(input = "") {
+  return String(input)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+
+// Discord tidak merender custom animated emoji jika ditulis sebagai teks di embed footer.
+// Solusi aman: footer text tetap rapi, emoji DESA TULUS dipasang sebagai footer icon dari CDN emoji Discord.
+const OT_FOOTER_EMOJI = "<a:desatulus:1513686597584031804>";
+const OT_FOOTER_EMOJI_ID = "1513686597584031804";
+const OT_FOOTER_ICON_URL = `https://cdn.discordapp.com/emojis/${OT_FOOTER_EMOJI_ID}.gif?size=44&quality=lossless`;
+const OT_FOOTER_PREFIX = "DESA TULUS";
+
+function makeOTFooter(text = "") {
+  const raw = String(text || "").trim();
+  if (!raw) return OT_FOOTER_PREFIX;
+
+  let cleaned = raw
+    .replaceAll(OT_FOOTER_EMOJI, "")
+    .replace(new RegExp(`https://cdn\.discordapp\.com/emojis/${OT_FOOTER_EMOJI_ID}\.[a-z?=&0-9]+`, "gi"), "")
+    .replace(/^DESA TULUS\s*[•|\-:]*\s*/i, "")
+    .replace(/^Pak RW\s*[•|\-:]*\s*/i, "")
+    .replace(/^\{server\}\s*[•|\-:]*\s*/i, "")
+    .replace(/^Server\s*[•|\-:]*\s*/i, "")
+    .trim();
+
+  if (!cleaned) return OT_FOOTER_PREFIX;
+  return `${OT_FOOTER_PREFIX} • ${cleaned}`.slice(0, 2048);
+}
+
+function isSafeFooterIconUrl(value = "") {
+  return /^https?:\/\//i.test(String(value || "").trim());
+}
+
+function makeOTFooterData(text = "", iconURL = "") {
+  return {
+    text: makeOTFooter(text),
+    iconURL: isSafeFooterIconUrl(iconURL) ? String(iconURL).trim() : OT_FOOTER_ICON_URL
+  };
+}
+
+// Paksa semua embed footer Pak RW punya icon emoji DESA TULUS yang benar-benar tampil,
+// bukan teks mentah <a:desatulus:...> di footer.
+try {
+  const originalSetFooter = EmbedBuilder.prototype.setFooter;
+  if (originalSetFooter && !EmbedBuilder.prototype.__orangTulusFooterPatched) {
+    EmbedBuilder.prototype.setFooter = function patchedOrangTulusFooter(options) {
+      if (options && typeof options === "object") {
+        const rawText = options.text || "";
+        const rawIcon = options.iconURL || options.icon_url || "";
+        return originalSetFooter.call(this, {
+          ...options,
+          text: makeOTFooter(rawText),
+          iconURL: isSafeFooterIconUrl(rawIcon) ? rawIcon : OT_FOOTER_ICON_URL
+        });
+      }
+      return originalSetFooter.call(this, options);
+    };
+    EmbedBuilder.prototype.__orangTulusFooterPatched = true;
+  }
+} catch (err) {
+  console.log("OT FOOTER PATCH ERROR:", err?.message || err);
+}
+
+
+function dashboardMaxStudioScript() {
+  return `<div class="max-command">
+    <button type="button" id="maxPaletteBtn">⌘ Menu</button>
+  </div>
+  <div class="max-palette" id="maxPalette">
+    <div class="max-palette-box">
+      <input id="maxPaletteSearch" placeholder="Cari menu cepat... contoh: embed, cari mabar, config, donatur, level" />
+      <div class="max-palette-list" id="maxPaletteList"></div>
+    </div>
+  </div>
+  <script>
+  (() => {
+    const routes = [
+      { title: "Studio Home", desc: "Dashboard utama Pak RW", url: "/studio", key: "home studio dashboard" },
+      { title: "Pak RW Mega Control", desc: "Edit semua fitur, embed, teks, gambar, role, channel, dan JSON config", url: "/maxton-control", key: "pak rw control edit semua fitur embed text image json" },
+      { title: "Dashboard Map", desc: "Peta semua fitur dashboard", url: "/luxe-map", key: "dashboard map peta fitur menu" },
+      { title: "Discord Hub", desc: "Overview Discord server dari dashboard", url: "/discord-hub", key: "discord hub server roles channels" },
+      { title: "Role Board", desc: "Lihat semua role dan ID", url: "/orbit-roles", key: "role board ids" },
+      { title: "Channel Board", desc: "Lihat semua channel dan ID", url: "/orbit-channels", key: "channel board ids" },
+      { title: "Emoji Studio", desc: "Lihat emoji custom server", url: "/emoji-studio", key: "emoji studio custom" },
+      { title: "Easy Start", desc: "Alur simpel edit cek test backup", url: "/easy", key: "easy start mulai gampang" },
+      { title: "Quick Edit", desc: "Edit cepat prefix role channel AI", url: "/quick-edit", key: "quick edit cepat prefix role channel" },
+      { title: "Dashboard Feature Center", desc: "Pusat fitur dashboard Pak RW", url: "/dashboard-features", key: "feature center dashboard" },
+      { title: "Top Aktif Warga", desc: "Member of the Month, top chat, top voice, top aktif", url: "/top-active", key: "top aktif top chat top voice member of the month maxton" },
+      { title: "Command Studio", desc: "Daftar command bot rapi", url: "/dashboard-commands", key: "command studio list" },
+      { title: "Feature Toggle", desc: "Aktif nonaktif fitur penting", url: "/feature-toggles", key: "toggle fitur aktif nonaktif" },
+      { title: "Editor Hub", desc: "Pusat edit config, embed, role, channel", url: "/editor", key: "edit editor hub nyaman gampang" },
+      { title: "Smart Center", desc: "Diagnose otomatis config, role, channel, permission", url: "/smart", key: "smart diagnose checker permission setup" },
+      { title: "Test Center", desc: "Panduan test fitur Pak RW", url: "/test-center", key: "test command ping boost level" },
+      { title: "Media Studio", desc: "Logo, banner, background dashboard", url: "/media", key: "media logo banner background image" },
+      { title: "Tools Center", desc: "Environment, live config, API links", url: "/tools", key: "tools env api live config" },
+      { title: "Backup Center", desc: "Backup dan export config", url: "/backup", key: "backup export config" },
+      { title: "Preview Studio", desc: "Preview embed tersimpan", url: "/preview", key: "preview embed juragan donatur level" },
+      { title: "Theme Studio", desc: "Nama, subtitle, identitas tampilan dashboard", url: "/theme", key: "theme tampilan title subtitle" },
+      { title: "Feature Settings", desc: "Edit AI, welcome, juragan, donatur, level, saran", url: "/modules", key: "config fitur setting" },
+      { title: "Embeds & Texts", desc: "Edit embed Juragan, Donatur, Level, Curhat", url: "/embeds", key: "embed text juragan boost" },
+      { title: "Discord Manager", desc: "Pilih role dan channel dari Discord", url: "/discord", key: "role channel discord" },
+      { title: "Control Center", desc: "Kirim pesan/embed ke Discord", url: "/control", key: "send message embed" },
+      { title: "Analytics", desc: "Statistik server dan level", url: "/analytics", key: "statistik level server" },
+      { title: "Data Center", desc: "Lihat data level dan temporary role", url: "/data-center", key: "data level temp role" },
+      { title: "Source Studio", desc: "Lihat config, index, package, README", url: "/source", key: "source coding config json" },
+      { title: "Commands", desc: "Daftar command bot", url: "/commands", key: "command help" }
+    ];
+
+    const palette = document.getElementById("maxPalette");
+    const btn = document.getElementById("maxPaletteBtn");
+    const input = document.getElementById("maxPaletteSearch");
+    const list = document.getElementById("maxPaletteList");
+
+    if (!palette || !btn || !input || !list) return;
+
+    function render(q = "") {
+      const query = q.toLowerCase();
+      const filtered = routes.filter((r) => (r.title + " " + r.desc + " " + r.key).toLowerCase().includes(query));
+      list.innerHTML = filtered.map((r, i) => \`
+        <div class="max-palette-item \${i === 0 ? "active" : ""}" data-url="\${r.url}">
+          <div><b>\${r.title}</b><br><span>\${r.desc}</span></div>
+          <span>Enter</span>
+        </div>
+      \`).join("");
+    }
+
+    function openPalette() {
+      render("");
+      palette.classList.add("open");
+      setTimeout(() => input.focus(), 30);
+    }
+
+    function closePalette() {
+      palette.classList.remove("open");
+      input.value = "";
+    }
+
+    btn.addEventListener("click", openPalette);
+    input.addEventListener("input", () => render(input.value));
+
+    document.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        openPalette();
+      }
+      if (e.key === "Escape") closePalette();
+
+      if (palette.classList.contains("open") && e.key === "Enter") {
+        const active = list.querySelector(".max-palette-item.active") || list.querySelector(".max-palette-item");
+        if (active) window.location.href = active.dataset.url;
+      }
+
+      if (palette.classList.contains("open") && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+        e.preventDefault();
+        const items = [...list.querySelectorAll(".max-palette-item")];
+        if (!items.length) return;
+        let idx = items.findIndex((x) => x.classList.contains("active"));
+        if (idx < 0) idx = 0;
+        items[idx].classList.remove("active");
+        idx = e.key === "ArrowDown" ? Math.min(items.length - 1, idx + 1) : Math.max(0, idx - 1);
+        items[idx].classList.add("active");
+        items[idx].scrollIntoView({ block: "nearest" });
+      }
+    });
+
+    list.addEventListener("click", (e) => {
+      const item = e.target.closest(".max-palette-item");
+      if (item) window.location.href = item.dataset.url;
+    });
+
+    palette.addEventListener("click", (e) => {
+      if (e.target === palette) closePalette();
+    });
+  })();
+  </script>`;
+}
+
+
+
+function dashboardLuxeGalaxyScript() {
+  return `<div class="luxe-toast" id="luxeToast">Copied</div>
+  <script>
+  (() => {
+    const toast = document.getElementById("luxeToast");
+    function showToast(text) {
+      if (!toast) return;
+      toast.textContent = text || "Copied";
+      toast.classList.add("show");
+      setTimeout(() => toast.classList.remove("show"), 1300);
+    }
+
+    document.addEventListener("click", async (e) => {
+      const chip = e.target.closest(".copy-chip");
+      if (!chip) return;
+
+      const raw = chip.innerText || chip.textContent || "";
+      const text = raw.replaceAll("<", "<").replaceAll(">", ">").trim();
+
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast("✅ Disalin: " + text.slice(0, 34));
+      } catch {
+        showToast("Copy manual: " + text.slice(0, 34));
+      }
+    });
+  })();
+  </script>`;
+}
+
+
+function dashboardShell(content, title = "Pak RW Dashboard") {
+  return `<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>${escapeHtml(title)}</title>
+  <style>
+    :root {
+      --bg: #080b14;
+      --card: rgba(255,255,255,.08);
+      --card2: rgba(255,255,255,.12);
+      --line: rgba(255,255,255,.14);
+      --text: #f7f8ff;
+      --muted: #aab0c5;
+      --blue: #70a7ff;
+      --pink: #ff6bd6;
+      --purple: #8b5cf6;
+      --cyan: #22d3ee;
+      --green: #48e6a6;
+      --yellow: #ffd166;
+      --danger: #ff5c7a;
+      --shadow: 0 25px 80px rgba(0,0,0,.45);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 20% 5%, rgba(112,167,255,.22), transparent 35%),
+        radial-gradient(circle at 95% 15%, rgba(255,107,214,.18), transparent 30%),
+        radial-gradient(circle at 50% 90%, rgba(72,230,166,.10), transparent 35%),
+        var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, Segoe UI, Arial, sans-serif;
+      min-height: 100vh;
+    }
+    a { color: inherit; text-decoration: none; }
+    .layout { display: grid; grid-template-columns: 270px 1fr; min-height: 100vh; }
+    .sidebar {
+      border-right: 1px solid var(--line);
+      background: rgba(9,12,24,.72);
+      backdrop-filter: blur(18px);
+      padding: 24px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+    }
+    .brand {
+      display:flex; align-items:center; gap:12px; margin-bottom:30px;
+    }
+    .logo {
+      width:46px; height:46px; border-radius:16px;
+      display:grid; place-items:center;
+      background: linear-gradient(135deg, var(--blue), var(--pink));
+      box-shadow: 0 12px 40px rgba(112,167,255,.35);
+      font-size:24px;
+    }
+    .brand h1 { font-size:18px; margin:0; letter-spacing:.2px; }
+    .brand p { margin:4px 0 0; color:var(--muted); font-size:12px; }
+    .nav { display:flex; flex-direction:column; gap:10px; }
+    .nav a {
+      padding:13px 14px;
+      border-radius:14px;
+      color:var(--muted);
+      background: transparent;
+      border:1px solid transparent;
+    }
+    .nav a:hover, .nav a.active {
+      color:var(--text);
+      background: var(--card);
+      border-color: var(--line);
+    }
+    .main { padding: 28px; }
+    .topbar {
+      display:flex; justify-content:space-between; gap:16px; align-items:center;
+      margin-bottom:24px;
+    }
+    .title h2 { margin:0; font-size:30px; }
+    .title p { margin:8px 0 0; color:var(--muted); }
+    .pill {
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: rgba(72,230,166,.12);
+      color: var(--green);
+      border: 1px solid rgba(72,230,166,.25);
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .hero-banner {
+      position: relative;
+      overflow: hidden;
+      border-radius: 30px;
+      border: 1px solid var(--line);
+      padding: 28px;
+      margin-bottom: 20px;
+      background:
+        linear-gradient(135deg, rgba(112,167,255,.22), rgba(255,107,214,.14)),
+        radial-gradient(circle at 80% 10%, rgba(34,211,238,.20), transparent 30%),
+        rgba(255,255,255,.07);
+      box-shadow: var(--shadow);
+    }
+    .hero-banner:after {
+      content: "";
+      position: absolute;
+      inset: -90px -90px auto auto;
+      width: 220px;
+      height: 220px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.10);
+      filter: blur(2px);
+    }
+    .hero-banner h2 { margin:0; font-size:34px; }
+    .hero-banner p { color:var(--muted); max-width: 760px; line-height:1.6; }
+    .mini-row { display:flex; gap:10px; flex-wrap:wrap; margin-top:16px; }
+    .mini-pill {
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.09);
+      padding:9px 12px;
+      border-radius:999px;
+      font-size:13px;
+      color:var(--muted);
+    }
+    .table-wrap { overflow:auto; border-radius:18px; border:1px solid var(--line); }
+    table { width:100%; border-collapse:collapse; min-width: 720px; }
+    th, td { padding:13px 14px; border-bottom:1px solid var(--line); text-align:left; font-size:13px; }
+    th { color:var(--muted); background:rgba(255,255,255,.06); }
+    tr:hover td { background:rgba(255,255,255,.04); }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .two-col { display:grid; grid-template-columns: 1.25fr .75fr; gap:18px; }
+
+    .ac-box {
+      position: fixed;
+      z-index: 99999;
+      min-width: 280px;
+      max-width: 420px;
+      max-height: 280px;
+      overflow: auto;
+      background: rgba(10, 14, 28, .96);
+      border: 1px solid rgba(255,255,255,.16);
+      border-radius: 16px;
+      box-shadow: 0 20px 70px rgba(0,0,0,.55);
+      backdrop-filter: blur(18px);
+      padding: 8px;
+      display: none;
+    }
+    .ac-item {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 10px 11px;
+      border-radius: 12px;
+      cursor: pointer;
+      color: var(--text);
+      border: 1px solid transparent;
+    }
+    .ac-item:hover, .ac-item.active {
+      background: rgba(255,255,255,.10);
+      border-color: rgba(255,255,255,.14);
+    }
+    .ac-left { min-width: 0; }
+    .ac-title { font-weight: 800; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ac-desc { font-size: 11px; color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ac-tag {
+      font-size: 10px;
+      color: var(--cyan);
+      border: 1px solid rgba(34,211,238,.25);
+      background: rgba(34,211,238,.08);
+      padding: 4px 7px;
+      border-radius: 999px;
+      align-self: center;
+      white-space: nowrap;
+    }
+
+    @media (max-width: 980px) { .two-col { grid-template-columns:1fr; } }
+    .grid {
+      display:grid;
+      grid-template-columns: repeat(4, minmax(0,1fr));
+      gap:16px;
+      margin-bottom:18px;
+    }
+    .card {
+      background: linear-gradient(180deg, var(--card2), var(--card));
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 20px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+    .card h3 { margin:0 0 8px; font-size:14px; color:var(--muted); font-weight:600; }
+    .card .big { font-size:28px; font-weight:900; margin:0; }
+    .card .sub { color:var(--muted); font-size:13px; margin-top:6px; }
+    .panel {
+      background: linear-gradient(180deg, rgba(255,255,255,.11), rgba(255,255,255,.065));
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      padding: 22px;
+      margin-top:18px;
+    }
+    .panel h3 { margin:0 0 14px; font-size:18px; }
+    .formgrid { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:16px; }
+    label { display:block; color:var(--muted); font-size:13px; margin-bottom:8px; }
+    input, textarea, select {
+      width:100%;
+      background: rgba(0,0,0,.24);
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px 13px;
+      outline: none;
+      font-size: 14px;
+    }
+    textarea { min-height: 120px; resize: vertical; }
+    input:focus, textarea:focus { border-color: rgba(112,167,255,.65); box-shadow: 0 0 0 4px rgba(112,167,255,.12); }
+    .btn {
+      border:0; cursor:pointer; color:white; font-weight:800;
+      padding:13px 18px; border-radius:14px;
+      background: linear-gradient(135deg, var(--blue), var(--pink));
+      box-shadow: 0 14px 35px rgba(112,167,255,.25);
+    }
+    .btn.secondary { background: rgba(255,255,255,.1); border:1px solid var(--line); box-shadow:none; }
+    .actions { display:flex; gap:10px; margin-top:18px; flex-wrap:wrap; }
+    .commands { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:12px; }
+    .cmd {
+      background: rgba(0,0,0,.22);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding:14px;
+      color:var(--muted);
+    }
+    .cmd b { color:var(--text); display:block; margin-bottom:5px; }
+    .alert {
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(72,230,166,.12);
+      border: 1px solid rgba(72,230,166,.25);
+      color: var(--green);
+      margin-bottom: 18px;
+      font-weight:700;
+    }
+    .danger {
+      background: rgba(255,92,122,.12);
+      border-color: rgba(255,92,122,.25);
+      color: var(--danger);
+    }
+    .login {
+      min-height: 100vh; display:grid; place-items:center; padding:24px;
+    }
+    .loginbox { width:min(460px, 100%); }
+    .footer { color:var(--muted); font-size:12px; margin-top:16px; }
+
+    .setting-helper {
+      display:block;
+      margin-top:7px;
+      color: rgba(248,251,255,.52);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .mention-help {
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      margin-top:8px;
+      padding:7px 9px;
+      border-radius:999px;
+      background:rgba(88,101,242,.13);
+      color:#cbd5ff;
+      border:1px solid rgba(88,101,242,.22);
+      font-size:12px;
+      font-weight:800;
+    }
+    @media (max-width: 980px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { position:relative; height:auto; }
+      .grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .formgrid { grid-template-columns: 1fr; }
+      .commands { grid-template-columns: 1fr; }
+    }
+  
+    /* ================= DASHBOARD CLEAN PREMIUM THEME ================= */
+    body.dashboard-clean {
+      letter-spacing: .1px;
+    }
+    .layout {
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,0)),
+        transparent;
+    }
+    .sidebar {
+      width: 100%;
+      background:
+        linear-gradient(180deg, rgba(14,18,35,.92), rgba(9,12,24,.82));
+      box-shadow: 18px 0 70px rgba(0,0,0,.20);
+    }
+    .brand {
+      padding: 12px;
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 22px;
+      background: rgba(255,255,255,.055);
+    }
+    .logo {
+      border-radius: 18px;
+      box-shadow:
+        0 18px 45px rgba(112,167,255,.28),
+        inset 0 1px 0 rgba(255,255,255,.35);
+    }
+    .brand h1 {
+      font-size: 19px;
+      font-weight: 950;
+    }
+    .brand p {
+      font-weight: 650;
+    }
+    .nav {
+      gap: 8px;
+    }
+    .nav a {
+      display: flex;
+      align-items: center;
+      min-height: 46px;
+      font-weight: 760;
+      border-radius: 16px;
+      transition: transform .16s ease, background .16s ease, border-color .16s ease;
+    }
+    .nav a:hover {
+      transform: translateX(3px);
+    }
+    .nav a.active {
+      background: linear-gradient(135deg, rgba(112,167,255,.19), rgba(255,107,214,.13));
+      border-color: rgba(255,255,255,.20);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.14);
+    }
+    .main {
+      max-width: 1480px;
+      width: 100%;
+      margin: 0 auto;
+    }
+    .topbar {
+      padding: 18px 20px;
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 26px;
+      background: rgba(255,255,255,.045);
+      backdrop-filter: blur(18px);
+      box-shadow: 0 20px 70px rgba(0,0,0,.18);
+    }
+    .title h2 {
+      font-weight: 980;
+      letter-spacing: -.8px;
+    }
+    .title p {
+      line-height: 1.55;
+      max-width: 820px;
+    }
+    .pill {
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.20);
+      white-space: nowrap;
+    }
+    .grid {
+      gap: 18px;
+    }
+    .card {
+      position: relative;
+      overflow: hidden;
+      border-radius: 26px;
+      padding: 22px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.115), rgba(255,255,255,.055));
+      box-shadow:
+        0 24px 75px rgba(0,0,0,.28),
+        inset 0 1px 0 rgba(255,255,255,.12);
+    }
+    .card:before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 3px;
+      background: linear-gradient(90deg, var(--blue), var(--pink), var(--green));
+      opacity: .70;
+    }
+    .card h3 {
+      text-transform: uppercase;
+      letter-spacing: .9px;
+      font-size: 11px;
+      font-weight: 900;
+    }
+    .card .big {
+      letter-spacing: -1px;
+    }
+    .panel {
+      border-radius: 28px;
+      padding: 24px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.095), rgba(255,255,255,.052));
+      box-shadow:
+        0 24px 85px rgba(0,0,0,.28),
+        inset 0 1px 0 rgba(255,255,255,.11);
+    }
+    .panel h3 {
+      font-size: 19px;
+      letter-spacing: -.2px;
+    }
+    input, textarea, select {
+      border-radius: 16px;
+      background: rgba(0,0,0,.22);
+      border-color: rgba(255,255,255,.14);
+      transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease;
+    }
+    input:hover, textarea:hover, select:hover {
+      border-color: rgba(255,255,255,.24);
+    }
+    input:focus, textarea:focus, select:focus {
+      transform: translateY(-1px);
+    }
+    label {
+      font-weight: 800;
+      letter-spacing: .2px;
+    }
+    .btn {
+      border-radius: 16px;
+      transition: transform .16s ease, filter .16s ease, box-shadow .16s ease;
+    }
+    .btn:hover {
+      transform: translateY(-2px);
+      filter: brightness(1.05);
+      box-shadow: 0 18px 45px rgba(112,167,255,.28);
+    }
+    .btn.secondary:hover {
+      box-shadow: none;
+      background: rgba(255,255,255,.14);
+    }
+    .commands {
+      gap: 14px;
+    }
+    .cmd {
+      border-radius: 18px;
+      transition: transform .16s ease, border-color .16s ease, background .16s ease;
+    }
+    .cmd:hover {
+      transform: translateY(-2px);
+      border-color: rgba(255,255,255,.22);
+      background: rgba(255,255,255,.075);
+    }
+    .cmd b {
+      font-size: 14px;
+    }
+    .cmd span {
+      line-height: 1.45;
+    }
+    .hero-banner {
+      box-shadow:
+        0 26px 90px rgba(0,0,0,.30),
+        inset 0 1px 0 rgba(255,255,255,.14);
+    }
+    .hero-banner h2 {
+      letter-spacing: -1px;
+      font-weight: 980;
+    }
+    .mini-pill {
+      font-weight: 800;
+      background: rgba(255,255,255,.075);
+    }
+    .table-wrap {
+      background: rgba(0,0,0,.16);
+    }
+    th {
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      font-size: 11px;
+    }
+    td {
+      color: rgba(247,248,255,.88);
+    }
+    .alert {
+      border-radius: 18px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.12);
+    }
+    .footer {
+      padding: 14px;
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 18px;
+      background: rgba(255,255,255,.04);
+      line-height: 1.55;
+    }
+    @media (max-width: 980px) {
+      .main {
+        padding: 18px;
+      }
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+      .grid {
+        grid-template-columns: 1fr;
+      }
+      .card, .panel, .hero-banner {
+        border-radius: 22px;
+      }
+      .title h2, .hero-banner h2 {
+        font-size: 26px;
+      }
+    }
+    @media (min-width: 981px) {
+      .layout {
+        grid-template-columns: 292px 1fr;
+      }
+    }
+
+  
+    /* ================= CLEAN EDITOR PLUS ================= */
+    :root {
+      --soft-card: rgba(255,255,255,.065);
+      --soft-card-2: rgba(255,255,255,.095);
+      --focus: rgba(112,167,255,.28);
+    }
+    .dashboard-clean .main {
+      padding-top: 24px;
+    }
+    .dashboard-clean .panel form,
+    .dashboard-clean form.panel {
+      position: relative;
+    }
+    .dashboard-clean .panel h3 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    .dashboard-clean .formgrid {
+      gap: 18px;
+      margin-top: 12px;
+      margin-bottom: 10px;
+    }
+    .dashboard-clean label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 18px;
+    }
+    .dashboard-clean label:after {
+      content: "edit";
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      color: rgba(247,248,255,.36);
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 999px;
+      padding: 2px 6px;
+      margin-left: 8px;
+    }
+    .dashboard-clean textarea {
+      line-height: 1.6;
+      font-family: Inter, ui-sans-serif, system-ui, Segoe UI, Arial, sans-serif;
+    }
+    .dashboard-clean input,
+    .dashboard-clean textarea,
+    .dashboard-clean select {
+      min-height: 46px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.055);
+    }
+    .dashboard-clean textarea:focus,
+    .dashboard-clean input:focus,
+    .dashboard-clean select:focus {
+      box-shadow:
+        0 0 0 4px var(--focus),
+        inset 0 1px 0 rgba(255,255,255,.08);
+    }
+    .dashboard-clean .actions {
+      position: sticky;
+      bottom: 14px;
+      z-index: 30;
+      padding: 12px;
+      border: 1px solid rgba(255,255,255,.10);
+      background: rgba(8,11,20,.82);
+      backdrop-filter: blur(18px);
+      border-radius: 20px;
+      box-shadow: 0 18px 60px rgba(0,0,0,.35);
+    }
+    .dashboard-clean .hero-banner {
+      background:
+        linear-gradient(135deg, rgba(112,167,255,.18), rgba(255,107,214,.11)),
+        radial-gradient(circle at 88% 20%, rgba(34,211,238,.16), transparent 28%),
+        radial-gradient(circle at 10% 90%, rgba(72,230,166,.10), transparent 26%),
+        rgba(255,255,255,.055);
+    }
+    .dashboard-clean .card .sub,
+    .dashboard-clean .title p,
+    .dashboard-clean .hero-banner p {
+      color: rgba(247,248,255,.64);
+    }
+    .dashboard-clean .cmd span {
+      color: rgba(247,248,255,.62);
+    }
+    .dashboard-clean .section-note {
+      color: rgba(247,248,255,.62);
+      line-height: 1.6;
+      margin: -6px 0 16px;
+      font-size: 13px;
+    }
+    .dashboard-clean .edit-helper {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0,1fr));
+      gap: 10px;
+      margin: 14px 0 18px;
+    }
+    .dashboard-clean .edit-helper .mini-pill {
+      text-align: center;
+      border-radius: 14px;
+      padding: 10px;
+    }
+    .dashboard-clean .sidebar {
+      padding: 20px;
+    }
+    .dashboard-clean .nav a {
+      font-size: 14px;
+    }
+    .dashboard-clean .brand {
+      margin-bottom: 22px;
+    }
+    .dashboard-clean .alert {
+      margin-top: 8px;
+    }
+    @media (max-width: 720px) {
+      .dashboard-clean .edit-helper {
+        grid-template-columns: 1fr 1fr;
+      }
+      .dashboard-clean .actions {
+        position: static;
+      }
+    }
+
+  
+    /* ================= PAK RW STUDIO PANEL ================= */
+    :root {
+      --studio-bg: #070912;
+      --studio-panel: rgba(255,255,255,.065);
+      --studio-panel-2: rgba(255,255,255,.095);
+      --studio-border: rgba(255,255,255,.12);
+      --studio-soft: rgba(255,255,255,.055);
+      --studio-text: #f8fbff;
+      --studio-muted: rgba(248,251,255,.62);
+      --studio-accent: #8b5cf6;
+      --studio-accent-2: #22d3ee;
+      --studio-good: #44f1a6;
+    }
+    body.dashboard-clean {
+      background:
+        radial-gradient(circle at 18% -10%, rgba(139,92,246,.26), transparent 34%),
+        radial-gradient(circle at 92% 0%, rgba(34,211,238,.16), transparent 30%),
+        radial-gradient(circle at 50% 105%, rgba(72,230,166,.10), transparent 40%),
+        linear-gradient(180deg, #070912 0%, #0a0d18 54%, #070912 100%);
+    }
+    .layout {
+      grid-template-columns: 300px 1fr;
+    }
+    .sidebar {
+      border-right: 1px solid rgba(255,255,255,.08);
+      background:
+        linear-gradient(180deg, rgba(10,14,30,.94), rgba(8,10,20,.90));
+      padding: 18px;
+    }
+    .brand {
+      padding: 14px;
+      border-radius: 24px;
+      background:
+        linear-gradient(135deg, rgba(139,92,246,.20), rgba(34,211,238,.10)),
+        rgba(255,255,255,.05);
+      border: 1px solid rgba(255,255,255,.14);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.16);
+    }
+    .logo {
+      background: linear-gradient(135deg, #8b5cf6, #22d3ee);
+      box-shadow: 0 18px 48px rgba(139,92,246,.28);
+    }
+    .brand h1 {
+      font-size: 20px;
+      font-weight: 1000;
+      letter-spacing: -.4px;
+    }
+    .brand p {
+      color: rgba(248,251,255,.58);
+      font-weight: 800;
+    }
+    .nav {
+      margin-top: 18px;
+      gap: 7px;
+    }
+    .nav a {
+      min-height: 44px;
+      border-radius: 15px;
+      padding: 12px 13px;
+      font-weight: 850;
+      color: rgba(248,251,255,.62);
+    }
+    .nav a.active {
+      color: #fff;
+      background:
+        linear-gradient(135deg, rgba(139,92,246,.28), rgba(34,211,238,.12));
+      border-color: rgba(255,255,255,.20);
+      box-shadow:
+        0 12px 30px rgba(0,0,0,.20),
+        inset 0 1px 0 rgba(255,255,255,.16);
+    }
+    .nav a:hover {
+      color: #fff;
+      background: rgba(255,255,255,.075);
+      transform: translateX(4px);
+    }
+    .main {
+      padding: 26px;
+      max-width: 1540px;
+    }
+    .topbar {
+      padding: 18px 20px;
+      border-radius: 28px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.085), rgba(255,255,255,.045));
+      border: 1px solid rgba(255,255,255,.12);
+      box-shadow: 0 22px 80px rgba(0,0,0,.22);
+    }
+    .title h2 {
+      font-size: 31px;
+      letter-spacing: -1px;
+      font-weight: 1000;
+    }
+    .title p {
+      max-width: 900px;
+      color: rgba(248,251,255,.62);
+    }
+    .studio-hero {
+      position: relative;
+      overflow: hidden;
+      border-radius: 34px;
+      padding: 28px;
+      margin-bottom: 18px;
+      background:
+        linear-gradient(135deg, rgba(139,92,246,.22), rgba(34,211,238,.12)),
+        linear-gradient(180deg, rgba(255,255,255,.085), rgba(255,255,255,.045));
+      border: 1px solid rgba(255,255,255,.14);
+      box-shadow: 0 26px 90px rgba(0,0,0,.28);
+    }
+    .studio-hero:before {
+      content: "";
+      position: absolute;
+      right: -120px;
+      top: -120px;
+      width: 330px;
+      height: 330px;
+      border-radius: 999px;
+      background: radial-gradient(circle, rgba(255,255,255,.18), transparent 62%);
+    }
+    .studio-hero h2 {
+      margin: 0;
+      font-size: 38px;
+      line-height: 1.08;
+      letter-spacing: -1.3px;
+      font-weight: 1000;
+    }
+    .studio-hero p {
+      margin: 12px 0 0;
+      color: rgba(248,251,255,.66);
+      max-width: 820px;
+      line-height: 1.65;
+    }
+    .studio-kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 20px;
+    }
+    .studio-kpi {
+      border-radius: 20px;
+      background: rgba(0,0,0,.18);
+      border: 1px solid rgba(255,255,255,.10);
+      padding: 14px;
+    }
+    .studio-kpi b {
+      display: block;
+      font-size: 18px;
+      color: #fff;
+      margin-bottom: 4px;
+    }
+    .studio-kpi span {
+      font-size: 12px;
+      color: rgba(248,251,255,.56);
+    }
+    .studio-grid {
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap: 18px;
+    }
+    .studio-card-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .studio-action {
+      display: block;
+      min-height: 122px;
+      padding: 18px;
+      border-radius: 24px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.085), rgba(255,255,255,.048));
+      border: 1px solid rgba(255,255,255,.12);
+      box-shadow: 0 18px 55px rgba(0,0,0,.18);
+      transition: transform .16s ease, border-color .16s ease, background .16s ease;
+    }
+    .studio-action:hover {
+      transform: translateY(-4px);
+      background: linear-gradient(180deg, rgba(255,255,255,.12), rgba(255,255,255,.06));
+      border-color: rgba(255,255,255,.22);
+    }
+    .studio-action .icon {
+      font-size: 26px;
+      margin-bottom: 12px;
+    }
+    .studio-action b {
+      display: block;
+      color: #fff;
+      font-size: 15px;
+      margin-bottom: 6px;
+    }
+    .studio-action span {
+      color: rgba(248,251,255,.58);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .panel {
+      border-radius: 30px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.075), rgba(255,255,255,.043));
+      border: 1px solid rgba(255,255,255,.12);
+      box-shadow: 0 24px 80px rgba(0,0,0,.22);
+    }
+    .panel h3 {
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      padding-bottom: 12px;
+    }
+    .formgrid {
+      gap: 16px;
+    }
+    input, textarea, select {
+      border-radius: 16px;
+      background: rgba(3,6,16,.52);
+      border: 1px solid rgba(255,255,255,.13);
+      min-height: 48px;
+    }
+    textarea {
+      min-height: 150px;
+      line-height: 1.65;
+    }
+    input:focus, textarea:focus, select:focus {
+      border-color: rgba(34,211,238,.65);
+      box-shadow: 0 0 0 4px rgba(34,211,238,.13);
+    }
+    .btn {
+      border-radius: 16px;
+      background: linear-gradient(135deg, #8b5cf6, #22d3ee);
+    }
+    .btn.secondary {
+      background: rgba(255,255,255,.075);
+    }
+    .actions {
+      border-radius: 22px;
+    }
+    .cmd {
+      background: rgba(3,6,16,.42);
+      border-radius: 18px;
+    }
+    .codebox {
+      width: 100%;
+      min-height: 560px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.55;
+      white-space: pre;
+      overflow: auto;
+    }
+    .file-tabs {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .file-tab {
+      padding: 10px 13px;
+      border: 1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.055);
+      border-radius: 14px;
+      color: rgba(248,251,255,.72);
+      font-weight: 800;
+    }
+    .file-tab.active {
+      background: linear-gradient(135deg, rgba(139,92,246,.25), rgba(34,211,238,.12));
+      color: #fff;
+    }
+    @media (max-width: 1100px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { position: relative; height: auto; }
+      .studio-grid { grid-template-columns: 1fr; }
+      .studio-card-grid { grid-template-columns: 1fr 1fr; }
+      .studio-kpis { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 640px) {
+      .main { padding: 16px; }
+      .studio-card-grid, .studio-kpis { grid-template-columns: 1fr; }
+      .studio-hero h2 { font-size: 29px; }
+      .title h2 { font-size: 25px; }
+    }
+
+  
+    /* ================= PAK RW MAX STUDIO UI ================= */
+    :root {
+      --max-bg: #050711;
+      --max-glass: rgba(255,255,255,.072);
+      --max-glass-2: rgba(255,255,255,.105);
+      --max-border: rgba(255,255,255,.135);
+      --max-text: #f8fbff;
+      --max-muted: rgba(248,251,255,.62);
+      --max-purple: #9b5cff;
+      --max-blue: #69a7ff;
+      --max-cyan: #22d3ee;
+      --max-pink: #ff5fcb;
+      --max-green: #47f0a8;
+      --max-warning: #ffd166;
+    }
+    body.dashboard-clean {
+      background:
+        radial-gradient(circle at 16% -10%, rgba(155,92,255,.30), transparent 33%),
+        radial-gradient(circle at 88% 4%, rgba(34,211,238,.20), transparent 30%),
+        radial-gradient(circle at 50% 106%, rgba(71,240,168,.12), transparent 42%),
+        linear-gradient(180deg, #050711 0%, #090d1a 48%, #050711 100%);
+      color: var(--max-text);
+    }
+    body.dashboard-clean:before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255,255,255,.022) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.022) 1px, transparent 1px);
+      background-size: 42px 42px;
+      mask-image: linear-gradient(180deg, rgba(0,0,0,.65), transparent 85%);
+      z-index: -1;
+    }
+    .layout {
+      grid-template-columns: 310px 1fr;
+    }
+    .sidebar {
+      padding: 18px;
+      border-right: 1px solid rgba(255,255,255,.085);
+      background:
+        linear-gradient(180deg, rgba(10,14,32,.94), rgba(5,7,17,.88)),
+        rgba(0,0,0,.28);
+      box-shadow: 18px 0 90px rgba(0,0,0,.26);
+    }
+    .brand {
+      padding: 14px;
+      border-radius: 26px;
+      background:
+        linear-gradient(135deg, rgba(155,92,255,.22), rgba(34,211,238,.10)),
+        rgba(255,255,255,.052);
+      border: 1px solid rgba(255,255,255,.15);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.18),
+        0 18px 50px rgba(0,0,0,.18);
+    }
+    .logo {
+      width: 50px;
+      height: 50px;
+      border-radius: 20px;
+      background: linear-gradient(135deg, var(--max-purple), var(--max-cyan));
+      box-shadow: 0 18px 55px rgba(155,92,255,.30);
+    }
+    .brand h1 {
+      font-size: 20px;
+      letter-spacing: -.45px;
+      font-weight: 1000;
+    }
+    .brand p {
+      color: rgba(248,251,255,.60);
+      font-weight: 850;
+    }
+    .nav {
+      gap: 7px;
+      margin-top: 18px;
+    }
+    .nav a {
+      min-height: 45px;
+      border-radius: 16px;
+      padding: 12px 13px;
+      font-weight: 880;
+      color: rgba(248,251,255,.64);
+      position: relative;
+      overflow: hidden;
+    }
+    .nav a:before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, rgba(155,92,255,.16), rgba(34,211,238,.07));
+      opacity: 0;
+      transition: opacity .16s ease;
+    }
+    .nav a:hover:before,
+    .nav a.active:before { opacity: 1; }
+    .nav a:hover {
+      color: #fff;
+      transform: translateX(4px);
+      border-color: rgba(255,255,255,.18);
+    }
+    .nav a.active {
+      color: #fff;
+      border-color: rgba(255,255,255,.22);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.14),
+        0 14px 32px rgba(0,0,0,.20);
+    }
+    .main {
+      max-width: 1600px;
+      padding: 26px;
+    }
+    .topbar {
+      border-radius: 30px;
+      padding: 18px 21px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.090), rgba(255,255,255,.045));
+      border: 1px solid rgba(255,255,255,.13);
+      box-shadow:
+        0 24px 85px rgba(0,0,0,.24),
+        inset 0 1px 0 rgba(255,255,255,.10);
+    }
+    .title h2 {
+      font-weight: 1000;
+      letter-spacing: -1.05px;
+    }
+    .title p {
+      color: var(--max-muted);
+      line-height: 1.6;
+    }
+    .pill {
+      background: rgba(71,240,168,.11);
+      border: 1px solid rgba(71,240,168,.25);
+      color: var(--max-green);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.12);
+    }
+    .max-hero {
+      position: relative;
+      overflow: hidden;
+      border-radius: 38px;
+      padding: 30px;
+      margin-bottom: 20px;
+      background:
+        radial-gradient(circle at 88% 10%, rgba(255,255,255,.14), transparent 24%),
+        linear-gradient(135deg, rgba(155,92,255,.28), rgba(34,211,238,.14) 52%, rgba(71,240,168,.08)),
+        rgba(255,255,255,.055);
+      border: 1px solid rgba(255,255,255,.15);
+      box-shadow:
+        0 30px 100px rgba(0,0,0,.31),
+        inset 0 1px 0 rgba(255,255,255,.14);
+    }
+    .max-hero:before {
+      content: "";
+      position: absolute;
+      right: -110px;
+      top: -130px;
+      width: 360px;
+      height: 360px;
+      border-radius: 999px;
+      background: radial-gradient(circle, rgba(255,255,255,.20), transparent 64%);
+    }
+    .max-hero:after {
+      content: "";
+      position: absolute;
+      left: 28px;
+      bottom: -62px;
+      width: 180px;
+      height: 180px;
+      border-radius: 999px;
+      background: radial-gradient(circle, rgba(34,211,238,.18), transparent 65%);
+    }
+    .max-hero .max-eyebrow {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 11px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.13);
+      background: rgba(0,0,0,.16);
+      color: rgba(248,251,255,.72);
+      font-weight: 850;
+      font-size: 12px;
+      margin-bottom: 15px;
+    }
+    .max-hero h2 {
+      margin: 0;
+      font-size: 42px;
+      line-height: 1.05;
+      letter-spacing: -1.7px;
+      font-weight: 1000;
+      max-width: 780px;
+    }
+    .max-hero p {
+      color: rgba(248,251,255,.68);
+      max-width: 850px;
+      line-height: 1.65;
+      margin: 14px 0 0;
+    }
+    .max-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 22px;
+      position: relative;
+      z-index: 2;
+    }
+    .max-kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0,1fr));
+      gap: 12px;
+      margin-top: 22px;
+      position: relative;
+      z-index: 2;
+    }
+    .max-kpi {
+      border-radius: 22px;
+      padding: 15px;
+      background: rgba(3,6,16,.34);
+      border: 1px solid rgba(255,255,255,.12);
+      backdrop-filter: blur(12px);
+    }
+    .max-kpi b {
+      display: block;
+      font-size: 19px;
+      color: #fff;
+      margin-bottom: 4px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .max-kpi span {
+      color: rgba(248,251,255,.58);
+      font-size: 12px;
+      font-weight: 760;
+    }
+    .max-grid {
+      display: grid;
+      grid-template-columns: 1.18fr .82fr;
+      gap: 18px;
+    }
+    .max-card-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0,1fr));
+      gap: 14px;
+    }
+    .max-action-card {
+      display: block;
+      padding: 18px;
+      min-height: 136px;
+      border-radius: 26px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.088), rgba(255,255,255,.047));
+      border: 1px solid rgba(255,255,255,.13);
+      box-shadow:
+        0 22px 65px rgba(0,0,0,.20),
+        inset 0 1px 0 rgba(255,255,255,.08);
+      transition: transform .16s ease, border-color .16s ease, background .16s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .max-action-card:after {
+      content: "";
+      position: absolute;
+      inset: auto -50px -70px auto;
+      width: 140px;
+      height: 140px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.055);
+      opacity: 0;
+      transition: opacity .16s ease;
+    }
+    .max-action-card:hover {
+      transform: translateY(-4px);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.12), rgba(255,255,255,.062));
+      border-color: rgba(255,255,255,.24);
+    }
+    .max-action-card:hover:after { opacity: 1; }
+    .max-action-card .icon {
+      width: 43px;
+      height: 43px;
+      display: grid;
+      place-items: center;
+      border-radius: 16px;
+      background: linear-gradient(135deg, rgba(155,92,255,.32), rgba(34,211,238,.16));
+      border: 1px solid rgba(255,255,255,.11);
+      font-size: 22px;
+      margin-bottom: 13px;
+    }
+    .max-action-card b {
+      display: block;
+      color: #fff;
+      margin-bottom: 7px;
+      font-size: 15px;
+    }
+    .max-action-card span {
+      display: block;
+      color: rgba(248,251,255,.60);
+      line-height: 1.5;
+      font-size: 12px;
+    }
+    .panel, .card {
+      border-radius: 30px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.078), rgba(255,255,255,.043));
+      border: 1px solid rgba(255,255,255,.13);
+      box-shadow:
+        0 24px 80px rgba(0,0,0,.23),
+        inset 0 1px 0 rgba(255,255,255,.085);
+    }
+    .panel h3 {
+      letter-spacing: -.25px;
+      font-weight: 960;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      padding-bottom: 12px;
+    }
+    .cmd {
+      background: rgba(3,6,16,.40);
+      border-color: rgba(255,255,255,.11);
+    }
+    input, textarea, select {
+      border-radius: 17px;
+      min-height: 48px;
+      background: rgba(3,6,16,.54);
+      border: 1px solid rgba(255,255,255,.13);
+    }
+    textarea {
+      line-height: 1.65;
+    }
+    input:focus, textarea:focus, select:focus {
+      border-color: rgba(34,211,238,.62);
+      box-shadow: 0 0 0 4px rgba(34,211,238,.13);
+    }
+    .btn {
+      border-radius: 17px;
+      background: linear-gradient(135deg, var(--max-purple), var(--max-cyan));
+      box-shadow: 0 18px 45px rgba(34,211,238,.14);
+    }
+    .btn.secondary {
+      background: rgba(255,255,255,.075);
+      border: 1px solid rgba(255,255,255,.12);
+    }
+    .max-command {
+      position: fixed;
+      right: 22px;
+      bottom: 22px;
+      z-index: 9999;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .max-command button {
+      border: 1px solid rgba(255,255,255,.14);
+      background: linear-gradient(135deg, rgba(155,92,255,.92), rgba(34,211,238,.78));
+      color: #fff;
+      border-radius: 999px;
+      padding: 13px 16px;
+      font-weight: 950;
+      cursor: pointer;
+      box-shadow: 0 20px 55px rgba(0,0,0,.35);
+    }
+    .max-palette {
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      display: none;
+      place-items: start center;
+      padding-top: 9vh;
+      background: rgba(0,0,0,.44);
+      backdrop-filter: blur(10px);
+    }
+    .max-palette.open { display: grid; }
+    .max-palette-box {
+      width: min(760px, calc(100vw - 28px));
+      border-radius: 28px;
+      border: 1px solid rgba(255,255,255,.15);
+      background: rgba(8,11,24,.96);
+      box-shadow: 0 28px 100px rgba(0,0,0,.55);
+      padding: 14px;
+    }
+    .max-palette-box input {
+      width: 100%;
+      font-size: 16px;
+      margin-bottom: 10px;
+      background: rgba(255,255,255,.075);
+    }
+    .max-palette-list {
+      display: grid;
+      gap: 8px;
+      max-height: 430px;
+      overflow: auto;
+    }
+    .max-palette-item {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 13px 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,.09);
+      background: rgba(255,255,255,.045);
+      color: #fff;
+      cursor: pointer;
+    }
+    .max-palette-item:hover, .max-palette-item.active {
+      background: rgba(255,255,255,.10);
+      border-color: rgba(255,255,255,.18);
+    }
+    .max-palette-item span {
+      color: rgba(248,251,255,.56);
+      font-size: 12px;
+    }
+    @media (max-width: 1120px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { position: relative; height: auto; }
+      .max-grid { grid-template-columns: 1fr; }
+      .max-card-grid { grid-template-columns: 1fr 1fr; }
+      .max-kpis { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 650px) {
+      .main { padding: 16px; }
+      .max-card-grid, .max-kpis { grid-template-columns: 1fr; }
+      .max-hero { padding: 22px; border-radius: 28px; }
+      .max-hero h2 { font-size: 30px; }
+      .max-command { right: 14px; bottom: 14px; }
+    }
+
+  
+    /* ================= PAK RW MEGA MAX MODE ================= */
+    :root {
+      --mega-gold: #ffd166;
+      --mega-red: #ff5c7a;
+      --mega-ok: #47f0a8;
+      --mega-info: #69a7ff;
+      --mega-deep: #03050d;
+    }
+    .mega-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 8px 11px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.075);
+      border: 1px solid rgba(255,255,255,.13);
+      color: rgba(248,251,255,.74);
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .mega-hero {
+      position: relative;
+      overflow: hidden;
+      border-radius: 40px;
+      padding: 32px;
+      margin-bottom: 20px;
+      background:
+        radial-gradient(circle at 86% 15%, rgba(255,209,102,.18), transparent 22%),
+        radial-gradient(circle at 18% 90%, rgba(71,240,168,.13), transparent 28%),
+        linear-gradient(135deg, rgba(155,92,255,.30), rgba(34,211,238,.15) 54%, rgba(255,95,203,.10)),
+        rgba(255,255,255,.055);
+      border: 1px solid rgba(255,255,255,.16);
+      box-shadow:
+        0 32px 110px rgba(0,0,0,.35),
+        inset 0 1px 0 rgba(255,255,255,.16);
+    }
+    .mega-hero h2 {
+      margin: 12px 0 0;
+      font-size: 44px;
+      line-height: 1.04;
+      letter-spacing: -1.8px;
+      font-weight: 1000;
+      max-width: 920px;
+    }
+    .mega-hero p {
+      max-width: 920px;
+      color: rgba(248,251,255,.68);
+      line-height: 1.68;
+      margin: 14px 0 0;
+    }
+    .mega-grid {
+      display: grid;
+      grid-template-columns: 1.15fr .85fr;
+      gap: 18px;
+    }
+    .mega-check-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .mega-check {
+      border-radius: 20px;
+      padding: 14px;
+      border: 1px solid rgba(255,255,255,.12);
+      background: rgba(3,6,16,.38);
+    }
+    .mega-check.ok {
+      border-color: rgba(71,240,168,.22);
+      background: rgba(71,240,168,.07);
+    }
+    .mega-check.warn {
+      border-color: rgba(255,209,102,.25);
+      background: rgba(255,209,102,.07);
+    }
+    .mega-check.bad {
+      border-color: rgba(255,92,122,.25);
+      background: rgba(255,92,122,.07);
+    }
+    .mega-check b {
+      display: block;
+      color: #fff;
+      margin-bottom: 5px;
+      font-size: 14px;
+    }
+    .mega-check span {
+      color: rgba(248,251,255,.62);
+      line-height: 1.45;
+      font-size: 12px;
+    }
+    .mega-meter {
+      height: 13px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(255,255,255,.09);
+      border: 1px solid rgba(255,255,255,.10);
+      margin-top: 10px;
+    }
+    .mega-meter div {
+      height: 100%;
+      background: linear-gradient(90deg, var(--mega-ok), var(--max-cyan, #22d3ee), var(--max-purple, #9b5cff));
+      border-radius: 999px;
+      transition: width .24s ease;
+    }
+    .mega-score {
+      display: grid;
+      place-items: center;
+      min-height: 230px;
+      border-radius: 30px;
+      background:
+        radial-gradient(circle, rgba(71,240,168,.13), transparent 55%),
+        rgba(3,6,16,.38);
+      border: 1px solid rgba(255,255,255,.12);
+    }
+    .mega-score strong {
+      font-size: 62px;
+      line-height: 1;
+      letter-spacing: -3px;
+      display: block;
+      text-align: center;
+    }
+    .mega-score span {
+      color: rgba(248,251,255,.62);
+      font-weight: 850;
+      margin-top: 9px;
+      display: block;
+      text-align: center;
+    }
+    .mega-list {
+      display: grid;
+      gap: 10px;
+    }
+    .mega-list-item {
+      padding: 13px 14px;
+      border-radius: 17px;
+      border: 1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.045);
+      color: rgba(248,251,255,.68);
+      line-height: 1.52;
+    }
+    .mega-list-item b {
+      color: #fff;
+    }
+    .mega-template-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0,1fr));
+      gap: 12px;
+    }
+    .mega-template {
+      border-radius: 22px;
+      border: 1px solid rgba(255,255,255,.12);
+      background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.043));
+      padding: 16px;
+    }
+    .mega-template b {
+      display:block;
+      margin-bottom:7px;
+      color:#fff;
+    }
+    .mega-template span {
+      display:block;
+      color:rgba(248,251,255,.60);
+      font-size:12px;
+      line-height:1.48;
+    }
+    .mega-preview {
+      border-radius: 22px;
+      background: rgba(3,6,16,.48);
+      border-left: 5px solid #ff4fd8;
+      padding: 16px;
+      line-height: 1.55;
+      color: rgba(248,251,255,.74);
+      white-space: pre-wrap;
+    }
+    .mega-preview h4 {
+      margin:0 0 10px;
+      color:#fff;
+      font-size:15px;
+    }
+    @media (max-width: 1120px) {
+      .mega-grid { grid-template-columns: 1fr; }
+      .mega-template-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 680px) {
+      .mega-hero h2 { font-size: 31px; }
+      .mega-check-grid, .mega-template-grid { grid-template-columns: 1fr; }
+      .mega-score strong { font-size: 48px; }
+    }
+
+  
+    /* ================= PAK RW MAXTON STUDIO PLUS ================= */
+    :root {
+      --maxton-bg: #040711;
+      --maxton-card: rgba(255,255,255,.072);
+      --maxton-card-2: rgba(255,255,255,.112);
+      --maxton-border: rgba(255,255,255,.145);
+      --maxton-text: #f9fbff;
+      --maxton-muted: rgba(249,251,255,.64);
+      --maxton-a: #7c5cff;
+      --maxton-b: #00d4ff;
+      --maxton-c: #ff4fd8;
+      --maxton-d: #4dffb5;
+      --maxton-gold: #ffd166;
+    }
+    body.dashboard-clean {
+      background:
+        radial-gradient(circle at 12% 0%, rgba(124,92,255,.32), transparent 28%),
+        radial-gradient(circle at 92% 8%, rgba(0,212,255,.20), transparent 30%),
+        radial-gradient(circle at 50% 105%, rgba(255,79,216,.12), transparent 42%),
+        linear-gradient(180deg, #040711 0%, #080c1b 52%, #040711 100%);
+      color: var(--maxton-text);
+    }
+    body.dashboard-clean:before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(rgba(255,255,255,.020) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.020) 1px, transparent 1px);
+      background-size: 48px 48px;
+      mask-image: linear-gradient(180deg, rgba(0,0,0,.76), transparent 86%);
+      z-index: -2;
+    }
+    .maxton-bg-image {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: -3;
+      opacity: .16;
+      background-position: center;
+      background-size: cover;
+      filter: saturate(1.25);
+    }
+    .layout { grid-template-columns: 318px 1fr; }
+    .sidebar {
+      padding: 18px;
+      border-right: 1px solid rgba(255,255,255,.085);
+      background: linear-gradient(180deg, rgba(7,11,27,.96), rgba(4,7,17,.89));
+      box-shadow: 20px 0 100px rgba(0,0,0,.30);
+    }
+    .brand {
+      padding: 14px;
+      border-radius: 28px;
+      background:
+        radial-gradient(circle at 20% 0%, rgba(255,255,255,.16), transparent 26%),
+        linear-gradient(135deg, rgba(124,92,255,.24), rgba(0,212,255,.12)),
+        rgba(255,255,255,.055);
+      border: 1px solid rgba(255,255,255,.16);
+      box-shadow: 0 20px 60px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.16);
+    }
+    .logo {
+      width: 52px; height: 52px; border-radius: 21px;
+      background: linear-gradient(135deg, var(--maxton-a), var(--maxton-b), var(--maxton-c));
+      box-shadow: 0 20px 60px rgba(124,92,255,.34);
+      overflow: hidden;
+    }
+    .logo img { width: 100%; height: 100%; object-fit: cover; display:block; }
+    .brand h1 { font-size: 20px; font-weight: 1000; letter-spacing: -.45px; }
+    .brand p { color: rgba(249,251,255,.60); font-weight: 850; }
+    .nav { margin-top: 18px; gap: 7px; }
+    .nav a {
+      min-height: 46px; border-radius: 17px; padding: 12px 13px;
+      font-weight: 900; color: rgba(249,251,255,.63);
+      position: relative; overflow: hidden;
+    }
+    .nav a:before {
+      content: ""; position: absolute; inset: 0; opacity: 0;
+      background: linear-gradient(90deg, rgba(124,92,255,.18), rgba(0,212,255,.10));
+      transition: opacity .16s ease;
+    }
+    .nav a:hover:before, .nav a.active:before { opacity: 1; }
+    .nav a:hover { transform: translateX(4px); color:#fff; border-color: rgba(255,255,255,.20); }
+    .nav a.active {
+      color:#fff; border-color: rgba(255,255,255,.24);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.16), 0 16px 38px rgba(0,0,0,.23);
+    }
+    .main { max-width: 1620px; padding: 26px; }
+    .topbar {
+      border-radius: 32px; padding: 18px 22px;
+      background: linear-gradient(180deg, rgba(255,255,255,.092), rgba(255,255,255,.045));
+      border: 1px solid rgba(255,255,255,.14);
+      box-shadow: 0 24px 90px rgba(0,0,0,.26), inset 0 1px 0 rgba(255,255,255,.10);
+    }
+    .title h2 { font-weight: 1000; letter-spacing: -1.1px; }
+    .title p { color: var(--maxton-muted); line-height: 1.62; }
+    .maxton-hero {
+      position: relative; overflow: hidden; border-radius: 42px; padding: 34px; margin-bottom: 20px;
+      background:
+        radial-gradient(circle at 90% 10%, rgba(255,255,255,.16), transparent 22%),
+        linear-gradient(135deg, rgba(124,92,255,.31), rgba(0,212,255,.16) 50%, rgba(255,79,216,.12)),
+        rgba(255,255,255,.055);
+      border: 1px solid rgba(255,255,255,.16);
+      box-shadow: 0 34px 120px rgba(0,0,0,.36), inset 0 1px 0 rgba(255,255,255,.16);
+    }
+    .maxton-hero:before {
+      content: ""; position:absolute; right:-130px; top:-150px; width:390px; height:390px;
+      border-radius:999px; background: radial-gradient(circle, rgba(255,255,255,.22), transparent 64%);
+    }
+    .maxton-hero .eyebrow {
+      display:inline-flex; gap:8px; align-items:center; padding:8px 12px; border-radius:999px;
+      background:rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.14);
+      color:rgba(249,251,255,.76); font-weight:900; font-size:12px; margin-bottom:16px;
+    }
+    .maxton-hero h2 { margin:0; font-size:44px; line-height:1.04; letter-spacing:-1.8px; font-weight:1000; max-width:900px; }
+    .maxton-hero p { max-width:930px; color:rgba(249,251,255,.68); line-height:1.68; margin:14px 0 0; }
+    .maxton-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:22px; position:relative; z-index:2; }
+    .maxton-kpis { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-top:23px; position:relative; z-index:2; }
+    .maxton-kpi {
+      border-radius:24px; padding:16px; background:rgba(3,6,16,.35);
+      border:1px solid rgba(255,255,255,.12); backdrop-filter: blur(12px);
+    }
+    .maxton-kpi b { display:block; font-size:19px; color:#fff; margin-bottom:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .maxton-kpi span { color:rgba(249,251,255,.58); font-size:12px; font-weight:800; }
+    .maxton-grid { display:grid; grid-template-columns: 1.18fr .82fr; gap:18px; }
+    .maxton-card-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+    .maxton-card {
+      display:block; min-height:138px; border-radius:28px; padding:18px; position:relative; overflow:hidden;
+      background: linear-gradient(180deg, rgba(255,255,255,.090), rgba(255,255,255,.047));
+      border:1px solid rgba(255,255,255,.13);
+      box-shadow: 0 24px 70px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.08);
+      transition: transform .16s ease, border-color .16s ease, background .16s ease;
+    }
+    .maxton-card:hover { transform:translateY(-5px); border-color:rgba(255,255,255,.25); background:linear-gradient(180deg, rgba(255,255,255,.13), rgba(255,255,255,.06)); }
+    .maxton-card .icon {
+      width:45px; height:45px; border-radius:17px; display:grid; place-items:center; font-size:23px; margin-bottom:13px;
+      background:linear-gradient(135deg, rgba(124,92,255,.34), rgba(0,212,255,.16));
+      border:1px solid rgba(255,255,255,.12);
+    }
+    .maxton-card b { display:block; color:#fff; margin-bottom:7px; font-size:15px; }
+    .maxton-card span { display:block; color:rgba(249,251,255,.60); line-height:1.5; font-size:12px; }
+    .panel, .card {
+      border-radius:32px;
+      background:linear-gradient(180deg, rgba(255,255,255,.080), rgba(255,255,255,.043));
+      border:1px solid rgba(255,255,255,.13);
+      box-shadow:0 25px 88px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.085);
+    }
+    .panel h3 { font-weight:980; letter-spacing:-.25px; border-bottom:1px solid rgba(255,255,255,.08); padding-bottom:12px; }
+    .cmd { background:rgba(3,6,16,.40); border-color:rgba(255,255,255,.11); }
+    input, textarea, select {
+      border-radius:18px; min-height:49px; background:rgba(3,6,16,.55); border:1px solid rgba(255,255,255,.13);
+    }
+    textarea { line-height:1.65; }
+    input:focus, textarea:focus, select:focus { border-color:rgba(0,212,255,.62); box-shadow:0 0 0 4px rgba(0,212,255,.13); }
+    .btn { border-radius:18px; background:linear-gradient(135deg, var(--maxton-a), var(--maxton-b)); box-shadow:0 18px 45px rgba(0,212,255,.14); }
+    .btn.secondary { background:rgba(255,255,255,.075); border:1px solid rgba(255,255,255,.12); }
+    .maxton-preview-img {
+      width:100%; max-height:260px; object-fit:cover; border-radius:24px;
+      border:1px solid rgba(255,255,255,.13); background:rgba(0,0,0,.2);
+    }
+    .theme-swatch {
+      height:44px; border-radius:15px; border:1px solid rgba(255,255,255,.14);
+      background:linear-gradient(135deg, var(--maxton-a), var(--maxton-b), var(--maxton-c));
+    }
+    @media (max-width: 1120px) {
+      .layout { grid-template-columns:1fr; }
+      .sidebar { position:relative; height:auto; }
+      .maxton-grid { grid-template-columns:1fr; }
+      .maxton-card-grid { grid-template-columns:1fr 1fr; }
+      .maxton-kpis { grid-template-columns:1fr 1fr; }
+    }
+    @media (max-width: 650px) {
+      .main { padding:16px; }
+      .maxton-card-grid, .maxton-kpis { grid-template-columns:1fr; }
+      .maxton-hero { padding:24px; border-radius:30px; }
+      .maxton-hero h2 { font-size:31px; }
+    }
+
+  
+    /* ================= PAK RW Luxe Galaxy UI ================= */
+    :root {
+      --aurora-bg: #030510;
+      --aurora-card: rgba(255,255,255,.074);
+      --aurora-card-2: rgba(255,255,255,.112);
+      --aurora-border: rgba(255,255,255,.145);
+      --aurora-text: #f9fbff;
+      --aurora-muted: rgba(249,251,255,.64);
+      --aurora-purple: #8b5cf6;
+      --aurora-blue: #4aa8ff;
+      --aurora-cyan: #22d3ee;
+      --aurora-pink: #ff4fd8;
+      --aurora-green: #48f5aa;
+      --aurora-yellow: #ffd166;
+    }
+    body.dashboard-clean {
+      background:
+        radial-gradient(circle at 8% -8%, rgba(139,92,246,.36), transparent 31%),
+        radial-gradient(circle at 90% 4%, rgba(34,211,238,.22), transparent 31%),
+        radial-gradient(circle at 45% 105%, rgba(255,79,216,.14), transparent 44%),
+        linear-gradient(180deg, #030510 0%, #080c1c 52%, #030510 100%);
+      color: var(--aurora-text);
+    }
+    body.dashboard-clean:before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -2;
+      pointer-events: none;
+      background:
+        linear-gradient(rgba(255,255,255,.020) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.020) 1px, transparent 1px);
+      background-size: 52px 52px;
+      mask-image: linear-gradient(180deg, rgba(0,0,0,.78), transparent 86%);
+    }
+    body.dashboard-clean:after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      background:
+        linear-gradient(115deg, transparent 0%, rgba(255,255,255,.035) 43%, transparent 56%),
+        radial-gradient(circle at center, transparent 0%, rgba(0,0,0,.26) 100%);
+      opacity: .7;
+    }
+    .layout { grid-template-columns: 320px 1fr; }
+    .sidebar {
+      padding: 18px;
+      border-right: 1px solid rgba(255,255,255,.085);
+      background:
+        linear-gradient(180deg, rgba(7,11,28,.96), rgba(3,5,16,.90)),
+        rgba(0,0,0,.28);
+      box-shadow: 22px 0 110px rgba(0,0,0,.31);
+    }
+    .brand {
+      border-radius: 30px;
+      background:
+        radial-gradient(circle at 18% 0%, rgba(255,255,255,.18), transparent 24%),
+        linear-gradient(135deg, rgba(139,92,246,.25), rgba(34,211,238,.12), rgba(255,79,216,.09)),
+        rgba(255,255,255,.055);
+      border: 1px solid rgba(255,255,255,.16);
+    }
+    .logo {
+      width: 54px;
+      height: 54px;
+      border-radius: 22px;
+      background: conic-gradient(from 180deg, var(--aurora-purple), var(--aurora-cyan), var(--aurora-pink), var(--aurora-purple));
+      box-shadow: 0 22px 70px rgba(139,92,246,.34);
+      overflow: hidden;
+    }
+    .logo img { width:100%; height:100%; object-fit:cover; display:block; }
+    .nav a {
+      border-radius: 18px;
+      min-height: 46px;
+      font-weight: 900;
+      letter-spacing: .05px;
+    }
+    .nav a.active {
+      background:
+        linear-gradient(135deg, rgba(139,92,246,.26), rgba(34,211,238,.12)),
+        rgba(255,255,255,.055);
+      border-color: rgba(255,255,255,.24);
+    }
+    .main { max-width: 1640px; padding: 26px; }
+    .aurora-hero {
+      position: relative;
+      overflow: hidden;
+      border-radius: 44px;
+      padding: 34px;
+      margin-bottom: 20px;
+      background:
+        radial-gradient(circle at 84% 14%, rgba(255,255,255,.16), transparent 22%),
+        radial-gradient(circle at 10% 90%, rgba(72,245,170,.14), transparent 28%),
+        linear-gradient(135deg, rgba(139,92,246,.31), rgba(34,211,238,.16) 50%, rgba(255,79,216,.12)),
+        rgba(255,255,255,.055);
+      border: 1px solid rgba(255,255,255,.16);
+      box-shadow: 0 36px 125px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.16);
+    }
+    .aurora-hero .eyebrow {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(0,0,0,.18);
+      border: 1px solid rgba(255,255,255,.14);
+      color: rgba(249,251,255,.78);
+      font-weight: 950;
+      font-size: 12px;
+      margin-bottom: 16px;
+    }
+    .aurora-hero h2 {
+      margin: 0;
+      max-width: 960px;
+      font-size: 46px;
+      line-height: 1.03;
+      letter-spacing: -1.95px;
+      font-weight: 1000;
+    }
+    .aurora-hero p {
+      max-width: 940px;
+      color: rgba(249,251,255,.68);
+      line-height: 1.7;
+      margin: 14px 0 0;
+    }
+    .aurora-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:22px; position:relative; z-index:2; }
+    .aurora-kpis { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-top:24px; position:relative; z-index:2; }
+    .aurora-kpi {
+      border-radius: 25px;
+      padding: 16px;
+      background: rgba(3,6,16,.35);
+      border: 1px solid rgba(255,255,255,.12);
+      backdrop-filter: blur(12px);
+    }
+    .aurora-kpi b { display:block; font-size:19px; color:#fff; margin-bottom:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .aurora-kpi span { color:rgba(249,251,255,.58); font-size:12px; font-weight:800; }
+    .aurora-grid { display:grid; grid-template-columns: 1.2fr .8fr; gap:18px; }
+    .aurora-card-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+    .aurora-card {
+      display:block;
+      min-height:142px;
+      border-radius:30px;
+      padding:18px;
+      position:relative;
+      overflow:hidden;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.092), rgba(255,255,255,.047));
+      border:1px solid rgba(255,255,255,.13);
+      box-shadow: 0 25px 75px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.08);
+      transition: transform .16s ease, border-color .16s ease, background .16s ease;
+    }
+    .aurora-card:hover { transform:translateY(-5px); border-color:rgba(255,255,255,.25); background:linear-gradient(180deg, rgba(255,255,255,.13), rgba(255,255,255,.06)); }
+    .aurora-card .icon {
+      width:46px;
+      height:46px;
+      border-radius:18px;
+      display:grid;
+      place-items:center;
+      font-size:23px;
+      margin-bottom:13px;
+      background:linear-gradient(135deg, rgba(139,92,246,.34), rgba(34,211,238,.16));
+      border:1px solid rgba(255,255,255,.12);
+    }
+    .aurora-card b { display:block; color:#fff; margin-bottom:7px; font-size:15px; }
+    .aurora-card span { display:block; color:rgba(249,251,255,.60); line-height:1.5; font-size:12px; }
+    .panel, .card {
+      border-radius: 32px;
+      background: linear-gradient(180deg, rgba(255,255,255,.080), rgba(255,255,255,.043));
+      border: 1px solid rgba(255,255,255,.13);
+      box-shadow: 0 26px 90px rgba(0,0,0,.26), inset 0 1px 0 rgba(255,255,255,.085);
+    }
+    .tool-row {
+      display:grid;
+      grid-template-columns: 1fr auto;
+      align-items:center;
+      gap:12px;
+      padding:13px 14px;
+      border-radius:18px;
+      background:rgba(3,6,16,.42);
+      border:1px solid rgba(255,255,255,.11);
+      margin-bottom:10px;
+    }
+    .tool-row b { display:block; color:#fff; margin-bottom:4px; }
+    .tool-row span { color:rgba(249,251,255,.60); font-size:12px; line-height:1.45; }
+    .mini-button {
+      border:1px solid rgba(255,255,255,.14);
+      border-radius:14px;
+      background:rgba(255,255,255,.075);
+      color:#fff;
+      padding:10px 12px;
+      font-weight:900;
+      cursor:pointer;
+      text-decoration:none;
+    }
+    .preview-card {
+      border-radius:24px;
+      background:rgba(3,6,16,.48);
+      border:1px solid rgba(255,255,255,.13);
+      padding:16px;
+      line-height:1.58;
+      white-space:pre-wrap;
+    }
+    @media (max-width: 1120px) {
+      .layout { grid-template-columns:1fr; }
+      .sidebar { position:relative; height:auto; }
+      .aurora-grid { grid-template-columns:1fr; }
+      .aurora-card-grid { grid-template-columns:1fr 1fr; }
+      .aurora-kpis { grid-template-columns:1fr 1fr; }
+    }
+    @media (max-width: 650px) {
+      .main { padding:16px; }
+      .aurora-card-grid, .aurora-kpis { grid-template-columns:1fr; }
+      .aurora-hero { padding:24px; border-radius:30px; }
+      .aurora-hero h2 { font-size:31px; }
+      .tool-row { grid-template-columns:1fr; }
+    }
+
+  
+    /* ================= PAK RW CLEAN SMART PRO FIX ================= */
+    :root {
+      --clean-bg: #050814;
+      --clean-panel: rgba(255,255,255,.072);
+      --clean-panel-2: rgba(255,255,255,.105);
+      --clean-border: rgba(255,255,255,.13);
+      --clean-text: #f8fbff;
+      --clean-muted: rgba(248,251,255,.62);
+      --clean-blue: #69a7ff;
+      --clean-purple: #8b5cf6;
+      --clean-cyan: #22d3ee;
+      --clean-pink: #ff4fd8;
+      --clean-green: #47f0a8;
+    }
+    body.dashboard-clean {
+      background:
+        radial-gradient(circle at 16% -10%, rgba(105,167,255,.22), transparent 32%),
+        radial-gradient(circle at 92% 2%, rgba(139,92,246,.20), transparent 30%),
+        linear-gradient(180deg, #050814 0%, #080c1a 52%, #050814 100%);
+      color: var(--clean-text);
+    }
+    body.dashboard-clean:before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -2;
+      pointer-events: none;
+      background:
+        linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px);
+      background-size: 54px 54px;
+      mask-image: linear-gradient(180deg, rgba(0,0,0,.70), transparent 88%);
+    }
+    .layout {
+      grid-template-columns: 300px 1fr;
+    }
+    .sidebar {
+      padding: 18px;
+      border-right: 1px solid rgba(255,255,255,.08);
+      background: linear-gradient(180deg, rgba(9,13,28,.96), rgba(5,8,20,.90));
+      box-shadow: 20px 0 90px rgba(0,0,0,.22);
+    }
+    .brand {
+      border-radius: 24px;
+      padding: 14px;
+      background: rgba(255,255,255,.055);
+      border: 1px solid rgba(255,255,255,.12);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.12);
+    }
+    .brand h1 {
+      font-size: 20px;
+      letter-spacing: -.4px;
+      font-weight: 1000;
+    }
+    .brand p {
+      color: var(--clean-muted);
+      font-weight: 800;
+    }
+    .logo {
+      width: 50px;
+      height: 50px;
+      border-radius: 19px;
+      background: linear-gradient(135deg, var(--clean-blue), var(--clean-purple));
+      box-shadow: 0 18px 50px rgba(105,167,255,.22);
+      overflow: hidden;
+    }
+    .logo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .nav {
+      margin-top: 18px;
+      gap: 6px;
+      max-height: calc(100vh - 180px);
+      overflow: auto;
+      padding-right: 4px;
+    }
+    .nav a {
+      min-height: 42px;
+      border-radius: 14px;
+      padding: 10px 12px;
+      font-size: 13px;
+      font-weight: 850;
+      color: rgba(248,251,255,.66);
+      border-color: transparent;
+      background: transparent;
+    }
+    .nav a:hover {
+      transform: translateX(3px);
+      color: #fff;
+      background: rgba(255,255,255,.065);
+      border-color: rgba(255,255,255,.10);
+    }
+    .nav a.active {
+      color: #fff;
+      background: linear-gradient(135deg, rgba(105,167,255,.16), rgba(139,92,246,.13));
+      border-color: rgba(255,255,255,.17);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.12);
+    }
+    .main {
+      padding: 24px;
+      max-width: 1480px;
+      margin: 0 auto;
+    }
+    .clean-hero {
+      border-radius: 30px;
+      padding: 28px;
+      margin-bottom: 18px;
+      background:
+        linear-gradient(135deg, rgba(105,167,255,.18), rgba(139,92,246,.13)),
+        rgba(255,255,255,.052);
+      border: 1px solid rgba(255,255,255,.13);
+      box-shadow: 0 24px 80px rgba(0,0,0,.23), inset 0 1px 0 rgba(255,255,255,.10);
+      overflow: hidden;
+      position: relative;
+    }
+    .clean-hero:after {
+      content: "";
+      position: absolute;
+      right: -80px;
+      top: -95px;
+      width: 240px;
+      height: 240px;
+      border-radius: 999px;
+      background: radial-gradient(circle, rgba(255,255,255,.14), transparent 65%);
+    }
+    .clean-hero .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 11px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.13);
+      background: rgba(0,0,0,.15);
+      color: rgba(248,251,255,.76);
+      font-size: 12px;
+      font-weight: 900;
+      margin-bottom: 14px;
+    }
+    .clean-hero h2 {
+      margin: 0;
+      max-width: 900px;
+      font-size: 36px;
+      line-height: 1.1;
+      letter-spacing: -1.25px;
+      font-weight: 1000;
+    }
+    .clean-hero p {
+      margin: 12px 0 0;
+      max-width: 900px;
+      color: var(--clean-muted);
+      line-height: 1.65;
+    }
+    .clean-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 20px;
+      position: relative;
+      z-index: 2;
+    }
+    .clean-kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 20px;
+      position: relative;
+      z-index: 2;
+    }
+    .clean-kpi {
+      border-radius: 18px;
+      padding: 14px;
+      background: rgba(3,6,16,.30);
+      border: 1px solid rgba(255,255,255,.10);
+    }
+    .clean-kpi b {
+      display: block;
+      color: #fff;
+      font-size: 18px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      margin-bottom: 3px;
+    }
+    .clean-kpi span {
+      color: rgba(248,251,255,.56);
+      font-size: 12px;
+      font-weight: 750;
+    }
+    .clean-layout {
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap: 18px;
+    }
+    .clean-section {
+      border-radius: 26px;
+      padding: 20px;
+      background: linear-gradient(180deg, rgba(255,255,255,.074), rgba(255,255,255,.042));
+      border: 1px solid rgba(255,255,255,.12);
+      box-shadow: 0 22px 70px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.08);
+    }
+    .clean-section h3 {
+      margin-top: 0;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      font-size: 18px;
+    }
+    .clean-group {
+      display: grid;
+      gap: 12px;
+    }
+    .clean-group-title {
+      margin: 18px 0 8px;
+      color: rgba(248,251,255,.58);
+      font-size: 12px;
+      font-weight: 950;
+      text-transform: uppercase;
+      letter-spacing: .9px;
+    }
+    .clean-card-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .clean-card {
+      display: block;
+      min-height: 112px;
+      padding: 15px;
+      border-radius: 20px;
+      background: rgba(3,6,16,.34);
+      border: 1px solid rgba(255,255,255,.10);
+      transition: transform .16s ease, background .16s ease, border-color .16s ease;
+    }
+    .clean-card:hover {
+      transform: translateY(-3px);
+      background: rgba(255,255,255,.075);
+      border-color: rgba(255,255,255,.18);
+    }
+    .clean-card .icon {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(105,167,255,.24), rgba(139,92,246,.18));
+      border: 1px solid rgba(255,255,255,.10);
+      margin-bottom: 10px;
+    }
+    .clean-card b {
+      display: block;
+      color: #fff;
+      margin-bottom: 6px;
+      font-size: 14px;
+    }
+    .clean-card span {
+      display: block;
+      color: rgba(248,251,255,.58);
+      line-height: 1.48;
+      font-size: 12px;
+    }
+    .panel, .card {
+      border-radius: 26px !important;
+      background: linear-gradient(180deg, rgba(255,255,255,.074), rgba(255,255,255,.042)) !important;
+      border: 1px solid rgba(255,255,255,.12) !important;
+      box-shadow: 0 22px 70px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.08) !important;
+    }
+    .topbar {
+      border-radius: 26px !important;
+      background: rgba(255,255,255,.060) !important;
+      border: 1px solid rgba(255,255,255,.12) !important;
+    }
+    .title h2 {
+      font-size: 28px;
+      font-weight: 1000;
+      letter-spacing: -.8px;
+    }
+    .title p {
+      color: var(--clean-muted);
+      line-height: 1.62;
+    }
+    input, textarea, select {
+      border-radius: 15px !important;
+      background: rgba(3,6,16,.50) !important;
+      border: 1px solid rgba(255,255,255,.12) !important;
+    }
+    textarea {
+      line-height: 1.62;
+    }
+    input:focus, textarea:focus, select:focus {
+      border-color: rgba(105,167,255,.62) !important;
+      box-shadow: 0 0 0 4px rgba(105,167,255,.13) !important;
+    }
+    .btn {
+      border-radius: 15px !important;
+      background: linear-gradient(135deg, var(--clean-blue), var(--clean-purple)) !important;
+    }
+    .btn.secondary {
+      background: rgba(255,255,255,.075) !important;
+    }
+    .cmd, .tool-row, .preview-card {
+      border-radius: 16px !important;
+      background: rgba(3,6,16,.36) !important;
+      border: 1px solid rgba(255,255,255,.10) !important;
+    }
+    .actions {
+      border-radius: 18px !important;
+    }
+    .smart-mini {
+      display: grid;
+      gap: 10px;
+    }
+    .smart-mini-item {
+      padding: 12px;
+      border-radius: 16px;
+      background: rgba(3,6,16,.36);
+      border: 1px solid rgba(255,255,255,.10);
+      color: rgba(248,251,255,.62);
+      line-height: 1.45;
+      font-size: 12px;
+    }
+    .smart-mini-item b {
+      color: #fff;
+      display: block;
+      margin-bottom: 4px;
+      font-size: 13px;
+    }
+    @media (max-width: 1120px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { position: relative; height: auto; }
+      .nav { max-height: none; }
+      .clean-layout { grid-template-columns: 1fr; }
+      .clean-kpis { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 680px) {
+      .main { padding: 16px; }
+      .clean-card-grid, .clean-kpis { grid-template-columns: 1fr; }
+      .clean-hero { padding: 22px; border-radius: 24px; }
+      .clean-hero h2 { font-size: 28px; }
+    }
+
+  
+    /* ================= PAK RW COMFORT EDITOR LAYER ================= */
+    .comfort-hero {
+      border-radius: 28px;
+      padding: 24px;
+      margin-bottom: 18px;
+      background:
+        linear-gradient(135deg, rgba(105,167,255,.16), rgba(72,240,166,.09)),
+        rgba(255,255,255,.048);
+      border: 1px solid rgba(255,255,255,.12);
+      box-shadow: 0 22px 70px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.09);
+    }
+    .comfort-hero h2 {
+      margin: 0;
+      font-size: 32px;
+      letter-spacing: -1px;
+      line-height: 1.12;
+      font-weight: 1000;
+    }
+    .comfort-hero p {
+      color: rgba(248,251,255,.62);
+      line-height: 1.65;
+      max-width: 900px;
+      margin: 10px 0 0;
+    }
+    .comfort-grid {
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap: 18px;
+    }
+    .comfort-card-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .comfort-card {
+      display: block;
+      padding: 16px;
+      min-height: 116px;
+      border-radius: 20px;
+      background: rgba(3,6,16,.34);
+      border: 1px solid rgba(255,255,255,.10);
+      transition: transform .16s ease, border-color .16s ease, background .16s ease;
+    }
+    .comfort-card:hover {
+      transform: translateY(-3px);
+      border-color: rgba(255,255,255,.18);
+      background: rgba(255,255,255,.070);
+    }
+    .comfort-card b {
+      display: block;
+      color: #fff;
+      font-size: 14px;
+      margin-bottom: 7px;
+    }
+    .comfort-card span {
+      display: block;
+      color: rgba(248,251,255,.58);
+      line-height: 1.48;
+      font-size: 12px;
+    }
+    .comfort-badge {
+      display: inline-flex;
+      margin-bottom: 10px;
+      padding: 6px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 950;
+      color: rgba(248,251,255,.75);
+      background: rgba(255,255,255,.070);
+      border: 1px solid rgba(255,255,255,.10);
+    }
+    .comfort-step {
+      padding: 13px;
+      border-radius: 17px;
+      background: rgba(3,6,16,.36);
+      border: 1px solid rgba(255,255,255,.10);
+      margin-bottom: 10px;
+      color: rgba(248,251,255,.62);
+      line-height: 1.5;
+      font-size: 13px;
+    }
+    .comfort-step b {
+      color: #fff;
+    }
+    .comfort-copy {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .comfort-pill {
+      padding: 9px 10px;
+      border-radius: 13px;
+      background: rgba(255,255,255,.055);
+      border: 1px solid rgba(255,255,255,.09);
+      color: rgba(248,251,255,.72);
+      font-size: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      text-align: center;
+    }
+    .editor-note {
+      padding: 12px 13px;
+      border-radius: 16px;
+      background: rgba(72,240,166,.070);
+      border: 1px solid rgba(72,240,166,.16);
+      color: rgba(248,251,255,.70);
+      line-height: 1.55;
+      margin-bottom: 14px;
+    }
+    .dashboard-clean form.panel > h3 {
+      margin-top: 26px;
+    }
+    .dashboard-clean form.panel > h3:first-child {
+      margin-top: 0;
+    }
+    .dashboard-clean .formgrid {
+      align-items: start;
+    }
+    .dashboard-clean label {
+      margin-bottom: 7px;
+    }
+    .dashboard-clean input,
+    .dashboard-clean textarea,
+    .dashboard-clean select {
+      font-size: 14px;
+    }
+    .dashboard-clean .actions {
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    @media (max-width: 980px) {
+      .comfort-grid { grid-template-columns: 1fr; }
+      .comfort-card-grid, .comfort-copy { grid-template-columns: 1fr; }
+      .comfort-hero h2 { font-size: 27px; }
+    }
+
+  
+    /* ================= PAK RW CALM COMFORT DASHBOARD ================= */
+    :root {
+      --calm-bg: #070b16;
+      --calm-panel: rgba(255,255,255,.060);
+      --calm-panel-2: rgba(255,255,255,.085);
+      --calm-border: rgba(255,255,255,.105);
+      --calm-text: #f7f9ff;
+      --calm-muted: rgba(247,249,255,.60);
+      --calm-blue: #7fb2ff;
+      --calm-purple: #a78bfa;
+      --calm-green: #72f2b6;
+      --calm-pink: #ff7adc;
+    }
+    body.dashboard-clean {
+      background:
+        radial-gradient(circle at 12% -8%, rgba(127,178,255,.18), transparent 34%),
+        radial-gradient(circle at 92% 0%, rgba(167,139,250,.13), transparent 30%),
+        linear-gradient(180deg, #070b16 0%, #0a0f1d 52%, #070b16 100%);
+      color: var(--calm-text);
+    }
+    body.dashboard-clean:before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: -2;
+      background:
+        linear-gradient(rgba(255,255,255,.014) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.014) 1px, transparent 1px);
+      background-size: 56px 56px;
+      mask-image: linear-gradient(180deg, rgba(0,0,0,.55), transparent 86%);
+    }
+    .layout {
+      grid-template-columns: 286px 1fr;
+    }
+    .sidebar {
+      padding: 18px;
+      background: linear-gradient(180deg, rgba(10,15,30,.94), rgba(7,11,22,.88));
+      border-right: 1px solid rgba(255,255,255,.07);
+      box-shadow: 16px 0 70px rgba(0,0,0,.18);
+    }
+    .brand {
+      border-radius: 22px;
+      padding: 13px;
+      background: rgba(255,255,255,.046);
+      border: 1px solid rgba(255,255,255,.095);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+    }
+    .brand h1 {
+      font-size: 19px;
+      letter-spacing: -.35px;
+      font-weight: 1000;
+    }
+    .brand p {
+      color: var(--calm-muted);
+      font-weight: 760;
+    }
+    .logo {
+      width: 48px;
+      height: 48px;
+      border-radius: 18px;
+      background: linear-gradient(135deg, var(--calm-blue), var(--calm-purple));
+      box-shadow: 0 16px 40px rgba(127,178,255,.18);
+      overflow: hidden;
+    }
+    .nav {
+      margin-top: 16px;
+      gap: 5px;
+      max-height: calc(100vh - 180px);
+      overflow: auto;
+      padding-right: 4px;
+    }
+    .nav a {
+      min-height: 40px;
+      border-radius: 13px;
+      padding: 10px 11px;
+      font-size: 13px;
+      font-weight: 820;
+      color: rgba(247,249,255,.62);
+      background: transparent;
+      border-color: transparent;
+    }
+    .nav a:hover {
+      color: #fff;
+      transform: translateX(2px);
+      background: rgba(255,255,255,.052);
+      border-color: rgba(255,255,255,.085);
+    }
+    .nav a.active {
+      color: #fff;
+      background: linear-gradient(135deg, rgba(127,178,255,.14), rgba(167,139,250,.10));
+      border-color: rgba(255,255,255,.14);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+    }
+    .main {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    .calm-hero {
+      position: relative;
+      overflow: hidden;
+      border-radius: 28px;
+      padding: 26px;
+      margin-bottom: 16px;
+      background:
+        linear-gradient(135deg, rgba(127,178,255,.135), rgba(167,139,250,.085)),
+        rgba(255,255,255,.042);
+      border: 1px solid rgba(255,255,255,.10);
+      box-shadow: 0 20px 65px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.07);
+    }
+    .calm-hero:after {
+      content: "";
+      position: absolute;
+      right: -85px;
+      top: -95px;
+      width: 235px;
+      height: 235px;
+      border-radius: 999px;
+      background: radial-gradient(circle, rgba(255,255,255,.10), transparent 66%);
+    }
+    .calm-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.055);
+      border: 1px solid rgba(255,255,255,.09);
+      color: rgba(247,249,255,.70);
+      font-size: 12px;
+      font-weight: 850;
+      margin-bottom: 12px;
+    }
+    .calm-hero h2 {
+      margin: 0;
+      max-width: 840px;
+      font-size: 32px;
+      line-height: 1.12;
+      letter-spacing: -1px;
+      font-weight: 1000;
+    }
+    .calm-hero p {
+      margin: 10px 0 0;
+      max-width: 850px;
+      color: var(--calm-muted);
+      line-height: 1.64;
+    }
+    .calm-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px;
+      margin-top: 18px;
+      position: relative;
+      z-index: 2;
+    }
+    .calm-kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 18px;
+      position: relative;
+      z-index: 2;
+    }
+    .calm-kpi {
+      border-radius: 17px;
+      padding: 13px;
+      background: rgba(3,6,16,.26);
+      border: 1px solid rgba(255,255,255,.085);
+    }
+    .calm-kpi b {
+      display: block;
+      color: #fff;
+      font-size: 17px;
+      margin-bottom: 3px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .calm-kpi span {
+      color: rgba(247,249,255,.54);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .calm-layout {
+      display: grid;
+      grid-template-columns: 1.05fr .95fr;
+      gap: 16px;
+    }
+    .calm-panel {
+      border-radius: 24px;
+      padding: 18px;
+      background: rgba(255,255,255,.052);
+      border: 1px solid rgba(255,255,255,.095);
+      box-shadow: 0 18px 55px rgba(0,0,0,.16), inset 0 1px 0 rgba(255,255,255,.065);
+    }
+    .calm-panel h3 {
+      margin: 0 0 14px;
+      padding-bottom: 11px;
+      border-bottom: 1px solid rgba(255,255,255,.075);
+      font-size: 17px;
+      letter-spacing: -.25px;
+    }
+    .calm-card-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .calm-card {
+      display: block;
+      min-height: 96px;
+      padding: 14px;
+      border-radius: 18px;
+      background: rgba(3,6,16,.28);
+      border: 1px solid rgba(255,255,255,.085);
+      transition: transform .16s ease, background .16s ease, border-color .16s ease;
+    }
+    .calm-card:hover {
+      transform: translateY(-2px);
+      background: rgba(255,255,255,.058);
+      border-color: rgba(255,255,255,.14);
+    }
+    .calm-card b {
+      display: block;
+      color: #fff;
+      margin-bottom: 6px;
+      font-size: 14px;
+    }
+    .calm-card span {
+      display: block;
+      color: rgba(247,249,255,.56);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .calm-row {
+      padding: 12px;
+      border-radius: 16px;
+      background: rgba(3,6,16,.28);
+      border: 1px solid rgba(255,255,255,.085);
+      color: rgba(247,249,255,.58);
+      line-height: 1.45;
+      font-size: 12px;
+      margin-bottom: 9px;
+    }
+    .calm-row b {
+      display: block;
+      color: #fff;
+      margin-bottom: 4px;
+      font-size: 13px;
+    }
+    .calm-pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .calm-pill {
+      padding: 7px 9px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.052);
+      border: 1px solid rgba(255,255,255,.085);
+      color: rgba(247,249,255,.62);
+      font-size: 12px;
+      font-weight: 760;
+    }
+    .panel, .card, .topbar {
+      border-radius: 24px !important;
+      background: rgba(255,255,255,.052) !important;
+      border: 1px solid rgba(255,255,255,.095) !important;
+      box-shadow: 0 18px 55px rgba(0,0,0,.16), inset 0 1px 0 rgba(255,255,255,.065) !important;
+    }
+    .title h2 {
+      font-size: 26px !important;
+      letter-spacing: -.75px !important;
+    }
+    .title p {
+      color: var(--calm-muted) !important;
+      line-height: 1.62 !important;
+    }
+    .cmd, .tool-row, .preview-card, .smart-mini-item, .comfort-step {
+      border-radius: 16px !important;
+      background: rgba(3,6,16,.28) !important;
+      border: 1px solid rgba(255,255,255,.085) !important;
+    }
+    input, textarea, select {
+      border-radius: 14px !important;
+      background: rgba(3,6,16,.42) !important;
+      border: 1px solid rgba(255,255,255,.095) !important;
+      font-size: 14px !important;
+    }
+    textarea {
+      line-height: 1.62 !important;
+    }
+    input:focus, textarea:focus, select:focus {
+      border-color: rgba(127,178,255,.50) !important;
+      box-shadow: 0 0 0 4px rgba(127,178,255,.10) !important;
+    }
+    .btn {
+      border-radius: 14px !important;
+      background: linear-gradient(135deg, var(--calm-blue), var(--calm-purple)) !important;
+      box-shadow: 0 14px 35px rgba(127,178,255,.12) !important;
+    }
+    .btn.secondary {
+      background: rgba(255,255,255,.065) !important;
+      border: 1px solid rgba(255,255,255,.095) !important;
+    }
+    .actions {
+      border-radius: 16px !important;
+    }
+    .comfort-grid, .clean-layout, .aurora-grid, .maxton-grid, .max-grid, .mega-grid {
+      gap: 16px !important;
+    }
+    @media (max-width: 1020px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { position: relative; height: auto; }
+      .nav { max-height: none; }
+      .calm-layout { grid-template-columns: 1fr; }
+      .calm-kpis { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 640px) {
+      .main { padding: 15px; }
+      .calm-card-grid, .calm-kpis { grid-template-columns: 1fr; }
+      .calm-hero { padding: 20px; border-radius: 22px; }
+      .calm-hero h2 { font-size: 26px; }
+    }
+
+  
+    /* ================= PAK RW FOCUS COMFORT UPDATE ================= */
+    .focus-hero {
+      border-radius: 26px;
+      padding: 24px;
+      margin-bottom: 16px;
+      background:
+        linear-gradient(135deg, rgba(127,178,255,.13), rgba(114,242,182,.08)),
+        rgba(255,255,255,.042);
+      border: 1px solid rgba(255,255,255,.10);
+      box-shadow: 0 18px 55px rgba(0,0,0,.16), inset 0 1px 0 rgba(255,255,255,.07);
+    }
+    .focus-hero h2 {
+      margin: 0;
+      font-size: 30px;
+      line-height: 1.14;
+      letter-spacing: -.9px;
+      font-weight: 1000;
+    }
+    .focus-hero p {
+      margin: 10px 0 0;
+      max-width: 860px;
+      color: rgba(247,249,255,.60);
+      line-height: 1.62;
+    }
+    .focus-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .focus-wide {
+      grid-column: 1 / -1;
+    }
+    .focus-panel {
+      padding: 17px;
+      border-radius: 22px;
+      background: rgba(255,255,255,.050);
+      border: 1px solid rgba(255,255,255,.090);
+      box-shadow: 0 16px 48px rgba(0,0,0,.14), inset 0 1px 0 rgba(255,255,255,.055);
+    }
+    .focus-panel h3 {
+      margin: 0 0 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255,255,255,.070);
+      font-size: 16px;
+      letter-spacing: -.15px;
+    }
+    .focus-menu {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .focus-link {
+      display: block;
+      padding: 13px;
+      border-radius: 16px;
+      background: rgba(3,6,16,.28);
+      border: 1px solid rgba(255,255,255,.080);
+      transition: transform .15s ease, background .15s ease, border-color .15s ease;
+    }
+    .focus-link:hover {
+      transform: translateY(-2px);
+      background: rgba(255,255,255,.060);
+      border-color: rgba(255,255,255,.14);
+    }
+    .focus-link b {
+      display: block;
+      color: #fff;
+      margin-bottom: 5px;
+      font-size: 13px;
+    }
+    .focus-link span {
+      display: block;
+      color: rgba(247,249,255,.56);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .focus-step {
+      padding: 12px;
+      border-radius: 15px;
+      background: rgba(3,6,16,.28);
+      border: 1px solid rgba(255,255,255,.080);
+      color: rgba(247,249,255,.60);
+      line-height: 1.48;
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+    .focus-step b {
+      color: #fff;
+    }
+    .focus-command {
+      padding: 8px 10px;
+      border-radius: 12px;
+      background: rgba(255,255,255,.055);
+      border: 1px solid rgba(255,255,255,.080);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      display: inline-block;
+      margin: 3px 4px 3px 0;
+      color: rgba(247,249,255,.78);
+    }
+    .focus-status {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0,1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .focus-stat {
+      border-radius: 15px;
+      padding: 12px;
+      background: rgba(3,6,16,.26);
+      border: 1px solid rgba(255,255,255,.075);
+    }
+    .focus-stat b {
+      display: block;
+      font-size: 16px;
+      color: #fff;
+      margin-bottom: 3px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .focus-stat span {
+      display: block;
+      font-size: 11px;
+      color: rgba(247,249,255,.52);
+      font-weight: 700;
+    }
+    .focus-note {
+      border-radius: 15px;
+      padding: 12px;
+      background: rgba(114,242,182,.065);
+      border: 1px solid rgba(114,242,182,.14);
+      color: rgba(247,249,255,.68);
+      line-height: 1.52;
+      margin-bottom: 12px;
+      font-size: 13px;
+    }
+    .dashboard-clean .main {
+      max-width: 1260px;
+    }
+    .dashboard-clean .panel,
+    .dashboard-clean .card,
+    .dashboard-clean .topbar {
+      border-radius: 22px !important;
+    }
+    .dashboard-clean textarea {
+      min-height: 130px;
+    }
+    @media (max-width: 900px) {
+      .focus-grid,
+      .focus-menu,
+      .focus-status {
+        grid-template-columns: 1fr;
+      }
+      .focus-hero h2 {
+        font-size: 26px;
+      }
+    }
+
+  
+    /* ================= DASHBOARD FEATURE CENTER PLUS ================= */
+    .feature-center-hero {
+      border-radius: 26px;
+      padding: 24px;
+      margin-bottom: 16px;
+      background:
+        linear-gradient(135deg, rgba(105,167,255,.14), rgba(255,79,216,.08)),
+        rgba(255,255,255,.045);
+      border: 1px solid rgba(255,255,255,.10);
+      box-shadow: 0 18px 55px rgba(0,0,0,.16), inset 0 1px 0 rgba(255,255,255,.07);
+    }
+    .feature-center-hero h2 {
+      margin: 0;
+      font-size: 30px;
+      line-height: 1.14;
+      letter-spacing: -.9px;
+      font-weight: 1000;
+    }
+    .feature-center-hero p {
+      margin: 10px 0 0;
+      max-width: 880px;
+      color: rgba(247,249,255,.62);
+      line-height: 1.62;
+    }
+    .feature-tab-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0,1fr));
+      gap: 12px;
+    }
+    .feature-tab {
+      display: block;
+      border-radius: 18px;
+      padding: 15px;
+      background: rgba(3,6,16,.30);
+      border: 1px solid rgba(255,255,255,.09);
+      transition: transform .15s ease, background .15s ease, border-color .15s ease;
+    }
+    .feature-tab:hover {
+      transform: translateY(-2px);
+      background: rgba(255,255,255,.060);
+      border-color: rgba(255,255,255,.14);
+    }
+    .feature-tab b {
+      display: block;
+      color: #fff;
+      margin-bottom: 6px;
+      font-size: 14px;
+    }
+    .feature-tab span {
+      display: block;
+      color: rgba(247,249,255,.58);
+      line-height: 1.45;
+      font-size: 12px;
+    }
+    .command-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .command-card {
+      border-radius: 17px;
+      padding: 13px;
+      background: rgba(3,6,16,.30);
+      border: 1px solid rgba(255,255,255,.09);
+    }
+    .command-card b {
+      color: #fff;
+      display: block;
+      margin-bottom: 5px;
+      font-size: 13px;
+    }
+    .command-card code {
+      display: inline-block;
+      margin: 4px 0 6px;
+      padding: 6px 8px;
+      border-radius: 10px;
+      background: rgba(255,255,255,.060);
+      border: 1px solid rgba(255,255,255,.08);
+      color: rgba(247,249,255,.82);
+      font-size: 12px;
+    }
+    .command-card span {
+      display: block;
+      color: rgba(247,249,255,.56);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .toggle-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap: 12px;
+    }
+    .toggle-card {
+      border-radius: 18px;
+      padding: 14px;
+      background: rgba(3,6,16,.30);
+      border: 1px solid rgba(255,255,255,.09);
+    }
+    .toggle-card label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0;
+      cursor: pointer;
+      color: #fff;
+      font-weight: 850;
+    }
+    .toggle-card input {
+      width: auto !important;
+      min-height: auto !important;
+      transform: scale(1.15);
+    }
+    .toggle-card span {
+      display: block;
+      margin-top: 7px;
+      color: rgba(247,249,255,.56);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0,1fr));
+      gap: 10px;
+    }
+    .summary-box {
+      border-radius: 16px;
+      padding: 13px;
+      background: rgba(3,6,16,.28);
+      border: 1px solid rgba(255,255,255,.08);
+    }
+    .summary-box b {
+      display: block;
+      color: #fff;
+      font-size: 16px;
+      margin-bottom: 4px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .summary-box span {
+      color: rgba(247,249,255,.55);
+      font-size: 12px;
+    }
+    @media (max-width: 980px) {
+      .feature-tab-grid,
+      .command-grid,
+      .toggle-grid,
+      .summary-grid {
+        grid-template-columns: 1fr;
+      }
+      .feature-center-hero h2 { font-size: 26px; }
+    }
+
+  
+    /* ================= PAK RW ORBIT COMMAND CENTER ================= */
+    :root {
+      --orbit-bg: #050711;
+      --orbit-card: rgba(255,255,255,.07);
+      --orbit-card-2: rgba(255,255,255,.105);
+      --orbit-border: rgba(255,255,255,.13);
+      --orbit-text: #f8fbff;
+      --orbit-muted: rgba(248,251,255,.62);
+      --orbit-blue: #5aa7ff;
+      --orbit-violet: #8b5cf6;
+      --orbit-cyan: #22d3ee;
+      --orbit-pink: #ff4fd8;
+      --orbit-green: #48f5aa;
+      --orbit-orange: #ffd166;
+    }
+    body.dashboard-clean {
+      background:
+        radial-gradient(circle at 50% -15%, rgba(90,167,255,.22), transparent 34%),
+        radial-gradient(circle at 92% 12%, rgba(255,79,216,.14), transparent 28%),
+        radial-gradient(circle at 6% 92%, rgba(72,245,170,.10), transparent 32%),
+        linear-gradient(180deg, #050711 0%, #090d1c 56%, #050711 100%);
+      color: var(--orbit-text);
+    }
+    body.dashboard-clean:before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -2;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at center, transparent 0 9px, rgba(255,255,255,.024) 10px, transparent 11px),
+        linear-gradient(rgba(255,255,255,.016) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.016) 1px, transparent 1px);
+      background-size: 96px 96px, 52px 52px, 52px 52px;
+      mask-image: linear-gradient(180deg, rgba(0,0,0,.75), transparent 86%);
+    }
+    .layout {
+      grid-template-columns: 292px 1fr;
+    }
+    .sidebar {
+      padding: 16px;
+      border-right: 1px solid rgba(255,255,255,.075);
+      background:
+        linear-gradient(180deg, rgba(8,12,28,.96), rgba(5,7,17,.90)),
+        rgba(0,0,0,.26);
+      box-shadow: 18px 0 90px rgba(0,0,0,.25);
+    }
+    .brand {
+      border-radius: 22px;
+      padding: 13px;
+      background:
+        linear-gradient(135deg, rgba(90,167,255,.14), rgba(139,92,246,.11)),
+        rgba(255,255,255,.046);
+      border: 1px solid rgba(255,255,255,.11);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.09);
+    }
+    .brand h1 { font-size: 19px; font-weight: 1000; letter-spacing: -.4px; }
+    .brand p { color: var(--orbit-muted); font-weight: 780; }
+    .logo {
+      width: 48px;
+      height: 48px;
+      border-radius: 18px;
+      background: radial-gradient(circle at 30% 20%, #fff, var(--orbit-cyan) 18%, var(--orbit-violet) 58%, var(--orbit-pink));
+      box-shadow: 0 18px 48px rgba(90,167,255,.22);
+      overflow: hidden;
+    }
+    .logo img { width:100%; height:100%; object-fit:cover; display:block; }
+    .nav {
+      margin-top: 15px;
+      gap: 5px;
+      max-height: calc(100vh - 168px);
+      overflow: auto;
+      padding-right: 4px;
+    }
+    .nav a {
+      min-height: 39px;
+      border-radius: 13px;
+      padding: 9px 11px;
+      font-size: 13px;
+      font-weight: 850;
+      color: rgba(248,251,255,.64);
+      background: transparent;
+      border-color: transparent;
+    }
+    .nav a:hover {
+      color: #fff;
+      transform: translateX(2px);
+      background: rgba(255,255,255,.052);
+      border-color: rgba(255,255,255,.09);
+    }
+    .nav a.active {
+      color: #fff;
+      background: linear-gradient(135deg, rgba(90,167,255,.16), rgba(139,92,246,.11));
+      border-color: rgba(255,255,255,.15);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+    }
+    .main {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 22px;
+    }
+    .orbit-hero {
+      border-radius: 30px;
+      padding: 24px;
+      margin-bottom: 16px;
+      background:
+        radial-gradient(circle at 92% 10%, rgba(255,255,255,.13), transparent 22%),
+        linear-gradient(135deg, rgba(90,167,255,.18), rgba(139,92,246,.12), rgba(255,79,216,.07)),
+        rgba(255,255,255,.045);
+      border: 1px solid rgba(255,255,255,.11);
+      box-shadow: 0 22px 70px rgba(0,0,0,.23), inset 0 1px 0 rgba(255,255,255,.08);
+      overflow: hidden;
+      position: relative;
+    }
+    .orbit-hero:after {
+      content: "";
+      position: absolute;
+      width: 260px;
+      height: 260px;
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 999px;
+      right: -85px;
+      top: -92px;
+      box-shadow: 0 0 0 22px rgba(255,255,255,.018), 0 0 0 46px rgba(255,255,255,.012);
+    }
+    .orbit-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.055);
+      border: 1px solid rgba(255,255,255,.10);
+      color: rgba(248,251,255,.72);
+      font-size: 12px;
+      font-weight: 900;
+      margin-bottom: 12px;
+    }
+    .orbit-hero h2 {
+      margin: 0;
+      max-width: 930px;
+      font-size: 34px;
+      line-height: 1.10;
+      letter-spacing: -1.1px;
+      font-weight: 1000;
+    }
+    .orbit-hero p {
+      margin: 10px 0 0;
+      max-width: 900px;
+      color: var(--orbit-muted);
+      line-height: 1.64;
+    }
+    .orbit-actions {
+      display: flex;
+      gap: 9px;
+      flex-wrap: wrap;
+      margin-top: 18px;
+      position: relative;
+      z-index: 2;
+    }
+    .orbit-kpis {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 18px;
+      position: relative;
+      z-index: 2;
+    }
+    .orbit-kpi {
+      border-radius: 17px;
+      padding: 13px;
+      background: rgba(3,6,16,.30);
+      border: 1px solid rgba(255,255,255,.085);
+    }
+    .orbit-kpi b {
+      display: block;
+      color: #fff;
+      font-size: 17px;
+      margin-bottom: 3px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .orbit-kpi span {
+      color: rgba(248,251,255,.54);
+      font-size: 11px;
+      font-weight: 760;
+    }
+    .orbit-bento {
+      display: grid;
+      grid-template-columns: 1.2fr .8fr;
+      gap: 16px;
+    }
+    .orbit-panel {
+      border-radius: 24px;
+      padding: 18px;
+      background: rgba(255,255,255,.052);
+      border: 1px solid rgba(255,255,255,.10);
+      box-shadow: 0 18px 55px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.06);
+    }
+    .orbit-panel h3 {
+      margin: 0 0 13px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255,255,255,.075);
+      font-size: 17px;
+      letter-spacing: -.22px;
+    }
+    .orbit-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0,1fr));
+      gap: 10px;
+    }
+    .orbit-card {
+      display: block;
+      min-height: 102px;
+      border-radius: 18px;
+      padding: 14px;
+      background: rgba(3,6,16,.30);
+      border: 1px solid rgba(255,255,255,.085);
+      transition: transform .15s ease, background .15s ease, border-color .15s ease;
+    }
+    .orbit-card:hover {
+      transform: translateY(-2px);
+      background: rgba(255,255,255,.060);
+      border-color: rgba(255,255,255,.14);
+    }
+    .orbit-card b { display:block; color:#fff; margin-bottom:6px; font-size:13px; }
+    .orbit-card span { display:block; color:rgba(248,251,255,.56); font-size:12px; line-height:1.45; }
+    .orbit-list { display:grid; gap:8px; }
+    .orbit-row {
+      padding: 12px;
+      border-radius: 16px;
+      background: rgba(3,6,16,.30);
+      border: 1px solid rgba(255,255,255,.085);
+      color: rgba(248,251,255,.58);
+      line-height: 1.45;
+      font-size: 12px;
+    }
+    .orbit-row b { display:block; color:#fff; margin-bottom:4px; font-size:13px; }
+    .discord-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0 8px;
+    }
+    .discord-table th {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .7px;
+      color: rgba(248,251,255,.46);
+      text-align: left;
+      padding: 0 10px 4px;
+    }
+    .discord-table td {
+      background: rgba(3,6,16,.32);
+      border-top: 1px solid rgba(255,255,255,.075);
+      border-bottom: 1px solid rgba(255,255,255,.075);
+      padding: 11px 10px;
+      color: rgba(248,251,255,.70);
+      font-size: 12px;
+    }
+    .discord-table td:first-child { border-left: 1px solid rgba(255,255,255,.075); border-radius: 14px 0 0 14px; }
+    .discord-table td:last-child { border-right: 1px solid rgba(255,255,255,.075); border-radius: 0 14px 14px 0; }
+    .copy-chip {
+      display: inline-block;
+      padding: 6px 8px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.060);
+      border: 1px solid rgba(255,255,255,.08);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: rgba(248,251,255,.78);
+      font-size: 11px;
+    }
+    .emoji-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0,1fr));
+      gap: 10px;
+    }
+    .emoji-card {
+      text-align: center;
+      border-radius: 17px;
+      padding: 13px;
+      background: rgba(3,6,16,.30);
+      border: 1px solid rgba(255,255,255,.085);
+    }
+    .emoji-card img { width: 42px; height: 42px; object-fit: contain; display:block; margin:0 auto 8px; }
+    .emoji-card b { display:block; color:#fff; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .emoji-card span { display:block; margin-top:5px; color:rgba(248,251,255,.50); font-size:11px; }
+    .panel, .card, .topbar {
+      border-radius: 24px !important;
+      background: rgba(255,255,255,.052) !important;
+      border: 1px solid rgba(255,255,255,.10) !important;
+      box-shadow: 0 18px 55px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.06) !important;
+    }
+    input, textarea, select {
+      border-radius: 14px !important;
+      background: rgba(3,6,16,.42) !important;
+      border: 1px solid rgba(255,255,255,.095) !important;
+    }
+    textarea { line-height: 1.62 !important; }
+    .btn {
+      border-radius: 14px !important;
+      background: linear-gradient(135deg, var(--orbit-blue), var(--orbit-violet)) !important;
+    }
+    .btn.secondary {
+      background: rgba(255,255,255,.065) !important;
+      border: 1px solid rgba(255,255,255,.095) !important;
+    }
+    @media (max-width: 1120px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { position: relative; height: auto; }
+      .nav { max-height: none; }
+      .orbit-bento { grid-template-columns: 1fr; }
+      .orbit-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .orbit-kpis { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .emoji-grid { grid-template-columns: repeat(3, minmax(0,1fr)); }
+    }
+    @media (max-width: 680px) {
+      .main { padding: 15px; }
+      .orbit-grid, .orbit-kpis, .emoji-grid { grid-template-columns: 1fr; }
+      .orbit-hero { padding: 20px; border-radius: 22px; }
+      .orbit-hero h2 { font-size: 27px; }
+      .discord-table { display:block; overflow:auto; }
+    }
+
+  
+    /* ================= PAK RW LUXE GALAXY DASHBOARD ================= */
+    :root {
+      --luxe-bg: #040511;
+      --luxe-panel: rgba(255,255,255,.074);
+      --luxe-panel-soft: rgba(255,255,255,.052);
+      --luxe-border: rgba(255,255,255,.13);
+      --luxe-text: #f9fbff;
+      --luxe-muted: rgba(249,251,255,.62);
+      --luxe-blue: #56a8ff;
+      --luxe-violet: #9b5cff;
+      --luxe-cyan: #22d3ee;
+      --luxe-pink: #ff4fd8;
+      --luxe-green: #48f5aa;
+      --luxe-gold: #ffd166;
+    }
+    body.dashboard-clean {
+      background:
+        radial-gradient(circle at 20% -12%, rgba(86,168,255,.25), transparent 34%),
+        radial-gradient(circle at 78% 0%, rgba(255,79,216,.17), transparent 30%),
+        radial-gradient(circle at 50% 110%, rgba(72,245,170,.11), transparent 42%),
+        linear-gradient(180deg, #040511 0%, #090e1e 54%, #040511 100%);
+      color: var(--luxe-text);
+    }
+    body.dashboard-clean:before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -2;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 12px 12px, rgba(255,255,255,.045) 1px, transparent 2px),
+        linear-gradient(rgba(255,255,255,.015) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.015) 1px, transparent 1px);
+      background-size: 90px 90px, 54px 54px, 54px 54px;
+      mask-image: linear-gradient(180deg, rgba(0,0,0,.86), transparent 88%);
+    }
+    body.dashboard-clean:after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      background: linear-gradient(115deg, transparent 0%, rgba(255,255,255,.030) 42%, transparent 56%);
+      opacity: .55;
+    }
+    .layout {
+      grid-template-columns: 306px 1fr;
+    }
+    .sidebar {
+      padding: 17px;
+      border-right: 1px solid rgba(255,255,255,.08);
+      background:
+        linear-gradient(180deg, rgba(8,12,30,.96), rgba(4,5,17,.90)),
+        rgba(0,0,0,.25);
+      box-shadow: 22px 0 90px rgba(0,0,0,.26);
+    }
+    .brand {
+      border-radius: 25px;
+      padding: 14px;
+      background:
+        radial-gradient(circle at 10% 0%, rgba(255,255,255,.15), transparent 25%),
+        linear-gradient(135deg, rgba(86,168,255,.18), rgba(155,92,255,.13), rgba(255,79,216,.08)),
+        rgba(255,255,255,.050);
+      border: 1px solid rgba(255,255,255,.12);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.10);
+    }
+    .brand h1 { font-size: 20px; font-weight: 1000; letter-spacing: -.45px; }
+    .brand p { color: var(--luxe-muted); font-weight: 800; }
+    .logo {
+      width: 50px;
+      height: 50px;
+      border-radius: 20px;
+      background:
+        radial-gradient(circle at 28% 20%, #fff 0 5%, var(--luxe-cyan) 13%, transparent 18%),
+        conic-gradient(from 210deg, var(--luxe-blue), var(--luxe-violet), var(--luxe-pink), var(--luxe-cyan), var(--luxe-blue));
+      box-shadow: 0 20px 55px rgba(86,168,255,.24);
+      overflow: hidden;
+    }
+    .logo img { width:100%; height:100%; object-fit:cover; display:block; }
+    .nav {
+      margin-top: 16px;
+      gap: 5px;
+      max-height: calc(100vh - 174px);
+      overflow: auto;
+      padding-right: 4px;
+    }
+    .nav a {
+      min-height: 40px;
+      border-radius: 14px;
+      padding: 9px 11px;
+      font-size: 13px;
+      font-weight: 850;
+      color: rgba(249,251,255,.64);
+      background: transparent;
+      border-color: transparent;
+    }
+    .nav a:hover {
+      color: #fff;
+      transform: translateX(3px);
+      background: rgba(255,255,255,.055);
+      border-color: rgba(255,255,255,.10);
+    }
+    .nav a.active {
+      color: #fff;
+      background:
+        linear-gradient(135deg, rgba(86,168,255,.18), rgba(155,92,255,.12)),
+        rgba(255,255,255,.030);
+      border-color: rgba(255,255,255,.17);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.09);
+    }
+    .main {
+      max-width: 1500px;
+      margin: 0 auto;
+      padding: 23px;
+    }
+    .luxe-shell {
+      display: grid;
+      gap: 16px;
+    }
+    .luxe-hero {
+      position: relative;
+      overflow: hidden;
+      border-radius: 34px;
+      padding: 26px;
+      min-height: 310px;
+      display: grid;
+      align-items: end;
+      background:
+        radial-gradient(circle at 88% 12%, rgba(255,255,255,.16), transparent 22%),
+        radial-gradient(circle at 12% 92%, rgba(72,245,170,.12), transparent 28%),
+        linear-gradient(135deg, rgba(86,168,255,.22), rgba(155,92,255,.16) 50%, rgba(255,79,216,.10)),
+        rgba(255,255,255,.050);
+      border: 1px solid rgba(255,255,255,.13);
+      box-shadow: 0 28px 90px rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.11);
+    }
+    .luxe-hero:before {
+      content: "";
+      position: absolute;
+      right: -110px;
+      top: -115px;
+      width: 300px;
+      height: 300px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.10);
+      box-shadow:
+        0 0 0 25px rgba(255,255,255,.020),
+        0 0 0 52px rgba(255,255,255,.012),
+        inset 0 0 75px rgba(255,255,255,.05);
+    }
+    .luxe-hero:after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(110deg, transparent 0%, rgba(255,255,255,.055) 46%, transparent 58%);
+      opacity: .65;
+    }
+    .luxe-hero-content {
+      position: relative;
+      z-index: 2;
+      max-width: 980px;
+    }
+    .luxe-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 11px;
+      border-radius: 999px;
+      background: rgba(0,0,0,.18);
+      border: 1px solid rgba(255,255,255,.12);
+      color: rgba(249,251,255,.74);
+      font-size: 12px;
+      font-weight: 950;
+      margin-bottom: 13px;
+    }
+    .luxe-hero h2 {
+      margin: 0;
+      max-width: 950px;
+      font-size: 40px;
+      line-height: 1.05;
+      letter-spacing: -1.35px;
+      font-weight: 1000;
+    }
+    .luxe-hero p {
+      margin: 12px 0 0;
+      max-width: 930px;
+      color: rgba(249,251,255,.66);
+      line-height: 1.66;
+    }
+    .luxe-actions {
+      display: flex;
+      gap: 9px;
+      flex-wrap: wrap;
+      margin-top: 18px;
+    }
+    .luxe-strip {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .luxe-stat {
+      border-radius: 19px;
+      padding: 14px;
+      background: rgba(255,255,255,.052);
+      border: 1px solid rgba(255,255,255,.10);
+      box-shadow: 0 16px 44px rgba(0,0,0,.15);
+    }
+    .luxe-stat b {
+      display: block;
+      color: #fff;
+      font-size: 18px;
+      margin-bottom: 4px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .luxe-stat span {
+      color: rgba(249,251,255,.54);
+      font-size: 11px;
+      font-weight: 760;
+    }
+    .luxe-bento {
+      display: grid;
+      grid-template-columns: 1.15fr .85fr;
+      gap: 16px;
+    }
+    .luxe-panel {
+      border-radius: 26px;
+      padding: 18px;
+      background: rgba(255,255,255,.052);
+      border: 1px solid rgba(255,255,255,.105);
+      box-shadow: 0 20px 62px rgba(0,0,0,.20), inset 0 1px 0 rgba(255,255,255,.065);
+    }
+    .luxe-panel h3 {
+      margin: 0 0 13px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255,255,255,.075);
+      font-size: 17px;
+      letter-spacing: -.25px;
+    }
+    .luxe-card-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0,1fr));
+      gap: 10px;
+    }
+    .luxe-card {
+      display: block;
+      min-height: 112px;
+      border-radius: 20px;
+      padding: 14px;
+      background: rgba(3,6,16,.31);
+      border: 1px solid rgba(255,255,255,.085);
+      transition: transform .15s ease, background .15s ease, border-color .15s ease;
+    }
+    .luxe-card:hover {
+      transform: translateY(-3px);
+      background: rgba(255,255,255,.064);
+      border-color: rgba(255,255,255,.15);
+    }
+    .luxe-card .ico {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(86,168,255,.22), rgba(155,92,255,.17));
+      border: 1px solid rgba(255,255,255,.085);
+      margin-bottom: 10px;
+    }
+    .luxe-card b { display:block; color:#fff; margin-bottom:6px; font-size:13px; }
+    .luxe-card span { display:block; color:rgba(249,251,255,.56); font-size:12px; line-height:1.45; }
+    .luxe-timeline {
+      display: grid;
+      gap: 9px;
+    }
+    .luxe-step {
+      padding: 12px;
+      border-radius: 16px;
+      background: rgba(3,6,16,.31);
+      border: 1px solid rgba(255,255,255,.085);
+      color: rgba(249,251,255,.58);
+      line-height: 1.45;
+      font-size: 12px;
+    }
+    .luxe-step b { color:#fff; display:block; margin-bottom:4px; font-size:13px; }
+    .luxe-map-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0,1fr));
+      gap: 14px;
+    }
+    .luxe-map-section {
+      border-radius: 22px;
+      padding: 16px;
+      background: rgba(3,6,16,.29);
+      border: 1px solid rgba(255,255,255,.09);
+    }
+    .luxe-map-section h4 {
+      margin: 0 0 10px;
+      color: #fff;
+      font-size: 14px;
+    }
+    .luxe-map-section a {
+      display: block;
+      padding: 9px 10px;
+      border-radius: 12px;
+      color: rgba(249,251,255,.68);
+      background: rgba(255,255,255,.035);
+      border: 1px solid rgba(255,255,255,.060);
+      margin-top: 7px;
+      font-size: 12px;
+      font-weight: 760;
+    }
+    .luxe-map-section a:hover {
+      color: #fff;
+      background: rgba(255,255,255,.070);
+    }
+    .copy-chip {
+      cursor: pointer;
+      user-select: all;
+    }
+    .luxe-toast {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 100000;
+      display: none;
+      padding: 12px 14px;
+      border-radius: 15px;
+      color: #fff;
+      background: rgba(8,12,28,.94);
+      border: 1px solid rgba(255,255,255,.15);
+      box-shadow: 0 18px 55px rgba(0,0,0,.38);
+      font-size: 13px;
+      font-weight: 850;
+    }
+    .luxe-toast.show { display:block; }
+    .panel, .card, .topbar {
+      border-radius: 24px !important;
+      background: rgba(255,255,255,.052) !important;
+      border: 1px solid rgba(255,255,255,.105) !important;
+      box-shadow: 0 20px 62px rgba(0,0,0,.20), inset 0 1px 0 rgba(255,255,255,.065) !important;
+    }
+    input, textarea, select {
+      border-radius: 14px !important;
+      background: rgba(3,6,16,.42) !important;
+      border: 1px solid rgba(255,255,255,.095) !important;
+    }
+    .btn {
+      border-radius: 14px !important;
+      background: linear-gradient(135deg, var(--luxe-blue), var(--luxe-violet)) !important;
+    }
+    .btn.secondary {
+      background: rgba(255,255,255,.065) !important;
+      border: 1px solid rgba(255,255,255,.095) !important;
+    }
+    @media (max-width: 1120px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { position: relative; height: auto; }
+      .nav { max-height: none; }
+      .luxe-bento { grid-template-columns: 1fr; }
+      .luxe-card-grid, .luxe-map-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .luxe-strip { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    }
+    @media (max-width: 680px) {
+      .main { padding: 15px; }
+      .luxe-card-grid, .luxe-map-grid, .luxe-strip { grid-template-columns: 1fr; }
+      .luxe-hero { padding: 20px; min-height: 0; border-radius: 24px; }
+      .luxe-hero h2 { font-size: 29px; }
+    }
+
+
+
+    /* ================= MAXTON MEGA CONTROL ================= */
+    .mega-hero {
+      position: relative;
+      overflow: hidden;
+      border-radius: 34px;
+      padding: 28px;
+      margin-bottom: 18px;
+      border: 1px solid rgba(255,255,255,.15);
+      background:
+        radial-gradient(circle at 80% 10%, rgba(255,214,102,.16), transparent 28%),
+        radial-gradient(circle at 12% 85%, rgba(34,211,238,.12), transparent 30%),
+        linear-gradient(135deg, rgba(155,92,255,.23), rgba(255,95,203,.10)),
+        rgba(255,255,255,.06);
+      box-shadow: 0 28px 96px rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.12);
+    }
+    .mega-hero h2 { margin: 0; font-size: 36px; letter-spacing: -1.2px; font-weight: 1000; }
+    .mega-hero p { max-width: 920px; color: rgba(248,251,255,.68); line-height: 1.65; }
+    .mega-tabs { display:flex; gap:10px; flex-wrap:wrap; margin: 16px 0 20px; position:sticky; top: 12px; z-index: 20; padding: 10px; border: 1px solid rgba(255,255,255,.10); border-radius: 22px; background: rgba(5,7,17,.78); backdrop-filter: blur(18px); }
+    .mega-tabs a, .mega-tabs button { border:1px solid rgba(255,255,255,.13); border-radius:999px; padding:10px 13px; background: rgba(255,255,255,.07); color: rgba(248,251,255,.78); font-weight:850; cursor:pointer; }
+    .mega-tabs a:hover, .mega-tabs button:hover { color:#fff; border-color: rgba(255,255,255,.26); background: rgba(255,255,255,.11); }
+    .mega-section { scroll-margin-top: 95px; }
+    .mega-section .panel { margin-top: 16px; }
+    .mega-check-grid { display:grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
+    .mega-check { border:1px solid rgba(255,255,255,.10); border-radius: 18px; padding: 14px; background: rgba(0,0,0,.18); }
+    .mega-check label { display:flex; gap:10px; align-items:center; justify-content:flex-start; margin:0; color:#fff; }
+    .mega-check input { width:auto; min-height:unset; transform: scale(1.15); }
+    .mega-preview { border: 1px solid rgba(255,255,255,.12); border-radius: 20px; padding: 16px; background: rgba(0,0,0,.22); margin-top: 12px; }
+    .mega-preview-title { font-weight: 950; font-size: 18px; margin-bottom: 8px; }
+    .mega-preview-desc { white-space: pre-wrap; color: rgba(248,251,255,.72); line-height:1.55; }
+    .mega-mini { display:grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; margin: 16px 0; }
+    .mega-mini .cmd { min-height: 88px; }
+    .mega-json { min-height: 520px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.5; white-space: pre; }
+    .mega-danger-zone { border-color: rgba(255,92,122,.22) !important; background: rgba(255,92,122,.06) !important; }
+    .mega-badge { display:inline-flex; align-items:center; gap:6px; padding: 7px 10px; border-radius:999px; border:1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.075); color: rgba(248,251,255,.72); font-size:12px; font-weight:850; margin: 3px; }
+    .mega-dashboard-v2 {
+      display: grid;
+      gap: 16px;
+    }
+    .mega-savebar {
+      position: sticky;
+      bottom: 14px;
+      z-index: 45;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px;
+      margin: 16px 0;
+      border-radius: 22px;
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(5,7,17,.82);
+      backdrop-filter: blur(20px);
+      box-shadow: 0 22px 80px rgba(0,0,0,.35);
+    }
+    .mega-savebar .savebar-left { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .mega-stat-grid { display:grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap:12px; margin: 18px 0 0; }
+    .mega-stat {
+      padding: 15px;
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,.12);
+      background: rgba(0,0,0,.22);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+    }
+    .mega-stat b { display:block; font-size:20px; color:#fff; margin-bottom:4px; }
+    .mega-stat span { color:rgba(248,251,255,.58); font-size:12px; font-weight:800; }
+    .format-grid { display:grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; }
+    .format-card {
+      position: relative;
+      overflow: hidden;
+      border:1px solid rgba(255,255,255,.12);
+      border-radius: 24px;
+      background: linear-gradient(180deg, rgba(255,255,255,.085), rgba(255,255,255,.045));
+      padding: 18px;
+      box-shadow: 0 18px 58px rgba(0,0,0,.20);
+    }
+    .format-card:before {
+      content:"";
+      position:absolute; left:0; top:0; width:100%; height:3px;
+      background: linear-gradient(90deg, var(--max-purple), var(--max-cyan), var(--max-pink));
+      opacity:.76;
+    }
+    .format-card h4 { margin: 0 0 10px; font-size: 15px; }
+    .format-card p { margin: 0 0 12px; color: rgba(248,251,255,.62); line-height: 1.55; font-size: 13px; }
+    .format-toolbar { display:flex; gap:8px; flex-wrap:wrap; margin: 10px 0 14px; }
+    .format-chip, .insert-snippet {
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.075);
+      color: rgba(248,251,255,.84);
+      padding: 8px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 850;
+      cursor: pointer;
+    }
+    .format-chip:hover, .insert-snippet:hover { background: rgba(255,255,255,.13); color:#fff; border-color: rgba(255,255,255,.24); }
+    .template-code {
+      white-space: pre-wrap;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: rgba(0,0,0,.28);
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 16px;
+      padding: 12px;
+      line-height: 1.55;
+      color: rgba(248,251,255,.78);
+      font-size: 12px;
+      max-height: 210px;
+      overflow:auto;
+    }
+    .placeholder-cloud { display:flex; gap:8px; flex-wrap:wrap; margin-top: 10px; }
+    .placeholder-cloud code {
+      border: 1px solid rgba(255,255,255,.13);
+      background: rgba(0,0,0,.24);
+      border-radius: 999px;
+      padding: 7px 9px;
+      color: rgba(248,251,255,.82);
+      cursor: pointer;
+    }
+    .editor-frame {
+      border:1px solid rgba(255,255,255,.12);
+      border-radius: 24px;
+      padding: 14px;
+      background: rgba(0,0,0,.16);
+      margin-top: 12px;
+    }
+    .embed-preview-card {
+      border-left: 4px solid var(--max-cyan);
+      border-radius: 18px;
+      padding: 14px;
+      background: rgba(17,20,34,.82);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+      margin-top: 12px;
+    }
+    .embed-preview-card .p-title { font-weight:1000; color:#fff; font-size: 16px; margin-bottom: 7px; }
+    .embed-preview-card .p-desc { white-space: pre-wrap; color: rgba(248,251,255,.70); line-height: 1.55; }
+    .embed-preview-card .p-footer { margin-top: 11px; color: rgba(248,251,255,.48); font-size: 12px; }
+    .maxton-format-row { display:grid; grid-template-columns: 240px 1fr; gap: 14px; align-items: start; }
+    .maxton-format-row .format-help { color:rgba(248,251,255,.60); line-height:1.55; font-size:13px; padding:12px; border:1px solid rgba(255,255,255,.10); border-radius:16px; background:rgba(0,0,0,.14); }
+    .quick-jump { display:flex; gap:8px; flex-wrap:wrap; margin-top: 12px; }
+    .quick-jump a { border:1px solid rgba(255,255,255,.12); background:rgba(255,255,255,.07); padding:8px 10px; border-radius:999px; color:rgba(248,251,255,.76); font-weight:850; font-size:12px; }
+    .quick-jump a:hover { color:#fff; background:rgba(255,255,255,.12); }
+    @media (max-width: 980px) { .format-grid, .mega-stat-grid, .maxton-format-row { grid-template-columns: 1fr; } .mega-savebar { position: static; } }
+    @media (max-width: 980px) { .mega-check-grid, .mega-mini { grid-template-columns: 1fr; } .mega-tabs { position: static; } }
+
+    /* ================= DESA TULUS CONTROL ROOM UI v3.10.3 ================= */
+    :root {
+      --ot-bg: #f3f5fb;
+      --ot-panel: rgba(255,255,255,.92);
+      --ot-panel-2: rgba(255,255,255,.78);
+      --ot-text: #111827;
+      --ot-muted: #667085;
+      --ot-line: rgba(17,24,39,.10);
+      --ot-blue: #2563eb;
+      --ot-blue-2: #60a5fa;
+      --ot-ink: #0f172a;
+      --ot-green: #16a34a;
+      --ot-yellow: #f59e0b;
+      --ot-red: #ef4444;
+      --ot-shadow: 0 22px 70px rgba(15,23,42,.10);
+    }
+    body.dashboard-clean {
+      color: var(--ot-text) !important;
+      background:
+        radial-gradient(circle at 12% 4%, rgba(37,99,235,.13), transparent 28%),
+        radial-gradient(circle at 88% 0%, rgba(96,165,250,.16), transparent 25%),
+        linear-gradient(180deg, #f8fafc 0%, #eef2ff 42%, #f8fafc 100%) !important;
+    }
+    body.dashboard-clean:before { opacity: .18; }
+    .layout {
+      grid-template-columns: 288px 1fr !important;
+      gap: 0;
+    }
+    .sidebar {
+      background: rgba(255,255,255,.82) !important;
+      border-right: 1px solid rgba(17,24,39,.09) !important;
+      box-shadow: 18px 0 50px rgba(15,23,42,.06) !important;
+      color: var(--ot-text) !important;
+      padding: 16px !important;
+    }
+    .brand {
+      background: linear-gradient(135deg, #ffffff, #eff6ff) !important;
+      border: 1px solid rgba(37,99,235,.16) !important;
+      border-radius: 24px !important;
+      color: var(--ot-text) !important;
+      margin-bottom: 16px !important;
+      box-shadow: 0 16px 45px rgba(37,99,235,.10) !important;
+    }
+    .brand h1 { color: var(--ot-ink) !important; font-weight: 1000 !important; }
+    .brand p { color: var(--ot-muted) !important; }
+    .logo {
+      background: linear-gradient(135deg, #111827, #2563eb) !important;
+      color: #fff !important;
+      box-shadow: 0 16px 36px rgba(37,99,235,.22) !important;
+    }
+    .logo img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
+    .nav { gap: 4px !important; max-height: calc(100vh - 155px); overflow: auto; padding-right: 3px; }
+    .nav-group { margin: 13px 7px 5px; font-size: 10px; font-weight: 1000; color: #98a2b3; letter-spacing: 1.2px; text-transform: uppercase; }
+    .nav a {
+      min-height: 40px !important;
+      border-radius: 14px !important;
+      color: #475467 !important;
+      background: transparent !important;
+      border: 1px solid transparent !important;
+      font-weight: 850 !important;
+      font-size: 13px !important;
+      padding: 10px 12px !important;
+    }
+    .nav a:hover, .nav a.active {
+      color: #0f172a !important;
+      background: #fff !important;
+      border-color: rgba(37,99,235,.18) !important;
+      box-shadow: 0 10px 25px rgba(15,23,42,.07) !important;
+      transform: translateX(2px) !important;
+    }
+    .nav a.active { color: #1d4ed8 !important; }
+    .main { max-width: 1360px !important; padding: 22px !important; }
+    .topbar {
+      background: rgba(255,255,255,.86) !important;
+      border: 1px solid rgba(17,24,39,.09) !important;
+      box-shadow: var(--ot-shadow) !important;
+      border-radius: 26px !important;
+      backdrop-filter: blur(18px);
+    }
+    .title h2, .hero-banner h2, .studio-hero h2, .max-hero h2 { color: #0f172a !important; letter-spacing: -.9px !important; }
+    .title p, .hero-banner p, .studio-hero p, .max-hero p, .section-note, .card .sub, .cmd span { color: var(--ot-muted) !important; }
+    .pill {
+      background: #ecfdf3 !important;
+      color: #067647 !important;
+      border-color: rgba(22,163,74,.20) !important;
+      box-shadow: none !important;
+    }
+    .card, .panel, .luxe-panel, .max-card, .studio-action, .cmd {
+      background: var(--ot-panel) !important;
+      border: 1px solid rgba(17,24,39,.09) !important;
+      box-shadow: var(--ot-shadow) !important;
+      color: var(--ot-text) !important;
+    }
+    .card, .panel { border-radius: 26px !important; }
+    .card:before { background: linear-gradient(90deg, #2563eb, #60a5fa, #16a34a) !important; }
+    .card h3, .panel h3, .cmd b { color: #0f172a !important; }
+    .card .big { color: #0f172a !important; }
+    input, textarea, select {
+      background: #ffffff !important;
+      color: #0f172a !important;
+      border: 1px solid rgba(17,24,39,.12) !important;
+      box-shadow: 0 1px 0 rgba(15,23,42,.03) !important;
+    }
+    input:focus, textarea:focus, select:focus {
+      border-color: rgba(37,99,235,.70) !important;
+      box-shadow: 0 0 0 4px rgba(37,99,235,.12) !important;
+      transform: none !important;
+    }
+    label { color: #344054 !important; }
+    .dashboard-clean label:after { color: #98a2b3 !important; border-color: rgba(17,24,39,.10) !important; background: #f8fafc; }
+    .btn {
+      background: linear-gradient(135deg, #111827, #2563eb) !important;
+      border-radius: 14px !important;
+      box-shadow: 0 16px 34px rgba(37,99,235,.22) !important;
+      color: #fff !important;
+    }
+    .btn.secondary {
+      background: #ffffff !important;
+      color: #111827 !important;
+      border: 1px solid rgba(17,24,39,.12) !important;
+      box-shadow: 0 10px 26px rgba(15,23,42,.05) !important;
+    }
+    .actions {
+      background: rgba(255,255,255,.88) !important;
+      border-color: rgba(17,24,39,.09) !important;
+      box-shadow: 0 18px 45px rgba(15,23,42,.10) !important;
+    }
+    .alert { background: #ecfdf3 !important; border-color: rgba(22,163,74,.22) !important; color:#067647 !important; }
+    .alert.danger, .danger { background: #fff1f3 !important; border-color: rgba(239,68,68,.20) !important; color:#b42318 !important; }
+    table { color: #0f172a; }
+    th { background: #f8fafc !important; color: #667085 !important; }
+    td { color: #344054 !important; }
+    .table-wrap { background: #ffffff !important; border-color: rgba(17,24,39,.09) !important; }
+    .footer {
+      background: #ffffff !important;
+      color: var(--ot-muted) !important;
+      border-color: rgba(17,24,39,.09) !important;
+      box-shadow: 0 10px 25px rgba(15,23,42,.04);
+    }
+    .ot-hero {
+      position: relative;
+      overflow: hidden;
+      border-radius: 30px;
+      border: 1px solid rgba(17,24,39,.09);
+      background:
+        linear-gradient(135deg, rgba(15,23,42,.96), rgba(37,99,235,.88)),
+        #0f172a;
+      min-height: 250px;
+      padding: 28px;
+      box-shadow: 0 28px 80px rgba(15,23,42,.20);
+      margin-bottom: 18px;
+      color: #fff;
+    }
+    .ot-hero.with-image { background-size: cover; background-position: center; }
+    .ot-hero.with-image:before { content:""; position:absolute; inset:0; background: linear-gradient(90deg, rgba(15,23,42,.86), rgba(15,23,42,.46), rgba(37,99,235,.20)); }
+    .ot-hero > * { position: relative; z-index: 2; }
+    .ot-hero .ot-badge { display:inline-flex; gap:7px; align-items:center; border:1px solid rgba(255,255,255,.22); background:rgba(255,255,255,.12); border-radius:999px; padding:8px 11px; font-size:12px; font-weight:900; }
+    .ot-hero h2 { margin:16px 0 8px; font-size:38px; line-height:1.06; max-width: 740px; color:#fff !important; }
+    .ot-hero p { margin:0; max-width:760px; line-height:1.65; color:rgba(255,255,255,.78) !important; }
+    .ot-hero-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:18px; }
+    .ot-edit-grid { display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:14px; margin: 18px 0; }
+    .ot-edit-card {
+      display:block;
+      background:#fff;
+      border:1px solid rgba(17,24,39,.09);
+      border-radius:24px;
+      padding:18px;
+      min-height:145px;
+      box-shadow: var(--ot-shadow);
+      transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+    }
+    .ot-edit-card:hover { transform: translateY(-4px); border-color: rgba(37,99,235,.25); box-shadow: 0 28px 80px rgba(37,99,235,.13); }
+    .ot-edit-card .ico { font-size:26px; margin-bottom:16px; }
+    .ot-edit-card b { display:block; color:#0f172a; font-size:16px; margin-bottom:7px; }
+    .ot-edit-card span { display:block; color:#667085; font-size:13px; line-height:1.5; }
+    .ot-split { display:grid; grid-template-columns: 1fr 380px; gap:16px; align-items:start; }
+    .ot-checklist { display:grid; gap:10px; }
+    .ot-check { display:flex; gap:10px; align-items:flex-start; background:#fff; border:1px solid rgba(17,24,39,.08); border-radius:18px; padding:13px; color:#344054; }
+    .ot-check b { color:#0f172a; display:block; margin-bottom:3px; }
+    .ot-preview-img { width:100%; max-height:280px; object-fit:cover; border-radius:20px; border:1px solid rgba(17,24,39,.10); background:#f8fafc; }
+    .ot-preview-blank { min-height:180px; display:grid; place-items:center; text-align:center; padding:18px; border:1px dashed rgba(37,99,235,.30); background:#f8fafc; color:#667085; border-radius:20px; }
+    .ot-helper { background:#eff6ff; border:1px solid rgba(37,99,235,.12); color:#1e3a8a; padding:14px; border-radius:18px; line-height:1.6; font-size:13px; }
+    .ot-mini-tabs { display:flex; gap:9px; flex-wrap:wrap; margin: 12px 0 18px; }
+    .ot-mini-tabs a { background:#fff; border:1px solid rgba(17,24,39,.10); border-radius:999px; padding:9px 12px; color:#344054; font-weight:850; font-size:12px; }
+    .ot-mini-tabs a:hover { color:#1d4ed8; border-color: rgba(37,99,235,.24); }
+    .ot-compact-form .formgrid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .ot-compact-form h3 { margin-top: 26px !important; }
+    .max-palette-box, .luxe-toast { color: #f8fbff; }
+    .maxton-bg-image { opacity: .08 !important; filter: blur(0px) saturate(1.1) !important; }
+    @media (max-width: 1120px) {
+      .layout { grid-template-columns: 1fr !important; }
+      .sidebar { position:relative !important; height:auto !important; }
+      .nav { max-height: none; display:grid !important; grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .nav-group { grid-column: 1 / -1; }
+      .ot-edit-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .ot-split { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      .main { padding: 14px !important; }
+      .nav, .ot-edit-grid, .ot-compact-form .formgrid { grid-template-columns: 1fr !important; }
+      .ot-hero h2 { font-size:29px; }
+      .ot-hero { padding:20px; border-radius:24px; }
+    }
+
+
+    /* ================= PAK RW SOFT CONTROL ROOM v10.10.54 ================= */
+    body.dashboard-clean {
+      background:
+        radial-gradient(circle at 16% -8%, rgba(76,96,255,.20), transparent 34%),
+        radial-gradient(circle at 92% 2%, rgba(34,211,238,.12), transparent 32%),
+        linear-gradient(180deg, #080b14 0%, #0b1020 48%, #080b14 100%) !important;
+      color: #eef4ff !important;
+    }
+    body.dashboard-clean:before {
+      display: block !important;
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
+      background-size: 44px 44px;
+      mask-image: linear-gradient(180deg, rgba(0,0,0,.55), transparent 82%);
+      z-index: -1;
+    }
+    .layout {
+      grid-template-columns: 292px 1fr !important;
+      background: transparent !important;
+    }
+    .sidebar {
+      background:
+        linear-gradient(180deg, rgba(13,18,34,.94), rgba(8,11,20,.90)) !important;
+      border-right: 1px solid rgba(255,255,255,.08) !important;
+      box-shadow: 18px 0 70px rgba(0,0,0,.24) !important;
+    }
+    .brand {
+      background:
+        linear-gradient(135deg, rgba(124,92,255,.26), rgba(34,211,238,.10)),
+        rgba(255,255,255,.06) !important;
+      color: #fff !important;
+      border: 1px solid rgba(255,255,255,.13) !important;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.14) !important;
+    }
+    .brand p { color: rgba(238,244,255,.66) !important; }
+    .logo {
+      background: rgba(255,255,255,.10) !important;
+      color: #fff !important;
+      box-shadow: 0 14px 36px rgba(124,92,255,.18) !important;
+    }
+    .nav { max-height: calc(100vh - 185px); overflow: auto; padding-right: 3px; }
+    .nav-group {
+      color: rgba(238,244,255,.38) !important;
+      letter-spacing: .9px !important;
+    }
+    .nav a {
+      color: rgba(238,244,255,.66) !important;
+      background: transparent !important;
+      border: 1px solid transparent !important;
+      box-shadow: none !important;
+    }
+    .nav a:hover,
+    .nav a.active {
+      color: #ffffff !important;
+      background: rgba(255,255,255,.075) !important;
+      border-color: rgba(255,255,255,.12) !important;
+      transform: translateX(2px) !important;
+    }
+    .main {
+      background: transparent !important;
+      max-width: 1500px !important;
+    }
+    .topbar, .panel, .card, .cmd, .ot-edit-card, .ot-check {
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.078), rgba(255,255,255,.048)) !important;
+      color: #eef4ff !important;
+      border: 1px solid rgba(255,255,255,.105) !important;
+      box-shadow: 0 18px 58px rgba(0,0,0,.24) !important;
+      backdrop-filter: blur(14px) !important;
+    }
+    .topbar { border-radius: 26px !important; }
+    .title h2, .panel h3, .card .big, .cmd b, .ot-edit-card b, .ot-check b {
+      color: #f8fbff !important;
+    }
+    .title p, .card .sub, .cmd span, .ot-edit-card span, .footer, .section-note {
+      color: rgba(238,244,255,.62) !important;
+    }
+    .ot-hero {
+      background:
+        radial-gradient(circle at 86% 8%, rgba(255,255,255,.12), transparent 24%),
+        linear-gradient(135deg, #111827 0%, #1e2550 48%, #12405b 100%) !important;
+      color: #fff !important;
+      border: 1px solid rgba(255,255,255,.10) !important;
+      box-shadow: 0 26px 78px rgba(0,0,0,.32) !important;
+    }
+    .ot-hero h2, .ot-hero p { color: #fff !important; }
+    .ot-badge {
+      background: rgba(255,255,255,.11) !important;
+      color: #fff !important;
+      border-color: rgba(255,255,255,.16) !important;
+    }
+    .ot-edit-card:hover, .cmd:hover {
+      border-color: rgba(125,145,255,.30) !important;
+      box-shadow: 0 24px 70px rgba(0,0,0,.30) !important;
+    }
+    .btn {
+      background: linear-gradient(135deg, #6d7dff, #22b8cf) !important;
+      color: #fff !important;
+      box-shadow: 0 14px 34px rgba(34,184,207,.18) !important;
+    }
+    .btn.secondary {
+      background: rgba(255,255,255,.075) !important;
+      color: #eef4ff !important;
+      border: 1px solid rgba(255,255,255,.12) !important;
+      box-shadow: none !important;
+    }
+    input, textarea, select {
+      background: rgba(4,8,18,.52) !important;
+      color: #f8fbff !important;
+      border: 1px solid rgba(255,255,255,.13) !important;
+    }
+    input::placeholder, textarea::placeholder { color: rgba(238,244,255,.36) !important; }
+    input:focus, textarea:focus, select:focus {
+      border-color: rgba(34,211,238,.55) !important;
+      box-shadow: 0 0 0 4px rgba(34,211,238,.12) !important;
+    }
+    label { color: rgba(238,244,255,.74) !important; }
+    .alert { background: rgba(16,185,129,.12) !important; color: #7df7c0 !important; border-color: rgba(16,185,129,.22) !important; }
+    .danger { background: rgba(248,113,113,.12) !important; color: #ffb4b4 !important; border-color: rgba(248,113,113,.22) !important; }
+    .footer { background: rgba(255,255,255,.045) !important; border-color: rgba(255,255,255,.09) !important; }
+    .ot-helper {
+      background: rgba(34,211,238,.09) !important;
+      border-color: rgba(34,211,238,.18) !important;
+      color: rgba(238,244,255,.78) !important;
+    }
+    .ot-preview-blank, .ot-preview-img {
+      background: rgba(4,8,18,.40) !important;
+      border-color: rgba(255,255,255,.12) !important;
+      color: rgba(238,244,255,.58) !important;
+    }
+    .table-wrap { background: rgba(0,0,0,.18) !important; border-color: rgba(255,255,255,.10) !important; }
+    th { background: rgba(255,255,255,.06) !important; color: rgba(238,244,255,.58) !important; }
+    td { color: rgba(238,244,255,.82) !important; }
+    .pill { background: rgba(34,211,238,.10) !important; color: #93f1ff !important; border-color: rgba(34,211,238,.20) !important; }
+    .max-command button, #maxPaletteBtn {
+      background: rgba(255,255,255,.09) !important;
+      border: 1px solid rgba(255,255,255,.14) !important;
+      color: #eef4ff !important;
+    }
+    @media (max-width: 1120px) {
+      .layout { grid-template-columns: 1fr !important; }
+      .nav { max-height: none !important; }
+    }
+
+
+
+
+
+    /* ================= PAK RW BIG BOT FLOW v10.10.54 ================= */
+    .bbo-flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+      margin: 16px 0 18px;
+    }
+    .bbo-step {
+      position: relative;
+      overflow: hidden;
+      border-radius: 22px;
+      padding: 16px;
+      background: linear-gradient(180deg, rgba(255,255,255,.085), rgba(255,255,255,.048));
+      border: 1px solid rgba(255,255,255,.11);
+      box-shadow: 0 18px 55px rgba(0,0,0,.22);
+      min-height: 118px;
+    }
+    .bbo-step:before {
+      content: attr(data-step);
+      display: inline-grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 14px;
+      margin-bottom: 12px;
+      background: rgba(109,125,255,.18);
+      border: 1px solid rgba(109,125,255,.28);
+      color: #dfe6ff;
+      font-weight: 1000;
+    }
+    .bbo-step b { display:block; color:#f8fbff; margin-bottom:6px; }
+    .bbo-step span { display:block; color:rgba(238,244,255,.62); font-size:12px; line-height:1.5; }
+    .bbo-feature-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .bbo-feature {
+      border-radius: 20px;
+      padding: 14px;
+      background: rgba(255,255,255,.055);
+      border: 1px solid rgba(255,255,255,.10);
+    }
+    .bbo-feature b { color:#f8fbff; display:block; margin-bottom:5px; }
+    .bbo-feature span { color:rgba(238,244,255,.60); font-size:12px; line-height:1.45; }
+    .bbo-ai-box {
+      border-radius: 26px;
+      padding: 18px;
+      background:
+        radial-gradient(circle at 90% 0%, rgba(34,211,238,.14), transparent 28%),
+        linear-gradient(135deg, rgba(109,125,255,.14), rgba(15,23,42,.28));
+      border: 1px solid rgba(255,255,255,.11);
+    }
+    .bbo-chip-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+    .bbo-chip {
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      border-radius:999px;
+      padding:8px 10px;
+      background:rgba(255,255,255,.075);
+      border:1px solid rgba(255,255,255,.12);
+      color:rgba(238,244,255,.76);
+      font-size:12px;
+      font-weight:850;
+    }
+    .bbo-section-title {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom: 12px;
+    }
+    .bbo-section-title h3 { margin:0 !important; }
+    .bbo-muted { color:rgba(238,244,255,.62); line-height:1.6; font-size:13px; }
+    .bbo-warning {
+      margin-top: 12px;
+      border-radius: 18px;
+      padding: 12px;
+      color: rgba(238,244,255,.76);
+      background: rgba(251,191,36,.08);
+      border: 1px solid rgba(251,191,36,.18);
+      line-height: 1.55;
+      font-size: 13px;
+    }
+    .ai-style-preview {
+      border-radius: 20px;
+      padding: 14px;
+      background: rgba(0,0,0,.18);
+      border: 1px solid rgba(255,255,255,.10);
+      color: rgba(238,244,255,.72);
+      line-height: 1.6;
+      font-size: 13px;
+    }
+    @media (max-width: 1120px) {
+      .bbo-flow { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .bbo-feature-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    }
+    @media (max-width: 640px) {
+      .bbo-flow, .bbo-feature-grid { grid-template-columns: 1fr; }
+      .bbo-section-title { align-items:flex-start; flex-direction:column; }
+    }
+
+
+
+    /* ================= COMFORT PRO DASHBOARD v10.10.54 ================= */
+    body.dashboard-clean {
+      background:
+        radial-gradient(circle at 14% -8%, rgba(80, 118, 255, .18), transparent 34%),
+        radial-gradient(circle at 92% 4%, rgba(43, 211, 190, .12), transparent 31%),
+        radial-gradient(circle at 50% 108%, rgba(255, 255, 255, .035), transparent 42%),
+        linear-gradient(180deg, #080b12 0%, #0b101b 45%, #080b12 100%) !important;
+      color: #eef4ff;
+    }
+    body.dashboard-clean:before {
+      opacity: .45;
+      background-size: 56px 56px !important;
+    }
+    .layout {
+      grid-template-columns: 286px minmax(0, 1fr) !important;
+    }
+    .sidebar {
+      padding: 16px !important;
+      background:
+        linear-gradient(180deg, rgba(13, 18, 31, .96), rgba(7, 10, 18, .94)) !important;
+      border-right: 1px solid rgba(255,255,255,.075) !important;
+      overflow-y: auto;
+      scrollbar-width: thin;
+    }
+    .brand {
+      margin-bottom: 12px !important;
+      border-radius: 22px !important;
+      background:
+        linear-gradient(135deg, rgba(83, 112, 255, .18), rgba(42, 211, 190, .08)),
+        rgba(255,255,255,.045) !important;
+    }
+    .brand h1 { font-size: 18px !important; }
+    .brand p { font-size: 11px !important; color: rgba(238,244,255,.56) !important; }
+    .side-pins {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin: 12px 0 14px;
+    }
+    .side-pins a {
+      min-height: 38px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.055);
+      color: rgba(238,244,255,.80);
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .side-pins a:hover {
+      background: rgba(83, 112, 255, .18);
+      border-color: rgba(83, 112, 255, .28);
+      color: #fff;
+    }
+    .nav {
+      gap: 6px !important;
+      margin-top: 8px !important;
+    }
+    .nav-group {
+      margin: 13px 6px 5px;
+      color: rgba(238,244,255,.42);
+      font-size: 10px;
+      letter-spacing: .9px;
+      font-weight: 1000;
+      text-transform: uppercase;
+    }
+    .nav a {
+      min-height: 40px !important;
+      padding: 10px 11px !important;
+      border-radius: 13px !important;
+      font-size: 13px !important;
+      color: rgba(238,244,255,.68) !important;
+      background: transparent !important;
+    }
+    .nav a.active {
+      color: #fff !important;
+      background: linear-gradient(135deg, rgba(83,112,255,.22), rgba(42,211,190,.10)) !important;
+      border-color: rgba(255,255,255,.15) !important;
+      box-shadow: inset 3px 0 0 rgba(42,211,190,.72), 0 12px 32px rgba(0,0,0,.18) !important;
+    }
+    .nav a:hover {
+      transform: translateX(2px) !important;
+      background: rgba(255,255,255,.055) !important;
+      color: #fff !important;
+    }
+    .nav-more {
+      margin-top: 10px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,.08);
+      background: rgba(255,255,255,.03);
+      overflow: hidden;
+    }
+    .nav-more summary {
+      cursor: pointer;
+      padding: 12px;
+      color: rgba(238,244,255,.74);
+      font-weight: 950;
+      font-size: 13px;
+      list-style: none;
+    }
+    .nav-more summary::-webkit-details-marker { display: none; }
+    .nav-more summary:after { content: "Buka"; float: right; color: rgba(238,244,255,.38); font-size: 11px; }
+    .nav-more[open] summary:after { content: "Tutup"; }
+    .nav-more .nav-group { display: none; }
+    .nav-more a { margin: 0 8px 7px; }
+    .main {
+      max-width: 1360px !important;
+      padding: 22px 24px 40px !important;
+    }
+    .topbar {
+      border-radius: 24px !important;
+      padding: 16px 18px !important;
+      background: rgba(255,255,255,.052) !important;
+      box-shadow: 0 18px 56px rgba(0,0,0,.20) !important;
+    }
+    .panel, .card, .ot-edit-card, .bbo-feature, .bbo-step {
+      background: linear-gradient(180deg, rgba(255,255,255,.070), rgba(255,255,255,.040)) !important;
+      border-color: rgba(255,255,255,.10) !important;
+      box-shadow: 0 18px 54px rgba(0,0,0,.20), inset 0 1px 0 rgba(255,255,255,.06) !important;
+    }
+    .panel {
+      padding: 20px !important;
+      border-radius: 24px !important;
+    }
+    .panel h3 {
+      font-size: 18px !important;
+      letter-spacing: -.25px;
+    }
+    .card {
+      border-radius: 20px !important;
+      padding: 18px !important;
+    }
+    .card h3 {
+      color: rgba(238,244,255,.52) !important;
+    }
+    .card .big { color:#fff; font-size:26px !important; }
+    .sub, .bbo-muted, .cmd span { color: rgba(238,244,255,.58) !important; }
+    .ot-hero {
+      border-radius: 28px !important;
+      min-height: 265px;
+      background:
+        linear-gradient(135deg, rgba(83,112,255,.18), rgba(42,211,190,.09)),
+        radial-gradient(circle at 86% 18%, rgba(255,255,255,.10), transparent 30%),
+        rgba(255,255,255,.048) !important;
+      border: 1px solid rgba(255,255,255,.11) !important;
+      box-shadow: 0 24px 70px rgba(0,0,0,.26) !important;
+    }
+    .ot-hero h2 { font-size: clamp(30px, 4vw, 46px) !important; letter-spacing: -1.4px; }
+    .ot-hero p { max-width: 850px; color: rgba(238,244,255,.68) !important; }
+    .ot-badge {
+      background: rgba(42,211,190,.09) !important;
+      border-color: rgba(42,211,190,.18) !important;
+      color: rgba(210,255,247,.84) !important;
+    }
+    .btn {
+      background: linear-gradient(135deg, #506cff, #24c9b2) !important;
+      border-radius: 14px !important;
+      box-shadow: 0 13px 32px rgba(36,201,178,.14) !important;
+    }
+    .btn.secondary {
+      background: rgba(255,255,255,.06) !important;
+      border: 1px solid rgba(255,255,255,.11) !important;
+      color: rgba(238,244,255,.86) !important;
+    }
+    .btn:hover { transform: translateY(-1px) !important; }
+    input, textarea, select {
+      border-radius: 14px !important;
+      background: rgba(4,7,13,.55) !important;
+      border: 1px solid rgba(255,255,255,.11) !important;
+      color: #eef4ff !important;
+      min-height: 46px !important;
+    }
+    input:focus, textarea:focus, select:focus {
+      border-color: rgba(42,211,190,.54) !important;
+      box-shadow: 0 0 0 4px rgba(42,211,190,.10) !important;
+    }
+    label {
+      color: rgba(238,244,255,.66) !important;
+      font-size: 12px !important;
+      font-weight: 900 !important;
+    }
+    .formgrid > div, .editor-frame, .maxton-format-row > div, .format-card {
+      border-radius: 18px;
+      padding: 12px;
+      background: rgba(255,255,255,.030);
+      border: 1px solid rgba(255,255,255,.070);
+    }
+    .actions {
+      gap: 8px !important;
+      padding: 10px !important;
+      background: rgba(8,11,18,.74) !important;
+      border: 1px solid rgba(255,255,255,.09) !important;
+      border-radius: 18px !important;
+      backdrop-filter: blur(18px);
+    }
+    .comfort-edit-map {
+      display:grid;
+      grid-template-columns: 1.05fr .95fr;
+      gap: 14px;
+      margin: 16px 0 18px;
+    }
+    .comfort-box {
+      border-radius: 22px;
+      padding: 18px;
+      background: linear-gradient(180deg, rgba(255,255,255,.068), rgba(255,255,255,.038));
+      border: 1px solid rgba(255,255,255,.10);
+      box-shadow: 0 18px 54px rgba(0,0,0,.19);
+    }
+    .comfort-box h3 { margin: 0 0 8px; }
+    .comfort-list {
+      display:grid;
+      gap: 9px;
+      margin-top: 12px;
+    }
+    .comfort-list a, .comfort-list div {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 10px;
+      border-radius: 14px;
+      padding: 11px 12px;
+      background: rgba(0,0,0,.16);
+      border: 1px solid rgba(255,255,255,.075);
+      color: rgba(238,244,255,.80);
+      font-weight: 820;
+    }
+    .comfort-list span { color: rgba(238,244,255,.44); font-size: 12px; font-weight: 800; }
+    .comfort-list a:hover { background: rgba(83,112,255,.14); color: #fff; }
+    .comfort-toolbar {
+      position: sticky;
+      top: 10px;
+      z-index: 40;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap: 12px;
+      padding: 10px;
+      margin-bottom: 14px;
+      border-radius: 18px;
+      background: rgba(8, 11, 18, .76);
+      border: 1px solid rgba(255,255,255,.09);
+      backdrop-filter: blur(18px);
+      box-shadow: 0 14px 44px rgba(0,0,0,.24);
+    }
+    .comfort-toolbar b { font-size: 13px; }
+    .comfort-toolbar span { color: rgba(238,244,255,.48); font-size: 12px; }
+    .comfort-toolbar .mini-row { margin:0; }
+    .ot-edit-grid { gap: 12px !important; }
+    .ot-edit-card {
+      border-radius: 22px !important;
+      min-height: 158px;
+    }
+    .ot-edit-card b { font-size: 17px; }
+    .ot-edit-card span { color: rgba(238,244,255,.60) !important; }
+    .bbo-flow { gap: 11px !important; }
+    .bbo-step { border-radius: 20px !important; }
+    .table-wrap { border-color: rgba(255,255,255,.09) !important; }
+    th { background: rgba(255,255,255,.055) !important; color: rgba(238,244,255,.50) !important; }
+    td { color: rgba(238,244,255,.78) !important; }
+    @media (max-width: 1120px) {
+      .layout { grid-template-columns: 1fr !important; }
+      .sidebar { position: relative !important; height: auto !important; }
+      .comfort-edit-map { grid-template-columns: 1fr; }
+      .comfort-toolbar { position: static; }
+    }
+    @media (max-width: 720px) {
+      .main { padding: 16px !important; }
+      .side-pins { grid-template-columns: 1fr 1fr; }
+      .ot-hero-actions, .comfort-toolbar { align-items: stretch; flex-direction: column; }
+      .comfort-toolbar .mini-row { width:100%; }
+    }
+
+  
+
+    /* ================= FULL FEATURE SUITE v10.10.54 ================= */
+    body.dashboard-clean {
+      background:
+        radial-gradient(circle at 8% 0%, rgba(124,109,255,.18), transparent 28%),
+        radial-gradient(circle at 95% 8%, rgba(45,212,191,.13), transparent 24%),
+        linear-gradient(180deg, #080A12 0%, #0D111D 46%, #090B13 100%) !important;
+    }
+    .suite-hero {
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 30px;
+      padding: 24px;
+      background:
+        linear-gradient(135deg, rgba(124,109,255,.15), rgba(45,212,191,.08)),
+        rgba(255,255,255,.052);
+      box-shadow: 0 26px 88px rgba(0,0,0,.25);
+      margin-bottom: 18px;
+    }
+    .suite-hero h2 { margin: 0; font-size: 34px; letter-spacing: -1px; }
+    .suite-hero p { color: rgba(248,251,255,.66); line-height: 1.65; max-width: 930px; }
+    .suite-flow { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 12px; }
+    .suite-step { border: 1px solid rgba(255,255,255,.105); background: rgba(4,7,16,.42); border-radius: 20px; padding: 15px; }
+    .suite-step b { display:block; color:#fff; margin-bottom:6px; }
+    .suite-step span { color: rgba(248,251,255,.60); font-size: 12px; line-height: 1.5; }
+    .suite-grid { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; }
+    .suite-card { display:grid; grid-template-columns: 54px 1fr auto; gap: 14px; align-items:center; padding: 16px; border-radius: 22px; border: 1px solid rgba(255,255,255,.105); background: linear-gradient(180deg, rgba(255,255,255,.073), rgba(255,255,255,.04)); }
+    .suite-card:hover { border-color: rgba(45,212,191,.35); transform: translateY(-2px); transition: .16s ease; }
+    .suite-ico { width: 54px; height: 54px; border-radius: 18px; display:grid; place-items:center; font-size: 25px; background: linear-gradient(135deg, rgba(124,109,255,.24), rgba(45,212,191,.12)); border: 1px solid rgba(255,255,255,.12); }
+    .suite-card b { display:block; color:#fff; margin-bottom: 5px; }
+    .suite-card p { margin:0; color: rgba(248,251,255,.59); line-height: 1.5; font-size: 12.5px; }
+    .suite-status { border: 1px solid rgba(45,212,191,.26); background: rgba(45,212,191,.09); color: #8ff5e8; border-radius: 999px; padding: 7px 10px; font-weight: 900; font-size: 11px; white-space: nowrap; }
+    .suite-table { width: 100%; border-collapse: separate; border-spacing: 0 10px; min-width: 0; }
+    .suite-table th { color: rgba(248,251,255,.50); background: transparent; border:0; padding: 4px 10px; }
+    .suite-table td { background: rgba(255,255,255,.045); border-top: 1px solid rgba(255,255,255,.08); border-bottom: 1px solid rgba(255,255,255,.08); padding: 12px 10px; }
+    .suite-table td:first-child { border-left: 1px solid rgba(255,255,255,.08); border-radius: 16px 0 0 16px; }
+    .suite-table td:last-child { border-right: 1px solid rgba(255,255,255,.08); border-radius: 0 16px 16px 0; }
+    .suite-note { border: 1px solid rgba(255,209,102,.20); background: rgba(255,209,102,.075); color: rgba(255,246,218,.82); padding: 14px; border-radius: 18px; line-height: 1.6; }
+    @media (max-width: 1100px) { .suite-flow { grid-template-columns: 1fr 1fr; } .suite-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 640px) { .suite-flow { grid-template-columns: 1fr; } .suite-card { grid-template-columns: 48px 1fr; } .suite-status { grid-column: 1 / -1; width: fit-content; } }
+
+  
+
+/* ================= PAK RW PREMIUM DASHBOARD ONLY v10.10.54 ================= */
+:root{
+  --premium-bg:#070a14;
+  --premium-bg2:#0b1021;
+  --premium-panel:rgba(255,255,255,.065);
+  --premium-panel2:rgba(255,255,255,.092);
+  --premium-line:rgba(255,255,255,.115);
+  --premium-text:#f7f8ff;
+  --premium-muted:rgba(247,248,255,.62);
+  --premium-soft:rgba(247,248,255,.44);
+  --premium-blue:#75a7ff;
+  --premium-pink:#ff6fd8;
+  --premium-purple:#9b7cff;
+  --premium-cyan:#35d6ff;
+  --premium-green:#57f0b3;
+  --premium-gold:#f5c542;
+  --premium-danger:#ff6b8a;
+}
+body.dashboard-clean{
+  background:
+    radial-gradient(circle at 14% -8%, rgba(117,167,255,.22), transparent 34%),
+    radial-gradient(circle at 92% 2%, rgba(255,111,216,.15), transparent 31%),
+    radial-gradient(circle at 50% 110%, rgba(53,214,255,.10), transparent 40%),
+    linear-gradient(180deg,#070a14 0%,#0b1021 54%,#070a14 100%) !important;
+  color:var(--premium-text);
+}
+body.dashboard-clean:before{opacity:.16!important;}
+.premium-app{min-height:100vh;display:grid;grid-template-columns:300px minmax(0,1fr);}
+.premium-sidebar{position:sticky;top:0;height:100vh;overflow:auto;padding:18px;border-right:1px solid var(--premium-line);background:linear-gradient(180deg,rgba(8,12,26,.94),rgba(6,9,19,.88));box-shadow:22px 0 90px rgba(0,0,0,.28);z-index:30;}
+.premium-brand{display:flex;gap:12px;align-items:center;padding:14px;border:1px solid rgba(255,255,255,.13);border-radius:24px;background:linear-gradient(135deg,rgba(117,167,255,.16),rgba(255,111,216,.10)),rgba(255,255,255,.045);box-shadow:inset 0 1px 0 rgba(255,255,255,.13);}
+.premium-logo{width:50px;height:50px;border-radius:18px;display:grid;place-items:center;background:linear-gradient(135deg,var(--premium-blue),var(--premium-pink));box-shadow:0 18px 45px rgba(117,167,255,.20);font-size:22px;overflow:hidden;}
+.premium-logo img{width:100%;height:100%;object-fit:cover;}
+.premium-brand h1{margin:0;color:#fff;font-size:18px;font-weight:1000;letter-spacing:-.45px;}
+.premium-brand p{margin:4px 0 0;color:var(--premium-muted);font-size:12px;font-weight:800;}
+.premium-search{margin:14px 0;position:relative;}
+.premium-search input{width:100%;height:44px;border:1px solid rgba(255,255,255,.12);border-radius:16px;background:rgba(0,0,0,.24);color:#fff;padding:0 13px;font-weight:800;outline:none;}
+.premium-search input:focus{border-color:rgba(117,167,255,.55);box-shadow:0 0 0 4px rgba(117,167,255,.10);}
+.premium-pins{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
+.premium-pins a{padding:10px;border-radius:14px;border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.052);font-size:12px;font-weight:950;color:rgba(247,248,255,.78);text-align:center;}
+.premium-pins a:hover{background:rgba(255,255,255,.09);color:#fff;}
+.premium-nav{display:flex;flex-direction:column;gap:12px;}
+.premium-nav-group{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(247,248,255,.35);font-weight:1000;margin:8px 6px 0;}
+.premium-nav a{display:flex;align-items:center;gap:10px;min-height:42px;padding:11px 12px;border-radius:14px;border:1px solid transparent;color:rgba(247,248,255,.66);font-weight:850;font-size:13px;transition:.16s ease;}
+.premium-nav a:hover{transform:translateX(3px);color:#fff;background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.10);}
+.premium-nav a.active{color:#fff;background:linear-gradient(135deg,rgba(117,167,255,.22),rgba(255,111,216,.12));border-color:rgba(255,255,255,.18);box-shadow:inset 0 1px 0 rgba(255,255,255,.13);}
+.premium-nav .hidden-by-search{display:none!important;}
+.premium-side-note{margin-top:16px;padding:12px;border:1px solid rgba(45,212,191,.14);background:rgba(45,212,191,.06);border-radius:18px;color:rgba(247,248,255,.58);font-size:12px;line-height:1.55;}
+.premium-main{min-width:0;max-width:1560px;width:100%;margin:0 auto;padding:24px;}
+.premium-topbar{display:flex;justify-content:space-between;gap:16px;align-items:center;margin-bottom:18px;padding:16px 18px;border:1px solid rgba(255,255,255,.10);border-radius:24px;background:rgba(255,255,255,.045);backdrop-filter:blur(18px);}
+.premium-topbar b{display:block;color:#fff;font-size:15px;}
+.premium-topbar span{display:block;margin-top:4px;color:var(--premium-muted);font-size:12px;}
+.premium-status-strip{display:flex;gap:8px;flex-wrap:wrap;}
+.premium-chip{display:inline-flex;align-items:center;gap:7px;padding:9px 11px;border-radius:999px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.055);font-size:12px;font-weight:900;color:rgba(247,248,255,.76);}
+.premium-chip.ok{border-color:rgba(87,240,179,.22);background:rgba(87,240,179,.08);color:#8ff8ce;}
+.premium-chip.warn{border-color:rgba(245,197,66,.22);background:rgba(245,197,66,.08);color:#ffe28a;}
+.premium-hero{position:relative;overflow:hidden;border:1px solid rgba(255,255,255,.12);border-radius:32px;padding:28px;margin-bottom:18px;background:linear-gradient(135deg,rgba(117,167,255,.16),rgba(155,124,255,.12) 48%,rgba(255,111,216,.10)),linear-gradient(180deg,rgba(255,255,255,.075),rgba(255,255,255,.045));box-shadow:0 26px 90px rgba(0,0,0,.28);}
+.premium-hero.with-image{background-size:cover;background-position:center;}
+.premium-hero.with-image:before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(7,10,20,.84),rgba(7,10,20,.52));}
+.premium-hero>*{position:relative;z-index:1;}
+.premium-hero-badge{display:inline-flex;align-items:center;gap:8px;padding:8px 11px;border:1px solid rgba(255,255,255,.13);background:rgba(255,255,255,.07);border-radius:999px;color:#dce7ff;font-weight:1000;font-size:12px;margin-bottom:12px;}
+.premium-hero h2{margin:0;max-width:840px;font-size:38px;line-height:1.08;letter-spacing:-1.3px;color:#fff;font-weight:1000;}
+.premium-hero p{margin:12px 0 0;max-width:880px;color:rgba(247,248,255,.68);line-height:1.7;}
+.premium-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px;}
+.premium-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:18px 0;}
+.premium-card{position:relative;overflow:hidden;border:1px solid rgba(255,255,255,.10);border-radius:24px;background:linear-gradient(180deg,rgba(255,255,255,.075),rgba(255,255,255,.043));padding:18px;box-shadow:0 22px 70px rgba(0,0,0,.22);}
+.premium-card:before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:linear-gradient(90deg,var(--premium-blue),var(--premium-pink));opacity:.75;}
+.premium-card h3{margin:0 0 8px;color:rgba(247,248,255,.50);font-size:11px;text-transform:uppercase;letter-spacing:.9px;font-weight:1000;}
+.premium-card .big{margin:0;color:#fff;font-size:25px;font-weight:1000;letter-spacing:-.8px;}
+.premium-card .sub{margin-top:7px;color:var(--premium-muted);font-size:12px;line-height:1.5;}
+.premium-section{margin-top:18px;border:1px solid rgba(255,255,255,.10);border-radius:28px;background:linear-gradient(180deg,rgba(255,255,255,.066),rgba(255,255,255,.038));padding:20px;box-shadow:0 24px 80px rgba(0,0,0,.22);}
+.premium-section-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;margin-bottom:14px;}
+.premium-section h3{margin:0;color:#fff;font-size:20px;font-weight:1000;letter-spacing:-.35px;}
+.premium-muted{color:var(--premium-muted);line-height:1.6;font-size:13px;}
+.premium-feature-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+.premium-feature{display:block;border:1px solid rgba(255,255,255,.09);border-radius:20px;background:rgba(255,255,255,.045);padding:16px;min-height:128px;transition:.16s ease;}
+.premium-feature:hover{transform:translateY(-3px);border-color:rgba(117,167,255,.28);background:rgba(255,255,255,.07);}
+.premium-feature .icon{font-size:25px;margin-bottom:10px;}
+.premium-feature b{display:block;color:#fff;font-size:14px;margin-bottom:5px;}
+.premium-feature span{display:block;color:var(--premium-muted);font-size:12px;line-height:1.5;}
+.premium-flow{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;}
+.premium-step{border:1px solid rgba(255,255,255,.09);border-radius:18px;background:rgba(0,0,0,.16);padding:14px;}
+.premium-step em{display:grid;place-items:center;width:28px;height:28px;border-radius:10px;background:linear-gradient(135deg,var(--premium-blue),var(--premium-pink));font-style:normal;font-weight:1000;color:#fff;margin-bottom:9px;}
+.premium-step b{display:block;color:#fff;margin-bottom:4px;}
+.premium-step span{display:block;color:var(--premium-muted);font-size:12px;line-height:1.45;}
+.premium-preview-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:14px;align-items:start;}
+.premium-discord-preview{border-radius:20px;background:#313338;border:1px solid rgba(255,255,255,.10);padding:16px;}
+.premium-discord-msg{color:#dbdee1;font-size:13px;margin-bottom:10px;}
+.premium-embed-demo{background:#2b2d31;border-left:4px solid #ff6fd8;border-radius:7px;max-width:620px;padding:13px;color:#dbdee1;}
+.premium-embed-demo b{display:block;color:#fff;margin-bottom:6px;}
+.premium-embed-demo .title{color:#83c7ff;font-weight:1000;margin-bottom:6px;}
+.premium-embed-demo p{margin:0;color:#dbdee1;line-height:1.45;font-size:13px;}
+.premium-embed-demo small{display:block;color:#949ba4;margin-top:10px;}
+.premium-banner-preview{min-height:210px;border:1px dashed rgba(255,255,255,.16);border-radius:20px;background:linear-gradient(135deg,rgba(117,167,255,.13),rgba(255,111,216,.08));display:grid;place-items:center;overflow:hidden;color:var(--premium-muted);text-align:center;padding:16px;}
+.premium-banner-preview img{width:100%;height:100%;object-fit:cover;display:block;}
+.premium-form-note{padding:11px 13px;border-radius:16px;border:1px solid rgba(117,167,255,.16);background:rgba(117,167,255,.065);color:rgba(247,248,255,.66);font-size:12px;line-height:1.55;}
+.unsaved-pill{position:fixed;right:18px;bottom:18px;z-index:9999;display:none;padding:11px 13px;border-radius:999px;border:1px solid rgba(245,197,66,.25);background:rgba(18,14,5,.92);color:#ffe28a;font-weight:1000;box-shadow:0 18px 55px rgba(0,0,0,.38);}
+body.has-unsaved .unsaved-pill{display:block;}
+.mobile-nav-toggle{display:none;position:fixed;left:14px;bottom:14px;z-index:9999;border:1px solid rgba(255,255,255,.12);background:rgba(10,14,28,.92);color:#fff;border-radius:999px;padding:11px 14px;font-weight:1000;box-shadow:0 18px 55px rgba(0,0,0,.35);}
+.dashboard-clean .panel,.dashboard-clean .card,.dashboard-clean .topbar{border-color:rgba(255,255,255,.10)!important;background:linear-gradient(180deg,rgba(255,255,255,.066),rgba(255,255,255,.038))!important;box-shadow:0 24px 80px rgba(0,0,0,.22)!important;}
+.dashboard-clean input,.dashboard-clean textarea,.dashboard-clean select{background:rgba(3,7,18,.70)!important;border-color:rgba(255,255,255,.12)!important;color:#f7f8ff!important;}
+.dashboard-clean label{color:rgba(247,248,255,.64)!important;}
+.dashboard-clean .btn{background:linear-gradient(135deg,var(--premium-blue),var(--premium-pink))!important;color:#fff!important;border:0!important;}
+.dashboard-clean .btn.secondary{background:rgba(255,255,255,.075)!important;border:1px solid rgba(255,255,255,.11)!important;color:#fff!important;}
+@media(max-width:1180px){.premium-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.premium-feature-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.premium-flow{grid-template-columns:repeat(2,minmax(0,1fr));}.premium-preview-grid{grid-template-columns:1fr;}}
+@media(max-width:860px){.premium-app{grid-template-columns:1fr}.premium-sidebar{position:fixed;left:0;top:0;bottom:0;width:min(86vw,320px);transform:translateX(-105%);transition:.2s ease;height:100vh}.nav-open .premium-sidebar{transform:translateX(0)}.mobile-nav-toggle{display:block}.premium-main{padding:16px 14px 78px}.premium-topbar,.premium-section-head{flex-direction:column}.premium-hero{padding:22px;border-radius:24px}.premium-hero h2{font-size:28px}.premium-grid,.premium-feature-grid,.premium-flow{grid-template-columns:1fr}.premium-pins{grid-template-columns:1fr 1fr}.premium-card,.premium-section{border-radius:22px}.carl-workspace,.carl-shell{grid-template-columns:1fr!important}.carl-preview-panel,.carl-side{position:relative!important;top:auto!important}}
+
+
+/* ================= PAK RW SPACIOUS PREMIUM DASHBOARD ONLY v10.10.54 ================= */
+:root{
+  --sp-bg:#070912;
+  --sp-bg2:#0b1020;
+  --sp-panel:rgba(255,255,255,.072);
+  --sp-panel2:rgba(255,255,255,.105);
+  --sp-line:rgba(255,255,255,.135);
+  --sp-text:#f8fbff;
+  --sp-muted:rgba(248,251,255,.66);
+  --sp-soft:rgba(248,251,255,.48);
+  --sp-blue:#78a8ff;
+  --sp-pink:#ff78d7;
+  --sp-purple:#a78bfa;
+  --sp-navy:#0b1224;
+  --sp-green:#5df0b5;
+  --sp-gold:#f7cd67;
+  --sp-danger:#ff6f91;
+  --sp-radius:28px;
+  --sp-shadow:0 26px 90px rgba(0,0,0,.30);
+}
+body.dashboard-clean{
+  font-size:16px!important;
+  background:
+    radial-gradient(circle at 11% -10%, rgba(120,168,255,.20), transparent 32%),
+    radial-gradient(circle at 92% 0%, rgba(255,120,215,.15), transparent 30%),
+    radial-gradient(circle at 48% 110%, rgba(167,139,250,.10), transparent 45%),
+    linear-gradient(180deg,#070912 0%,#0b1020 52%,#070912 100%)!important;
+}
+body.dashboard-clean *{scrollbar-width:thin;scrollbar-color:rgba(120,168,255,.38) rgba(255,255,255,.04)}
+body.dashboard-clean input,
+body.dashboard-clean textarea,
+body.dashboard-clean select{
+  min-height:52px!important;
+  font-size:15px!important;
+  border-radius:18px!important;
+  padding:14px 15px!important;
+  border:1px solid rgba(255,255,255,.145)!important;
+  background:rgba(5,9,20,.72)!important;
+  color:var(--sp-text)!important;
+}
+body.dashboard-clean textarea{min-height:190px!important;line-height:1.7!important;resize:vertical!important;}
+body.dashboard-clean input:focus,
+body.dashboard-clean textarea:focus,
+body.dashboard-clean select:focus{
+  border-color:rgba(120,168,255,.68)!important;
+  box-shadow:0 0 0 4px rgba(120,168,255,.12),0 0 0 1px rgba(255,120,215,.08) inset!important;
+}
+body.dashboard-clean label{font-size:14px!important;font-weight:850!important;color:rgba(248,251,255,.72)!important;line-height:1.45!important;}
+body.dashboard-clean .btn,
+body.dashboard-clean button.btn,
+body.dashboard-clean a.btn{
+  min-height:48px!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:8px!important;
+  padding:13px 18px!important;
+  border-radius:17px!important;
+  font-weight:950!important;
+  letter-spacing:.1px!important;
+  box-shadow:0 15px 34px rgba(120,168,255,.18)!important;
+  transition:transform .16s ease,filter .16s ease,box-shadow .16s ease,background .16s ease!important;
+}
+body.dashboard-clean .btn:hover{transform:translateY(-2px)!important;filter:brightness(1.05)!important;box-shadow:0 20px 46px rgba(255,120,215,.18)!important;}
+body.dashboard-clean .btn:active{transform:translateY(0)!important;filter:brightness(.96)!important;}
+body.dashboard-clean .btn.secondary{background:rgba(255,255,255,.07)!important;border:1px solid rgba(255,255,255,.13)!important;box-shadow:none!important;}
+body.dashboard-clean .btn.ghost{background:transparent!important;border:1px solid rgba(255,255,255,.13)!important;color:rgba(248,251,255,.78)!important;box-shadow:none!important;}
+body.dashboard-clean .btn.danger{background:linear-gradient(135deg,rgba(255,111,145,.94),rgba(255,120,215,.76))!important;color:#fff!important;}
+.premium-app{grid-template-columns:284px minmax(0,1fr)!important;transition:grid-template-columns .18s ease;}
+.premium-sidebar{padding:18px!important;background:linear-gradient(180deg,rgba(9,14,30,.96),rgba(6,9,20,.92))!important;}
+.premium-main{max-width:1680px!important;padding:30px!important;padding-bottom:110px!important;}
+.premium-topbar{min-height:76px!important;padding:18px 20px!important;margin-bottom:24px!important;border-radius:28px!important;background:linear-gradient(180deg,rgba(255,255,255,.072),rgba(255,255,255,.04))!important;}
+.premium-topbar b{font-size:17px!important;}
+.premium-topbar span{font-size:13px!important;line-height:1.55!important;}
+.premium-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end;}
+.premium-tool{min-height:44px;border-radius:15px;border:1px solid rgba(255,255,255,.13);background:rgba(255,255,255,.065);color:rgba(248,251,255,.82);font-weight:950;padding:0 13px;cursor:pointer;transition:.16s ease;}
+.premium-tool:hover{background:rgba(255,255,255,.10);color:#fff;transform:translateY(-1px)}
+.premium-tool.active{background:linear-gradient(135deg,rgba(120,168,255,.25),rgba(255,120,215,.14));border-color:rgba(120,168,255,.34);color:#fff;}
+.premium-density{display:flex;gap:6px;padding:5px;border:1px solid rgba(255,255,255,.10);border-radius:16px;background:rgba(0,0,0,.16)}
+.premium-density button{min-height:34px;border:0;border-radius:12px;background:transparent;color:rgba(248,251,255,.55);font-weight:950;padding:0 10px;cursor:pointer;}
+.premium-density button.active{background:linear-gradient(135deg,rgba(120,168,255,.22),rgba(255,120,215,.12));color:#fff;}
+.premium-grid{gap:22px!important;margin:24px 0!important;}
+.premium-card{padding:24px!important;border-radius:28px!important;background:linear-gradient(180deg,rgba(255,255,255,.086),rgba(255,255,255,.045))!important;box-shadow:var(--sp-shadow)!important;}
+.premium-card h3{font-size:12px!important;letter-spacing:1px!important;margin-bottom:11px!important;}
+.premium-card .big{font-size:29px!important;}
+.premium-card .sub{font-size:13px!important;line-height:1.6!important;margin-top:9px!important;}
+.premium-section{padding:28px!important;margin-top:24px!important;border-radius:32px!important;background:linear-gradient(180deg,rgba(255,255,255,.077),rgba(255,255,255,.042))!important;box-shadow:var(--sp-shadow)!important;}
+.premium-section-head{margin-bottom:20px!important;align-items:center!important;}
+.premium-section h3{font-size:23px!important;}
+.premium-muted{font-size:14px!important;line-height:1.75!important;}
+.premium-feature-grid{gap:18px!important;}
+.premium-feature{padding:22px!important;border-radius:26px!important;min-height:150px!important;}
+.premium-feature b{font-size:16px!important;}
+.premium-feature span{font-size:13px!important;line-height:1.65!important;}
+.premium-flow{gap:16px!important;}
+.premium-step{padding:20px!important;border-radius:24px!important;}
+.premium-preview-grid{gap:20px!important;}
+.premium-discord-preview,.premium-banner-preview{border-radius:24px!important;padding:20px!important;}
+.unsaved-pill{position:fixed;right:18px;bottom:18px;z-index:9999;opacity:0;transform:translateY(12px);pointer-events:none;padding:12px 14px;border-radius:999px;border:1px solid rgba(247,205,103,.26);background:rgba(247,205,103,.12);color:#ffe5a3;font-weight:950;box-shadow:0 18px 55px rgba(0,0,0,.33);transition:.16s ease;}
+body.has-unsaved .unsaved-pill{opacity:1;transform:translateY(0)}
+body.saved-pulse .unsaved-pill{opacity:1;transform:translateY(0);border-color:rgba(93,240,181,.26);background:rgba(93,240,181,.12);color:#a8ffd9;}
+body.sidebar-collapsed .premium-app{grid-template-columns:84px minmax(0,1fr)!important;}
+body.sidebar-collapsed .premium-sidebar{padding:14px 10px!important;}
+body.sidebar-collapsed .premium-brand{justify-content:center;padding:11px!important;}
+body.sidebar-collapsed .premium-brand h1,
+body.sidebar-collapsed .premium-brand p,
+body.sidebar-collapsed .premium-search,
+body.sidebar-collapsed .premium-pins,
+body.sidebar-collapsed .premium-nav-group,
+body.sidebar-collapsed .premium-side-note{display:none!important;}
+body.sidebar-collapsed .premium-nav a{justify-content:center;padding:12px 8px!important;font-size:0!important;}
+body.sidebar-collapsed .premium-nav a::first-letter{font-size:20px!important;}
+body.sidebar-collapsed .premium-logo{width:48px!important;height:48px!important;}
+body.focus-edit .premium-app{grid-template-columns:72px minmax(0,1fr)!important;}
+body.focus-edit .premium-sidebar{padding:12px 9px!important;}
+body.focus-edit .premium-brand h1,body.focus-edit .premium-brand p,body.focus-edit .premium-search,body.focus-edit .premium-pins,body.focus-edit .premium-nav-group,body.focus-edit .premium-side-note{display:none!important;}
+body.focus-edit .premium-nav a{justify-content:center;font-size:0!important;padding:12px 6px!important;}
+body.focus-edit .premium-main{max-width:none!important;padding:24px 34px 120px!important;}
+body.hide-dashboard-preview .premium-preview-grid{grid-template-columns:1fr!important;}
+body.hide-dashboard-preview .premium-preview-grid .premium-banner-preview,
+body.hide-dashboard-preview .premium-preview-grid .premium-discord-preview{display:none!important;}
+body.ui-density-spacious .premium-main{padding:34px!important;padding-bottom:120px!important;}
+body.ui-density-spacious .premium-section{padding:30px!important;}
+body.ui-density-spacious .premium-card{padding:26px!important;}
+body.ui-density-comfortable .premium-main{padding:24px!important;padding-bottom:100px!important;}
+body.ui-density-comfortable .premium-section{padding:22px!important;}
+body.ui-density-comfortable .premium-card{padding:20px!important;}
+body.ui-density-compact{font-size:14px!important;}
+body.ui-density-compact .premium-main{padding:18px!important;padding-bottom:92px!important;}
+body.ui-density-compact .premium-section{padding:18px!important;margin-top:16px!important;}
+body.ui-density-compact .premium-card{padding:16px!important;}
+body.ui-density-compact input,body.ui-density-compact textarea,body.ui-density-compact select{min-height:44px!important;font-size:14px!important;padding:10px 12px!important;}
+body.ui-density-compact textarea{min-height:120px!important;}
+.premium-toggle{display:inline-flex;align-items:center;gap:10px;min-height:42px;padding:6px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.18);font-weight:950;color:rgba(248,251,255,.70)}
+.premium-toggle .dot{width:34px;height:20px;border-radius:999px;background:rgba(255,255,255,.15);position:relative;display:inline-block;}
+.premium-toggle .dot:before{content:"";position:absolute;left:3px;top:3px;width:14px;height:14px;border-radius:999px;background:#fff;transition:.16s ease;}
+.premium-toggle.on{border-color:rgba(120,168,255,.28);background:linear-gradient(135deg,rgba(120,168,255,.16),rgba(255,120,215,.10));color:#fff;}
+.premium-toggle.on .dot{background:linear-gradient(135deg,var(--sp-blue),var(--sp-pink));}
+.premium-toggle.on .dot:before{left:17px;}
+@media(max-width:1366px){.premium-app{grid-template-columns:260px minmax(0,1fr)!important}.premium-main{padding:24px!important;padding-bottom:110px!important}.premium-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.premium-feature-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.premium-flow{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+@media(max-width:860px){.premium-main{padding:18px!important;padding-bottom:100px!important}.premium-topbar{align-items:flex-start!important}.premium-toolbar{justify-content:flex-start!important}.premium-grid,.premium-feature-grid,.premium-flow,.premium-preview-grid{grid-template-columns:1fr!important}.premium-section{padding:20px!important}.premium-sidebar{width:min(88vw,340px)!important}.premium-card,.premium-section{border-radius:24px!important}body.focus-edit .premium-main,body.sidebar-collapsed .premium-main{padding:18px!important;padding-bottom:100px!important}}
+
+
+/* ===== v10.10.54 Control Center Premium Safe Polish ===== */
+.premium-protect-note{border:1px solid rgba(255,120,215,.18);background:linear-gradient(135deg,rgba(120,168,255,.09),rgba(255,120,215,.07));border-radius:22px;padding:14px 16px;color:rgba(248,251,255,.76);font-weight:850;line-height:1.55;margin:14px 0;}
+.premium-feature.locked,.premium-card.locked{border-color:rgba(247,205,103,.18)!important;background:linear-gradient(180deg,rgba(247,205,103,.065),rgba(255,255,255,.035))!important;}
+.premium-feature.locked:after{content:"Locked Safe";position:absolute;right:14px;top:14px;padding:5px 8px;border-radius:999px;background:rgba(247,205,103,.12);border:1px solid rgba(247,205,103,.22);font-size:10px;font-weight:1000;color:#ffe8a0;}
+.premium-feature{position:relative;}
+.feature-safe-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:16px;}
+.feature-safe-card{border:1px solid rgba(255,255,255,.11);background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.038));border-radius:24px;padding:18px;box-shadow:0 18px 60px rgba(0,0,0,.18);}
+.feature-safe-card b{display:block;color:#fff;font-size:16px;margin-bottom:7px;}
+.feature-safe-card span{display:block;color:rgba(248,251,255,.62);font-size:13px;line-height:1.55;}
+.feature-safe-card .badge{display:inline-flex;margin-top:13px;padding:7px 10px;border-radius:999px;background:rgba(120,168,255,.10);border:1px solid rgba(120,168,255,.18);font-size:12px;font-weight:1000;color:#dce7ff;}
+@media(max-width:980px){.feature-safe-grid{grid-template-columns:1fr;}}
+
+</style>
+</head>
+<body class="dashboard-clean">${dashboardMediaBackground()}${content}${dashboardMaxStudioScript()}${dashboardLuxeGalaxyScript()}</body>
+</html>`;
+}
+
+
+function dashboardMediaConfig() {
+  const cfg = readConfigFile();
+  return cfg.embeds?.dashboard?.media || {};
+}
+
+function dashboardMediaBackground() {
+  const media = dashboardMediaConfig();
+  const url = media.backgroundUrl || "";
+  if (!url) return "";
+  return `<div class="maxton-bg-image" style="background-image:url('${escapeHtml(url)}')"></div>`;
+}
+
+function dashboardLogoHtml() {
+  const media = dashboardMediaConfig();
+  if (media.logoUrl) return `<img src="${escapeHtml(media.logoUrl)}" alt="Logo" />`;
+  return "🤍";
+}
+
+
+function dashboardLayout(inner, active = "dashboard") {
+  const cfg = readConfigFile();
+  const dash = cfg.embeds?.dashboard || {};
+  const statusText = client?.user?.tag ? "Online" : "Offline";
+  const navGroups = [
+    ["Control Center", [
+      ["dashboard", "🏠 Dashboard", "/"],
+      ["modules", "🧩 Modules", "/modules"],
+      ["ai", "🤖 AI Pak RW", "/modules#ai"],
+      ["curhat", "☁️ Curhat", "/embeds#embed-curhatReply"],
+      ["anonim", "🌙 Curhat Anonim", "/embeds#embed-anonimPanel"],
+      ["suggestion", "💡 Saran & Voting", "/embeds#embed-suggestionResult"],
+      ["welcome", "👋 Welcome", "/modules#welcome"],
+      ["commandcenter", "⌨️ Command Center", "/command-center"],
+      ["permissioncenter", "🛡️ Permission Center", "/permission-center"]
+    ]],
+    ["Community System", [
+      ["level", "📊 Level & Poin", "/modules#level"],
+      ["topactive", "🏆 Top Aktif / MOTM", "/top-active"],
+      ["manualmotm", "👑 Manual MOTM", "/manual-motm"],
+      ["juragan", "💎 Juragan / Booster", "/modules#juragan"],
+      ["donatur", "💸 Donatur", "/modules#donatur"],
+      ["mabar", "🎮 Cari Mabar", "/cari-mabar"],
+      ["owo", "🎮 OwO Auto Role", "/owo-auto-role"],
+      ["activevoice", "🎙️ Voice Role", "/active-voice-role"],
+      ["boostpoin", "⚡ Boost Poin", "/boost-poin"]
+    ]],
+    ["Design & Editor", [
+      ["media", "🖼️ Banner Manual", "/media"],
+      ["embeds", "🎨 Embed Editor", "/embeds"],
+      ["embedsync", "🔁 Embed Sync Manager", "/embed-sync"],
+      ["templates", "🗂️ Embed Template Manager", "/embed-templates"],
+      ["discord", "🔗 Server Settings", "/discord"],
+      ["quick", "⚡ Quick Edit", "/quick-edit"],
+      ["preview", "👀 Preview", "/preview"],
+      ["backup", "💾 Backup", "/backup"],
+      ["logs", "📜 Logs", "/logs"]
+    ]],
+    ["Advanced", [
+      ["featureflow", "🧭 Feature Flow", "/feature-flow"],
+      ["toggles", "🔘 Feature Toggle", "/feature-toggles"],
+      ["control", "📨 Send Center", "/control"],
+      ["smart", "🧠 Smart Check", "/smart"],
+      ["config", "⚙️ Config JSON", "/config"],
+      ["analytics", "📊 Analytics", "/analytics"],
+      ["data", "🗄️ Data Center", "/data-center"],
+      ["source", "🧾 Source", "/source"],
+      ["logout", "🚪 Logout", "/logout"]
+    ]]
+  ];
+
+  return dashboardShell(`
+    <button class="mobile-nav-toggle" type="button" id="premiumMenuBtn">☰ Menu</button>
+    <div class="premium-app">
+      <aside class="premium-sidebar" id="premiumSidebar">
+        <div class="premium-brand">
+          <div class="premium-logo">${dashboardLogoHtml()}</div>
+          <div>
+            <h1>${escapeHtml(dash.brandTitle || "Pak RW v10.10.54")}</h1>
+            <p>${escapeHtml(dash.brandSubtitle || "Premium Control Center")}</p>
+          </div>
+        </div>
+
+        <div class="premium-search">
+          <input id="premiumNavSearch" placeholder="Cari menu... AI, embed, mabar" autocomplete="off" />
+        </div>
+
+        <div class="premium-pins">
+          <a href="/embeds">🎨 Embed</a>
+          <a href="/embed-sync">🔁 Sync</a>
+          <a href="/media">🖼️ Banner</a>
+          <a href="/top-active">🏆 MOTM</a>
+          <a href="/manual-motm">👑 Manual MOTM</a>
+          <a href="/cari-mabar">🎮 Mabar</a>
+          <a href="/owo-auto-role">🎮 OwO</a>
+          <a href="/active-voice-role">🎙️ Voice Role</a>
+          <a href="/boost-poin">⚡ Boost Poin</a>
+          <a href="/command-center">⌨️ Command</a>
+        </div>
+
+        <nav class="premium-nav" id="premiumNav">
+          ${navGroups.map(([group, items]) => `
+            <div class="premium-nav-group">${escapeHtml(group)}</div>
+            ${items.map(([id, label, href]) => `<a data-label="${escapeHtml(label.toLowerCase())}" class="${active === id ? "active" : ""}" href="${href}">${label}</a>`).join("")}
+          `).join("")}
+        </nav>
+
+        <div class="premium-side-note">
+          <b>Alur premium:</b><br>Edit setting → lihat preview → test aman → backup. Semua dibuat supaya owner tidak perlu buka code.
+        </div>
+      </aside>
+
+      <main class="premium-main">
+        <div class="premium-topbar">
+          <div>
+            <b>Pak RW Control Center</b>
+            <span>DESA TULUS • Dashboard premium + Embed Sync Discord ↔ Dashboard</span>
+          </div>
+          <div class="premium-toolbar" aria-label="Dashboard tools">
+            <button class="premium-tool" type="button" id="sidebarCollapseBtn">☰ Sidebar</button>
+            <button class="premium-tool" type="button" id="focusModeBtn">🎯 Focus Edit</button>
+            <button class="premium-tool" type="button" id="hidePreviewBtn">👁️ Preview</button>
+            <div class="premium-density" title="UI Density">
+              <button type="button" data-density="spacious">Spacious</button>
+              <button type="button" data-density="comfortable">Comfort</button>
+              <button type="button" data-density="compact">Compact</button>
+            </div>
+            <span class="premium-chip ${statusText === "Online" ? "ok" : "warn"}">● ${escapeHtml(statusText)}</span>
+            <span class="premium-chip">${escapeHtml(cfg.serverName || "DESA TULUS")}</span>
+            <span class="premium-chip">v10.10.54</span>
+          </div>
+        </div>
+        ${inner}
+      </main>
+    </div>
+    <div class="unsaved-pill" id="unsavedPill">⚠️ Ada perubahan belum disimpan</div>
+    <script>
+      (() => {
+        const body = document.body;
+        const btn = document.getElementById("premiumMenuBtn");
+        if (btn) btn.addEventListener("click", () => body.classList.toggle("nav-open"));
+        document.addEventListener("click", (e) => {
+          if (window.innerWidth > 860) return;
+          if (e.target.closest(".premium-sidebar") || e.target.closest("#premiumMenuBtn")) return;
+          body.classList.remove("nav-open");
+        });
+        const search = document.getElementById("premiumNavSearch");
+        const nav = document.getElementById("premiumNav");
+        if (search && nav) {
+          search.addEventListener("input", () => {
+            const q = search.value.trim().toLowerCase();
+            nav.querySelectorAll("a").forEach((a) => {
+              a.classList.toggle("hidden-by-search", q && !(a.dataset.label || "").includes(q));
+            });
+          });
+        }
+        function setToggle(id, cls, storageKey) {
+          const el = document.getElementById(id);
+          if (!el) return;
+          if (localStorage.getItem(storageKey) === "1") { body.classList.add(cls); el.classList.add("active"); }
+          el.addEventListener("click", () => {
+            body.classList.toggle(cls);
+            el.classList.toggle("active", body.classList.contains(cls));
+            localStorage.setItem(storageKey, body.classList.contains(cls) ? "1" : "0");
+          });
+        }
+        setToggle("sidebarCollapseBtn", "sidebar-collapsed", "bekiwSidebarCollapsed");
+        setToggle("focusModeBtn", "focus-edit", "bekiwFocusEdit");
+        setToggle("hidePreviewBtn", "hide-dashboard-preview", "bekiwHidePreview");
+        const density = localStorage.getItem("bekiwUiDensity") || "spacious";
+        function applyDensity(next) {
+          body.classList.remove("ui-density-spacious", "ui-density-comfortable", "ui-density-compact");
+          body.classList.add("ui-density-" + next);
+          document.querySelectorAll("[data-density]").forEach((b) => b.classList.toggle("active", b.dataset.density === next));
+          localStorage.setItem("bekiwUiDensity", next);
+        }
+        applyDensity(density);
+        document.querySelectorAll("[data-density]").forEach((b) => b.addEventListener("click", () => applyDensity(b.dataset.density || "spacious")));
+        document.querySelectorAll("form").forEach((form) => {
+          form.addEventListener("input", () => body.classList.add("has-unsaved"), { passive: true });
+          form.addEventListener("submit", () => {
+            body.classList.remove("has-unsaved");
+            const submitter = document.activeElement?.closest?.("button") || form.querySelector('button[type="submit"]');
+            if (submitter) { submitter.dataset.oldText = submitter.textContent; submitter.textContent = "Menyimpan..."; submitter.disabled = true; }
+          });
+        });
+      })();
+    </script>
+  `);
+}
+
+function configInput(name, label, value, type = "text") {
+  return `<div><label>${escapeHtml(label)}</label><input type="${type}" name="${escapeHtml(name)}" value="${escapeHtml(value ?? "")}" /></div>`;
+}
+
+function renderDashboard(req) {
+  const cfg = readConfigFile();
+  const media = cfg.embeds?.dashboard?.media || {};
+  const topCfg = cfg.topActive || {};
+  const aiCfg = cfg.ai || {};
+  const uptime = Math.floor(process.uptime());
+  const hours = Math.floor(uptime / 3600);
+  const minutes = Math.floor((uptime % 3600) / 60);
+  const botTag = client?.user?.tag || "Belum login";
+  const guildCount = client?.guilds?.cache?.size || 0;
+  const heroStyle = media.bannerUrl ? ` style="background-image:url('${escapeHtml(media.bannerUrl)}')"` : "";
+  const heroClass = media.bannerUrl ? "premium-hero with-image" : "premium-hero";
+  const embedPreview = cfg.embeds?.juragan || {};
+  const featureCards = [
+    ["🤖", "AI Pak RW", "/modules#ai", aiCfg.openRouterModel || "AI model", "Atur model, gaya bahasa, cooldown, dan alur jawaban."],
+    ["☁️", "Curhat", "/embeds#embed-curhatReply", "Empati", "Rapikan balasan curhat dan panel curhat anonim."],
+    ["💡", "Saran & Voting", "/embeds#embed-suggestionResult", cfg.suggestion?.enabled !== false ? "Aktif" : "Nonaktif", "Edit panel saran, nama pengirim, dan voting."],
+    ["👋", "Welcome", "/modules#welcome", cfg.welcome?.enabled !== false ? "Aktif" : "Nonaktif", "Edit pesan welcome dan channel chat warga."],
+    ["📊", "Level & Poin", "/modules#level", `${cfg.level?.pointsPerLevel || 500} poin/level`, "Atur channel level, cek poin, dan role level 100."],
+    ["🏆", "Top Aktif / MOTM", "/top-active", topCfg.dailyAutoPost ? "Auto 00.00 WIB" : "Manual", "Atur ranking, poin chat/voice, bonus, dan banner MOTM."],
+    ["👑", "Manual MOTM", "/manual-motm", "Manual Only", "Pilih member, pasang image manual, lalu kirim/beri role MOTM dari dashboard."],
+    ["💎", "Juragan / Booster", "/embeds#embed-juragan", cfg.juragan?.enabled !== false ? "Aktif" : "Nonaktif", "Edit embed boost, role, dan channel Juragan."],
+    ["💸", "Donatur", "/embeds#embed-donatur", cfg.donaturRoleId ? "Role siap" : "Belum role", "Edit role donatur, nominal, dan embed akses."],
+    ["🎮", "Cari Mabar", "/cari-mabar", cfg.mabar?.enabled !== false ? "Aktif" : "Nonaktif", "Edit embed mabar, channel, tombol, dan status."],
+    ["🎮", "OwO Auto Role", "/owo-auto-role", cfg.owoAutoRole?.enabled !== false ? "Aktif" : "Nonaktif", "Prefix w: auto kasih role OwO Player/Squad tanpa spam notice."],
+    ["🎙️", "Voice Role Otomatis", "/active-voice-role", cfg.activeVoiceRole?.enabled !== false ? "Aktif" : "Nonaktif", "Member yang berada di voice otomatis dapat role Member Aktif."],
+    ["⚡", "Boost Poin Event", "/boost-poin", cfg.boostPoin?.enabled !== false ? (cfg.boostPoin?.eventActive ? "Event Aktif +5%" : "Standby") : "Nonaktif", "Owner bisa mengaktifkan event chat/voice manual dari dashboard. Peserta terbaca dari aktivitas nyata."],
+    ["🖼️", "Banner Manual", "/media", topCfg.bannerMode || "manual_image", "Tempel URL banner dan preview tanpa edit code."],
+    ["🎨", "Embed Editor", "/embeds", "Carlbot-like", "Edit title, description, image, footer, channel, preview."],
+    ["🔗", "Server Settings", "/discord", "Discord data", "Lihat channel, role, emoji, dan ID server."]
+  ];
+
+  return dashboardLayout(`
+    <section class="${heroClass}"${heroStyle}>
+      <div class="premium-hero-badge">🤍 DESA TULUS • Control Center Premium</div>
+      <h2>${escapeHtml(cfg.embeds?.dashboard?.homeTitle || "Pak RW Premium Control Center v10.10.54")}</h2>
+      <p>${escapeHtml(cfg.embeds?.dashboard?.homeSubtitle || "Dashboard dibuat lebih rapi, adem, dan modern seperti panel bot Discord besar. Semua fitur lama tetap aman; update ini hanya merapikan web dashboard, navigasi, editor, preview, dan pengalaman edit.")}</p>
+      <div class="premium-actions">
+        <a class="btn" href="/embeds">🎨 Edit Embed</a>
+        <a class="btn secondary" href="/cari-mabar">🎮 Cari Mabar</a>
+        <a class="btn secondary" href="/media">🖼️ Banner Manual</a>
+        <a class="btn secondary" href="/manual-motm">👑 Manual MOTM</a>
+        <a class="btn secondary" href="/modules#ai">🤖 AI Pak RW</a>
+        <a class="btn secondary" href="/quick-edit">⚡ Quick Edit</a>
+      </div>
+      <div class="premium-protect-note">🔁 Embed Sync aktif: import embed dari Discord → preview → simpan template → kirim/update balik ke Discord. Data lama, token/env, Level, Top Aktif/MOTM, dan Cek Poin tetap aman.</div>
+    </section>
+
+    <section class="premium-grid">
+      <div class="premium-card"><h3>Status Bot</h3><p class="big">${client?.user?.tag ? "Online" : "Offline"}</p><div class="sub">${escapeHtml(botTag)}</div></div>
+      <div class="premium-card"><h3>Server</h3><p class="big">${escapeHtml(cfg.serverName || "DESA TULUS")}</p><div class="sub">${guildCount} guild terhubung</div></div>
+      <div class="premium-card"><h3>Uptime</h3><p class="big">${hours}j ${minutes}m</p><div class="sub">Sejak container aktif</div></div>
+      <div class="premium-card"><h3>Top Aktif</h3><p class="big">${topCfg.dailyAutoPost ? "00.00" : "Manual"}</p><div class="sub">Auto post WIB: ${topCfg.dailyAutoPost ? "aktif" : "nonaktif"}</div></div>
+    </section>
+
+    <section class="premium-section">
+      <div class="premium-section-head">
+        <div>
+          <h3>🧭 Control Center Fitur</h3>
+          <div class="premium-muted">Setiap fitur punya card sendiri supaya tidak numpuk. Klik card untuk edit setting yang dibutuhkan.</div>
+        </div>
+        <a class="btn secondary" href="/feature-flow">Lihat Alur</a>
+      </div>
+      <div class="premium-feature-grid">
+        ${featureCards.map(([icon, name, href, status, desc]) => { const locked = ["/top-active", "/modules#level"].includes(href); return `<a class="premium-feature ${locked ? "locked" : ""}" href="${href}"><div class="icon">${icon}</div><b>${escapeHtml(name)}</b><span>${escapeHtml(desc)}</span><div class="premium-chip" style="margin-top:12px;width:max-content">${locked ? "Aman terkunci" : escapeHtml(status)}</div></a>`; }).join("")}
+      </div>
+    </section>
+
+    <section class="premium-section">
+      <div class="premium-section-head">
+        <div>
+          <h3>✨ Alur Edit yang Tidak Berantakan</h3>
+          <div class="premium-muted">Urutan edit dibuat konsisten supaya owner tahu harus mulai dari mana dan selesai di mana.</div>
+        </div>
+        <a class="btn secondary" href="/backup">Backup Config</a>
+      </div>
+      <div class="premium-flow">
+        <div class="premium-step"><em>1</em><b>Pilih Fitur</b><span>Masuk ke card/menu sesuai fitur yang mau diedit.</span></div>
+        <div class="premium-step"><em>2</em><b>Ubah Setting</b><span>Pakai input, toggle, dropdown, textarea, atau URL gambar.</span></div>
+        <div class="premium-step"><em>3</em><b>Preview</b><span>Cek embed/banner di dashboard sebelum dikirim.</span></div>
+        <div class="premium-step"><em>4</em><b>Test Aman</b><span>Gunakan command test tanpa merusak poin/data.</span></div>
+        <div class="premium-step"><em>5</em><b>Backup</b><span>Simpan config supaya gampang balikin kalau salah edit.</span></div>
+      </div>
+    </section>
+
+
+    <section class="premium-section">
+      <div class="premium-section-head">
+        <div><h3>📜 Recent Activity</h3><div class="premium-muted">Aktivitas terbaru dashboard: import embed, kirim embed, update pesan, backup, dan save template.</div></div>
+        <a class="btn secondary" href="/logs">Lihat Logs</a>
+      </div>
+      <div class="control-activity">
+        ${readDashboardActivity(6).length ? readDashboardActivity(6).map((a)=>`<div class="activity-row"><span>${escapeHtml(formatActivityTime(a.at))}</span><div><b>${escapeHtml(a.title || "Activity")}</b><span>${escapeHtml(a.detail || "")}</span></div><em class="activity-tag">${escapeHtml(a.type || "info")}</em></div>`).join("") : `<div class="premium-muted">Belum ada aktivitas. Mulai dari Embed Sync Manager atau simpan setting dashboard.</div>`}
+      </div>
+    </section>
+
+    <section class="premium-section">
+      <div class="premium-section-head">
+        <div>
+          <h3>👀 Preview Embed & Banner</h3>
+          <div class="premium-muted">Preview ringan supaya dashboard terasa seperti bot premium, tanpa bikin halaman berat.</div>
+        </div>
+        <div class="premium-actions" style="margin-top:0"><a class="btn secondary" href="/embeds">Embed Editor</a><a class="btn secondary" href="/media">Media</a></div>
+      </div>
+      <div class="premium-preview-grid">
+        <div class="premium-discord-preview">
+          <div class="premium-discord-msg">${escapeHtml(embedPreview.content || "Preview normal text embed")}</div>
+          <div class="premium-embed-demo" style="border-left-color:${escapeHtml(embedPreview.color || "#ff6fd8")}">
+            <b>${escapeHtml(embedPreview.authorName || "DESA TULUS")}</b>
+            <div class="title">${escapeHtml(embedPreview.title || "Pak RW Embed Preview")}</div>
+            <p>${escapeHtml(embedPreview.description || "Preview embed akan tampil di sini. Edit detailnya lewat menu Embed Editor.").slice(0, 360)}</p>
+            <small>${escapeHtml(embedPreview.footer || "DESA TULUS • Dashboard Preview")}</small>
+          </div>
+        </div>
+        <div class="premium-banner-preview">
+          ${media.bannerUrl ? `<img src="${escapeHtml(media.bannerUrl)}" alt="Banner dashboard" />` : `<div><b>Belum ada Banner Home</b><br><span>Pasang lewat Banner Manual supaya home lebih premium.</span></div>`}
+        </div>
+      </div>
+    </section>
+  `, "dashboard");
+}
+
+function renderFeatureFlowDashboard(req) {
+  const cfg = readConfigFile();
+  const flow = cfg.featureFlow || {};
+  const suite = cfg.featureSuite || {};
+  const modules = Array.isArray(suite.modules) ? suite.modules : [];
+  const topCfg = cfg.topActive || {};
+  const aiCfg = cfg.ai || {};
+  const rows = modules.map((m, i) => `
+    <tr>
+      <td><b>${escapeHtml(String(i + 1).padStart(2, "0"))}</b></td>
+      <td>${escapeHtml(m.icon || "🧩")} <b>${escapeHtml(m.name || m.id || "Fitur")}</b></td>
+      <td>${escapeHtml(m.flow || "Edit setting, preview, test, lalu backup.")}</td>
+      <td><span class="suite-status">${escapeHtml(m.status || "Aktif")}</span></td>
+      <td><a class="btn secondary" href="${escapeHtml(m.menu || "/modules")}">Edit</a></td>
+    </tr>
+  `).join("");
+
+  return dashboardLayout(`
+    <section class="suite-hero">
+      <span class="ot-badge">🧭 FULL FEATURE SUITE • v10.10.54</span>
+      <h2>Semua Fitur Pak RW, Satu Alur yang Jelas</h2>
+      <p>Halaman ini dibuat supaya dashboard terasa seperti bot besar terkenal: fitur tidak numpuk, tiap modul punya tujuan, dan setelah edit kamu tahu harus preview, test, lalu backup.</p>
+      <div class="ot-hero-actions">
+        <a class="btn" href="/modules">🤖 Edit AI & Fitur</a>
+        <a class="btn secondary" href="/top-active">🏆 Top Aktif</a>
+        <a class="btn secondary" href="/media">🖼️ Banner</a>
+        <a class="btn secondary" href="/embeds">🎨 Embed</a>
+        <a class="btn secondary" href="/backup">💾 Backup</a>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3>🪜 Alur Edit yang Tidak Berantakan</h3>
+      <div class="suite-flow">
+        <div class="suite-step"><b>1. Pilih Modul</b><span>${escapeHtml(flow.step1 || "Pilih fitur yang mau diedit.")}</span></div>
+        <div class="suite-step"><b>2. Edit Setting</b><span>${escapeHtml(flow.step2 || "Isi channel, role, teks, warna, banner, atau poin.")}</span></div>
+        <div class="suite-step"><b>3. Preview</b><span>${escapeHtml(flow.step3 || "Cek tampilan sebelum dipakai.")}</span></div>
+        <div class="suite-step"><b>4. Test</b><span>${escapeHtml(flow.step4 || "Test fitur di Discord.")}</span></div>
+        <div class="suite-step"><b>5. Backup</b><span>${escapeHtml(flow.step5 || "Backup config setelah cocok.")}</span></div>
+      </div>
+    </section>
+
+    <section class="suite-grid">
+      <div class="suite-card"><div class="suite-ico">🤖</div><div><b>Tanya Pak RW Lebih Natural</b><p>Mode: ${escapeHtml(aiCfg.styleMode || "auto_mirror_safe")} • Pronoun: ${escapeHtml(aiCfg.pronounMode || "auto")}. Pak RW bisa ikut lu/gua, aku/kamu, atau saya/anda, tetap aman.</p></div><span class="suite-status">ON</span></div>
+      <div class="suite-card"><div class="suite-ico">🏆</div><div><b>Top Aktif / MOTM Jelas</b><p>Target ${escapeHtml(String(topCfg.pointsThreshold || 10000))} poin. Top Chat, Top Voice, dan Top Aktif dipisah biar level/poin tidak terasa ngaco.</p></div><span class="suite-status">ON</span></div>
+      <div class="suite-card"><div class="suite-ico">🖼️</div><div><b>Banner Manual</b><p>Tempel URL banner dari Canva/CDN, pilih mode manual image, lalu test MOTM tanpa edit coding.</p></div><span class="suite-status">READY</span></div>
+      <div class="suite-card"><div class="suite-ico">🧠</div><div><b>Smart Check</b><p>Cek channel, role, database, dan setting penting sebelum panik saat fitur tidak jalan.</p></div><span class="suite-status">READY</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="bbo-section-title"><div><h3>📦 Modul Pak RW</h3><div class="bbo-muted">Klik Edit di modul yang mau diubah. Semua fitur lama tetap ada, hanya alurnya dibuat lebih jelas.</div></div><a class="btn secondary" href="/commands">Lihat Command</a></div>
+      <div class="table-wrap">
+        <table class="suite-table">
+          <thead><tr><th>#</th><th>Modul</th><th>Alur Fungsi</th><th>Status</th><th>Aksi</th></tr></thead>
+          <tbody>${rows || `<tr><td>01</td><td><b>Pak RW</b></td><td>Edit setting, preview, test, backup.</td><td><span class="suite-status">Aktif</span></td><td><a class="btn secondary" href="/modules">Edit</a></td></tr>`}</tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3>✅ Checklist Setelah Update</h3>
+      <div class="suite-note">
+        Setelah push ke GitHub, pastikan DisCloud upload/deploy terbaru, tunggu status Active, lalu buka dashboard dengan CTRL + F5. Kalau fitur Discord belum jalan, cek permission bot dan jalankan command test dari dashboard/Test Center.
+      </div>
+    </section>
+  `, "featureflow");
+}
+
+function maxtonFieldName(section, key) {
+  return `maxton_${section}_${key}`;
+}
+
+function maxtonInput(section, key, label, value, type = "text") {
+  return configInput(maxtonFieldName(section, key), label, value, type);
+}
+
+function maxtonTextarea(section, key, label, value, rows = 5) {
+  return textareaInput(maxtonFieldName(section, key), label, value, rows);
+}
+
+function maxtonEmbedPreview(title = "", description = "", color = "#FFFFFF", footer = "") {
+  return `<div class="mega-preview" style="border-left:4px solid ${escapeHtml(color || "#FFFFFF")}">
+    <div class="mega-preview-title">${escapeHtml(title || "Preview Judul Embed")}</div>
+    <div class="mega-preview-desc">${escapeHtml(description || "Preview deskripsi embed akan tampil di sini.")}</div>
+    ${footer ? `<div class="sub" style="margin-top:12px">${escapeHtml(footer)}</div>` : ""}
+  </div>`;
+}
+
+function maxtonEmbedEditor(key, label, embed = {}, rows = 7) {
+  const descSample = "Halo {user}, wilujeung sumping di **{server}** 🤍\n\n• Tulis poin pertama\n• Tulis poin kedua\n• Gunakan placeholder biar otomatis";
+  const motmSample = "🏆 Selamat {user}!\nKamu menjadi {role} bulan ini.\n\nTotal poin: **{total}**\nTop Chat: **{chat}** • Top Voice: **{voice}**";
+  return `<section class="panel mega-section" id="embed-${escapeHtml(key)}" data-editor-section data-search-name="embed ${escapeHtml(key)} ${escapeHtml(label)}">
+    <h3>${escapeHtml(label)}</h3>
+    <p class="section-note">Format embed lengkap: <b>content</b> = text di luar embed, <b>title</b> = judul, <b>description</b> = isi embed, <b>footer</b> = bawah embed, <b>thumbnail/image</b> = gambar. Placeholder aman: {user}, {username}, {server}, {level}, {rank}, {total}, {chat}, {voice}, {expiredText}, {memberCount}, {month}, {role}.</p>
+    <div class="format-toolbar">
+      <button type="button" class="insert-snippet" data-target="${escapeHtml(maxtonFieldName(key, "description"))}" data-insert="${escapeHtml(descSample)}">+ Format Welcome</button>
+      <button type="button" class="insert-snippet" data-target="${escapeHtml(maxtonFieldName(key, "description"))}" data-insert="${escapeHtml(motmSample)}">+ Format MOTM</button>
+      <button type="button" class="insert-snippet" data-target="${escapeHtml(maxtonFieldName(key, "description"))}" data-insert="${escapeHtml("**Informasi:**\n{user}\n\n**Detail:**\n• Total: {total}\n• Level: {level}\n• Rank: {rank}")}">+ Format Info</button>
+      <button type="button" class="insert-snippet" data-target="${escapeHtml(maxtonFieldName(key, "footer"))}" data-insert="${escapeHtml("{server} • Pak RW")}">+ Footer Server</button>
+    </div>
+    <div class="formgrid">
+      ${maxtonInput(key, "color", "Warna Embed HEX", embed.color || "#FFFFFF")}
+      ${maxtonInput(key, "title", "Judul Embed", embed.title || "")}
+      ${maxtonInput(key, "footer", "Footer Embed", embed.footer || "")}
+      ${maxtonInput(key, "image", "Image / Banner URL", embed.image || "")}
+      ${maxtonInput(key, "thumbnail", "Thumbnail URL / avatar", embed.thumbnail || "")}
+      ${maxtonInput(key, "content", "Pesan Chat di Luar Embed", embed.content || "")}
+      ${maxtonInput(key, "authorName", "Author Name (opsional)", embed.authorName || "")}
+      ${maxtonInput(key, "authorIcon", "Author Icon URL (opsional)", embed.authorIcon || "")}
+      ${maxtonInput(key, "titleUrl", "Title URL / Link Judul (opsional)", embed.titleUrl || "")}
+    </div>
+    <div class="maxton-format-row">
+      <div class="format-help">
+        <b>Tips format cepat</b><br>
+        <code>**tebal**</code> untuk tebal, <code>•</code> untuk list, <code>&lt;#ID&gt;</code> untuk channel, <code>&lt;@&ID&gt;</code> untuk role, <code>{user}</code> otomatis mention user.
+      </div>
+      ${maxtonTextarea(key, "description", "Deskripsi Embed", embed.description || "", rows)}
+    </div>
+    <div class="embed-preview-card" data-preview-for="${escapeHtml(key)}" style="border-left-color:${escapeHtml(embed.color || "#FFFFFF")}">
+      <div class="p-title">${escapeHtml(embed.title || "Preview Judul Embed")}</div>
+      <div class="p-desc">${escapeHtml(embed.description || "Preview deskripsi embed akan tampil di sini.")}</div>
+      ${embed.footer ? `<div class="p-footer">${escapeHtml(embed.footer)}</div>` : `<div class="p-footer">Footer embed akan tampil di sini.</div>`}
+    </div>
+  </section>`;
+}
+
+function maxtonFormatLibraryHtml() {
+  const placeholders = ["{user}", "{username}", "{server}", "{memberCount}", "{role}", "{month}", "{level}", "{rank}", "{total}", "{chat}", "{voice}", "{expiredText}"];
+  const welcomeFormat = "Halo {user}, wilujeung sumping di **{server} 🤍**\n\nSenang kamu sudah bergabung. Jangan lupa baca rules dan kenalan di chat warga ya.\n\nKamu adalah warga ke-**{memberCount}**.";
+  const motmFormat = "🏆 Selamat {user} Kamu menjadi {role} **TOP AKTIF BULAN INI**!\n\nTerima kasih sudah aktif di {server}.\nTotal poin: **{total}**";
+  const levelFormat = "{user} berhasil naik level!\n\n{badge} Sekarang menjadi **{rank}**\n🏷️ Level: **{level}**\n⭐ Total Poin: **{total}**";
+  return `<section class="panel mega-section" id="format-center">
+    <h3>🧩 Format Center • Embed & Text</h3>
+    <p class="section-note">Bagian ini buat kamu yang mau edit tanpa pusing. Klik chip untuk memasukkan format ke kolom yang sedang kamu pilih, atau copy formatnya lalu tempel ke embed/text mana pun.</p>
+    <div class="format-grid">
+      <div class="format-card">
+        <h4>👋 Format Welcome</h4>
+        <p>Cocok untuk embed welcome, chat warga, dan pesan sambutan.</p>
+        <div class="template-code">${escapeHtml(welcomeFormat)}</div>
+        <div class="format-toolbar"><button type="button" class="insert-snippet" data-insert="${escapeHtml(welcomeFormat)}">Pakai Format Ini</button></div>
+      </div>
+      <div class="format-card">
+        <h4>🏆 Format MOTM / Top Aktif</h4>
+        <p>Cocok untuk pengumuman Member Of The Month dan top aktif.</p>
+        <div class="template-code">${escapeHtml(motmFormat)}</div>
+        <div class="format-toolbar"><button type="button" class="insert-snippet" data-insert="${escapeHtml(motmFormat)}">Pakai Format Ini</button></div>
+      </div>
+      <div class="format-card">
+        <h4>🆙 Format Level Up</h4>
+        <p>Cocok untuk notifikasi level, cek poin, dan leaderboard.</p>
+        <div class="template-code">${escapeHtml(levelFormat)}</div>
+        <div class="format-toolbar"><button type="button" class="insert-snippet" data-insert="${escapeHtml(levelFormat)}">Pakai Format Ini</button></div>
+      </div>
+    </div>
+    <div class="placeholder-cloud">
+      ${placeholders.map((p) => `<code class="insert-snippet" data-insert="${escapeHtml(p)}">${escapeHtml(p)}</code>`).join("")}
+    </div>
+  </section>`;
+}
+
+function maxtonTextEditor(key, value = "") {
+  return `<div class="editor-frame" data-editor-section data-search-name="text ${escapeHtml(key)}">
+    <label>Text: ${escapeHtml(key)}</label>
+    <textarea name="textKey_${escapeHtml(key)}" style="min-height:96px">${escapeHtml(value ?? "")}</textarea>
+  </div>`;
+}
+
+function maxtonChannelSelect(guild, name, label, selected, type = "text") {
+  return guild ? selectField(name, label, channelOptions(guild, selected, type)) : configInput(name, label, selected || "");
+}
+
+function maxtonRoleSelect(guild, name, label, selected) {
+  return guild ? selectField(name, label, roleOptions(guild, selected)) : configInput(name, label, selected || "");
+}
+
+function renderMaxtonMegaControl(req, saved = false, error = "") {
+  const cfg = readConfigFile();
+  cfg.embeds = cfg.embeds || {};
+  cfg.juragan = cfg.juragan || {};
+  cfg.welcome = cfg.welcome || {};
+  cfg.ai = cfg.ai || {};
+  cfg.suggestion = cfg.suggestion || {};
+  cfg.panels = cfg.panels || {};
+  cfg.topActive = cfg.topActive || {};
+  cfg.embeds.dashboard = cfg.embeds.dashboard || {};
+  cfg.embeds.dashboard.media = cfg.embeds.dashboard.media || {};
+
+  const guild = typeof getDashboardGuild === "function" ? getDashboardGuild() : client.guilds.cache.first();
+  const dash = cfg.embeds.dashboard || {};
+  const media = dash.media || {};
+  const topCfg = { ...getTopActiveConfig(), ...(cfg.topActive || {}) };
+  const texts = cfg.texts || {};
+  const maxtonEmbedKeys = Object.keys(cfg.embeds || {})
+    .filter((key) => key !== "dashboard" && cfg.embeds[key] && typeof cfg.embeds[key] === "object")
+    .sort((a, b) => a.localeCompare(b));
+  const allEmbedsJson = JSON.stringify(Object.fromEntries(maxtonEmbedKeys.map((key) => [key, cfg.embeds[key]])), null, 2);
+  const maxtonTextKeys = Object.keys(texts || {}).sort((a, b) => a.localeCompare(b));
+  const allTextsJson = JSON.stringify(texts || {}, null, 2);
+
+  return dashboardLayout(`
+    <section class="mega-hero">
+      <div class="max-eyebrow">MAXTON V3.8 • ALL FORMAT EDITOR • PAK RW</div>
+      <h2>Dashboard semua bisa diedit: embed, text, image, channel, role, format, dan alur bot.</h2>
+      <p>${escapeHtml(texts.dashboardHelpText || "Pilih menu, ubah isi yang kamu mau, lalu klik Simpan Semua. Semua pengaturan utama Pak RW dikumpulkan di sini dengan tampilan simple: format embed, format text, image, AI, channel, role, Top Aktif, MOTM, reaction, thread, dan JSON full config.")}</p>
+      <div class="mega-stat-grid">
+        <div class="mega-stat"><b>${maxtonEmbedKeys.length}</b><span>Embed bisa diedit</span></div>
+        <div class="mega-stat"><b>${maxtonTextKeys.length}</b><span>Text template aktif</span></div>
+        <div class="mega-stat"><b>${topCfg.topLimit || 10}</b><span>Ranking Top Aktif</span></div>
+        <div class="mega-stat"><b>${topCfg.bonusPercent || 15}%</b><span>Bonus Booster/Juragan/Donatur</span></div>
+      </div>
+      <div class="actions" style="margin-top:18px">
+        <button class="btn secondary" type="button" onclick="document.querySelector('#maxtonSearch')?.focus()">🔎 Cari Setting</button>
+        <a class="btn secondary" href="#format-center">🧩 Format</a>
+        <a class="btn secondary" href="#embeds-all">🎨 Embed</a>
+        <a class="btn secondary" href="#texts">✍️ Text</a>
+        <a class="btn secondary" href="#json">🧠 Full JSON</a>
+        <a class="btn secondary" href="/test-center">🧪 Test</a>
+      </div>
+    </section>
+
+    ${saved ? `<div class="alert">${escapeHtml(texts.dashboardSaveSuccess || "✅ Dashboard Pak RW berhasil disimpan. Semua setting langsung live reload ke bot.")}</div>` : ""}
+    ${error ? `<div class="alert danger">❌ ${escapeHtml(error)}</div>` : ""}
+
+    <section class="panel" style="margin-bottom:16px">
+      <h3>🔎 Cari Setting Cepat</h3>
+      <input id="maxtonSearch" placeholder="Cari: embed juragan, cari mabar, MOTM, channel, role, image, welcome, bonus, thread, text..." />
+      <p class="section-note">Ketik kata kunci, dashboard akan menandai bagian yang cocok. Jadi tidak perlu bingung cari menu.</p>
+    </section>
+
+    <nav class="mega-tabs">
+      <a href="#format-center">Format</a>
+      <a href="#core">Core</a>
+      <a href="#channels">Channel</a>
+      <a href="#roles">Role</a>
+      <a href="#features">Fitur</a>
+      <a href="#topaktif">Top Aktif</a>
+      <a href="#pakrw">Pak RW Style</a>
+      <a href="#texts">Semua Text</a>
+      <a href="#embeds-all">Semua Embed</a>
+      <a href="#media">Image</a>
+      <a href="#json">Advanced JSON</a>
+    </nav>
+
+    ${maxtonFormatLibraryHtml()}
+
+    <form method="post" action="/maxton-control" class="panel mega-dashboard-v2">
+      <div class="mega-savebar">
+        <div class="savebar-left">
+          <span class="mega-badge">✅ Edit semua dari sini</span>
+          <span class="mega-badge">🎨 Embed format</span>
+          <span class="mega-badge">✍️ Text format</span>
+          <span class="mega-badge">🖼️ Image URL</span>
+        </div>
+        <button class="btn" type="submit">💾 Simpan Semua Perubahan</button>
+      </div>
+      <section class="mega-section" id="core">
+        <h3>⚙️ Core Bot Settings</h3>
+        <p class="section-note">Bagian paling dasar buat identitas Pak RW. Aman diedit langsung dari dashboard.</p>
+        <div class="formgrid">
+          ${configInput("serverName", "Nama Server", cfg.serverName || "DESA TULUS")}
+          ${configInput("ownerName", "Nama Owner", cfg.ownerName || "PAK RW")}
+          ${configInput("prefix", "Prefix Command", cfg.prefix || "rw")}
+          ${configInput("embedColor", "Warna Embed Default", cfg.embedColor || "#FFFFFF")}
+          ${configInput("activityText", "Activity Text Bot", cfg.activityText || "DESA TULUS 🤍")}
+          ${configInput("openRouterModel", "Model AI OpenRouter", cfg.ai.openRouterModel || "openai/gpt-4o-mini")}
+          ${configInput("aiCooldownMs", "Cooldown AI / Chat Pak RW (ms)", cfg.ai.cooldownMs ?? 4500, "number")}
+          ${configInput("aiMaxMessageLength", "Max Panjang Jawaban AI", cfg.ai.maxMessageLength ?? 1900, "number")}
+        </div>
+        <div class="actions">
+          <button class="btn" type="submit">💾 Simpan Semua</button>
+          <a class="btn secondary" href="/test-center">🧪 Test Center</a>
+          <a class="btn secondary" href="/api/maxton-control/config" target="_blank">👀 Lihat Config</a>
+        </div>
+      </section>
+
+      <section class="mega-section" id="channels">
+        <h3>📌 Channel Manager</h3>
+        <p class="section-note">Kalau bot sudah online, pilihan channel muncul otomatis dari Discord. Kalau belum online, isi ID manual.</p>
+        <div class="formgrid">
+          ${maxtonChannelSelect(guild, "aiChannelId", "Channel Nanya Pak RW / AI", cfg.aiChannelId, "text")}
+          ${maxtonChannelSelect(guild, "curhatChannelId", "Channel Curhat", cfg.curhatChannelId, "text")}
+          ${maxtonChannelSelect(guild, "anonymousCurhatChannelId", "Channel Curhat Anonim", cfg.anonymousCurhatChannelId, "text")}
+          ${maxtonChannelSelect(guild, "suggestionChannelId", "Channel Kritik & Saran", cfg.suggestionChannelId, "text")}
+          ${maxtonChannelSelect(guild, "chatWargaChannelId", "Channel Chat Warga / Welcome", cfg.chatWargaChannelId, "text")}
+          ${maxtonChannelSelect(guild, "levelChannelId", "Channel Level Up", cfg.levelChannelId, "text")}
+          ${maxtonChannelSelect(guild, "cekPoinChannelId", "Channel Cek Poin", cfg.cekPoinChannelId || cfg.level?.checkPointChannelId || cfg.levelChannelId, "text")}
+          ${maxtonChannelSelect(guild, "topActiveChannelId", "Channel Top Aktif 1 Channel", topCfg.channelId || cfg.levelChannelId, "text")}
+          ${maxtonChannelSelect(guild, "boostChannelId", "Channel Boost / Juragan", cfg.juragan.boostChannelId, "text")}
+          ${maxtonChannelSelect(guild, "ticketChannelId", "Channel Ticket", cfg.ticketChannelId, "text")}
+          ${maxtonChannelSelect(guild, "logChannelId", "Channel Log", cfg.logChannelId, "text")}
+          ${maxtonChannelSelect(guild, "rulesChannelId", "Channel Rules", cfg.rulesChannelId, "text")}
+          ${maxtonChannelSelect(guild, "infoChannelId", "Channel Info", cfg.infoChannelId, "text")}
+          ${maxtonChannelSelect(guild, "eventChannelId", "Channel Event", cfg.eventChannelId, "text")}
+        </div>
+      </section>
+
+      <section class="mega-section" id="roles">
+        <h3>🎭 Role Manager</h3>
+        <p class="section-note">Atur role penting dari dropdown Discord: Juragan, Donatur, Level 100, dan Member Of The Month.</p>
+        <div class="formgrid">
+          ${maxtonRoleSelect(guild, "juraganRoleId", "Role Juragan / Booster", cfg.juragan.roleId)}
+          ${maxtonRoleSelect(guild, "donaturRoleId", "Role Donatur", cfg.donaturRoleId)}
+          ${maxtonRoleSelect(guild, "level100RoleId", "Role Level 100", cfg.level100RoleId)}
+          ${maxtonRoleSelect(guild, "memberOfTheMonthRoleId", "Role Member Of The Month", topCfg.memberOfTheMonthRoleId)}
+          ${configInput("level100RoleDurationDays", "Durasi Role Level 100 (hari)", cfg.level100RoleDurationDays ?? 30, "number")}
+          ${configInput("levelPointsPerLevel", "Poin per Level", cfg.level?.pointsPerLevel ?? 500, "number")}
+          ${configInput("levelMaxLevel", "Level Maksimal", cfg.level?.maxLevel ?? 100, "number")}
+          ${configInput("donaturDefaultDays", "Default Donatur Days", cfg.donaturDefaultDays ?? 30, "number")}
+          ${configInput("donaturRpPerDay", "Donatur Rp Per Hari", cfg.donaturRpPerDay ?? 10000, "number")}
+          ${configInput("donaturMinimumAmount", "Minimal Donasi", cfg.donaturMinimumAmount ?? 100000, "number")}
+        </div>
+      </section>
+
+      <section class="mega-section" id="features">
+        <h3>🔘 Feature Toggle Center</h3>
+        <p class="section-note">Aktif/nonaktifkan fitur penting tanpa sentuh code.</p>
+        <div class="mega-check-grid">
+          <div class="mega-check">${checkboxInput("welcomeEnabled", "Welcome Aktif", cfg.welcome.enabled !== false)}</div>
+          <div class="mega-check">${checkboxInput("welcomeSendToChatWarga", "Welcome ke Chat Warga", cfg.welcome.sendToChatWarga !== false)}</div>
+          <div class="mega-check">${checkboxInput("juraganEnabled", "Juragan / Boost Aktif", cfg.juragan.enabled !== false)}</div>
+          <div class="mega-check">${checkboxInput("suggestionEnabled", "Suggestion Aktif", cfg.suggestion.enabled !== false)}</div>
+          <div class="mega-check">${checkboxInput("sendSuggestionPanelOnReady", "Kirim Panel Saran saat Ready", cfg.panels.sendSuggestionPanelOnReady === true)}</div>
+          <div class="mega-check">${checkboxInput("topActiveEnabled", "Top Aktif Aktif", topCfg.enabled !== false)}</div>
+          <div class="mega-check">${checkboxInput("topActiveUseOneChannel", "Mode 1 Channel", topCfg.useOneChannel !== false)}</div>
+          <div class="mega-check">${checkboxInput("topActiveAnnounceLevelUp", "Kirim Salinan Level-up ke Top Aktif", topCfg.announceLevelUp === true)}</div>
+          <div class="mega-check">${checkboxInput("topActiveAnnounceMotm", "Pengumuman MOTM", topCfg.announceMemberOfTheMonth !== false)}</div>
+          <div class="mega-check">${checkboxInput("topActivePostBoardAfterMotm", "Kirim Board Setelah MOTM", topCfg.postBoardAfterMotm === true)}</div>
+          <div class="mega-check">${checkboxInput("topActiveBonusEnabled", "Bonus +15% Aktif", topCfg.bonusEnabled !== false)}</div>
+          <div class="mega-check">${checkboxInput("topActiveBannerEnabled", "Banner MOTM Aktif", topCfg.bannerEnabled !== false)}</div>
+          <div class="mega-check">${checkboxInput("topActiveBannerShowStats", "Statistik Muncul di Banner", topCfg.bannerShowStats !== false)}</div>
+          <div class="mega-check">${checkboxInput("topActiveAutoThread", "Auto Thread Image", topCfg.autoImageThreadEnabled !== false)}</div>
+          <div class="mega-check">${checkboxInput("topActiveExcludeOwnerLevel", "Owner Tidak Ikut Level", topCfg.excludeOwnerFromLevel !== false)}</div>
+          <div class="mega-check">${checkboxInput("topActiveExcludeOwnerLeaderboard", "Owner Tidak Muncul Leaderboard", topCfg.excludeOwnerFromLeaderboard !== false)}</div>
+        </div>
+      </section>
+
+      <section class="mega-section" id="topaktif">
+        <h3>🏆 Top Aktif / Member Of The Month</h3>
+        <p class="section-note">Default mengikuti setting DESA TULUS: 1 channel, target 10.000 poin, chat 5 poin, voice 5 poin, bonus +15%, auto thread image.</p>
+        <div class="formgrid">
+          ${configInput("topActivePointsThreshold", "Target Poin MOTM", topCfg.pointsThreshold || 10000, "number")}
+          ${configInput("topActiveLimit", "Jumlah Ranking Ditampilkan", topCfg.topLimit || 10, "number")}
+          ${configInput("topActiveChatPoint", "Poin per Chat", topCfg.chatPointPerMessage || 5, "number")}
+          ${configInput("topActiveVoicePoint", "Poin per Menit Voice", topCfg.voicePointPerMinute || 5, "number")}
+          ${configInput("levelPointsPerLevel", "Poin per Level", cfg.level?.pointsPerLevel ?? 500, "number")}
+          ${configInput("levelMaxLevel", "Level Maksimal", cfg.level?.maxLevel ?? 100, "number")}
+          ${configInput("topActiveBonusPercent", "Persen Bonus Ekstra", topCfg.bonusPercent || 15, "number")}
+          ${configInput("topActiveArchiveMinutes", "Durasi Arsip Thread Image (menit)", topCfg.autoImageThreadArchiveMinutes || 1440, "number")}
+          ${configInput("topActiveTitle", "Judul Board", topCfg.title || "🏆 TOP AKTIF WARGA DESA TULUS")}
+          ${configInput("topActiveFooter", "Footer Board", topCfg.footer || "DESA TULUS • Top Aktif Warga")}
+          ${configInput("topActiveBannerTitle", "Judul Banner", topCfg.bannerTitle || "MEMBER OF THE MONTH")}
+          ${configInput("topActiveBannerSubtitle", "Subjudul Banner", topCfg.bannerSubtitle || "TOP CHAT • TOP VOICE • TOP AKTIF")}
+          ${configInput("topActiveBannerNameLabel", "Label Nama di Bawah Foto", topCfg.bannerNameLabel || "NAMA MEMBER")}
+          ${configInput("topActiveBannerFooterText", "Teks Bawah Banner", topCfg.bannerFooterText || "DESA TULUS • MEMBER PALING AKTIF")}
+          ${configInput("topActiveBannerAvatarRingText", "Teks Ring Avatar", topCfg.bannerAvatarRingText || "")}
+          ${configInput("topActiveThreadName", "Nama Thread Image", topCfg.autoImageThreadName || "🖼️ Diskusi Gambar • {username}")}
+          <div><label>Mode Kirim MOTM</label><select name="motmSendMode"><option value="separate_text_image" ${topCfg.motmSendMode !== "combined" ? "selected" : ""}>Teks ucapan + gambar terpisah</option><option value="combined" ${topCfg.motmSendMode === "combined" ? "selected" : ""}>Legacy gabung dalam 1 embed</option></select></div>
+          <div><label>Mode Banner MOTM</label><select name="motmBannerMode"><option value="manual_image" ${topCfg.bannerMode === "manual_image" ? "selected" : ""}>Manual Image Saja (tanpa generate)</option><option value="desa_tulus_template" ${topCfg.bannerMode === "desa_tulus_template" || !topCfg.bannerMode ? "selected" : ""}>Template DESA TULUS + Overlay Otomatis</option><option value="manual_background" ${topCfg.bannerMode === "manual_background" ? "selected" : ""}>Banner Manual + Nama Member Otomatis</option><option value="auto" ${topCfg.bannerMode === "auto" ? "selected" : ""}>Auto Premium DESA TULUS</option></select></div>
+          ${configInput("topActiveBannerImageUrl", "Custom Banner Image URL / Background Manual", topCfg.manualBannerUrl || topCfg.bannerImageUrl || "")}
+          <div class="section-note">Format MOTM rapi: bot mengirim teks ucapan dulu, lalu gambar/banner di bawahnya tanpa caption. Board Top Aktif tidak dikirim otomatis; pakai command <b>/posttopaktif</b> atau <b>rwposttopaktif</b>.</div>
+          ${configInput("topActiveBannerCategoryTemplate", "Teks Prestasi di Banner", topCfg.bannerCategoryTemplate || "TOP CHAT BULAN INI")}
+          ${configInput("topActiveBannerCardWidth", "Lebar Card Banner MOTM", topCfg.bannerCardWidth || 900, "number")}
+          ${configInput("topActiveBannerCardHeight", "Tinggi Card Banner MOTM", topCfg.bannerCardHeight || 506, "number")}
+          ${configInput("topActiveBannerAvatarX", "Posisi Foto X (0 kiri - 1 kanan)", topCfg.bannerAvatarX || 0.5, "number")}
+          ${configInput("topActiveBannerAvatarY", "Posisi Foto Y (0 atas - 1 bawah)", topCfg.bannerAvatarY ?? 0.575, "number")}
+          ${configInput("topActiveBannerAvatarRadius", "Ukuran Foto / Radius", topCfg.bannerAvatarRadius ?? 0.112, "number")}
+          ${configInput("topActiveBannerNameX", "Posisi Nama X", topCfg.bannerNameX ?? 0.5, "number")}
+          ${configInput("topActiveBannerNameY", "Posisi Nama Y", topCfg.bannerNameY ?? 0.725, "number")}
+          ${configInput("topActiveBannerNameFontSize", "Ukuran Font Nama", topCfg.bannerNameFontSize ?? 0.052, "number")}
+          ${configInput("topActiveBannerCategoryX", "Posisi Teks Prestasi X", topCfg.bannerCategoryX ?? 0.5, "number")}
+          ${configInput("topActiveBannerCategoryY", "Posisi Teks Prestasi Y", topCfg.bannerCategoryY ?? 0.792, "number")}
+          ${configInput("topActiveBannerCategoryFontSize", "Ukuran Font Prestasi", topCfg.bannerCategoryFontSize ?? 0.037, "number")}
+          ${configInput("topActiveBannerTotalX", "Posisi Total Poin X", topCfg.bannerTotalX ?? 0.5, "number")}
+          ${configInput("topActiveBannerTotalY", "Posisi Total Poin Y", topCfg.bannerTotalY ?? 0.850, "number")}
+          ${configInput("topActiveBannerTotalFontSize", "Ukuran Font Total Poin", topCfg.bannerTotalFontSize ?? 0.038, "number")}
+          ${configInput("topActiveBannerTextMaxWidth", "Lebar Maks Text Banner", topCfg.bannerTextMaxWidth ?? 0.56, "number")}
+          <div class="mega-check">${checkboxInput("motmManualBannerOverlay", "Tulis Nama Member di Banner Manual", topCfg.manualBannerOverlayEnabled !== false && topCfg.manualBannerNameEnabled !== false)}</div>
+          <div class="mega-check">${checkboxInput("motmManualBannerAvatar", "Tampilkan Foto Profil di Banner Manual", topCfg.manualBannerAvatarEnabled !== false)}</div>
+          <div class="mega-check">${checkboxInput("motmManualBannerDim", "Gelapkan Banner Manual Biar Text Jelas", topCfg.manualBannerDim !== false)}</div>
+          ${configInput("topActiveBoardAuthor", "Author Board", topCfg.boardAuthor || "DESA TULUS • Papan peringkat warga paling aktif")}
+          ${configInput("topActiveBoardTitleTemplate", "Template Judul Board", topCfg.boardTitleTemplate || "🏆 TOP AKTIF WARGA BULAN {month}")}
+          ${configInput("topActiveTopActiveFieldTitle", "Judul Field Top Aktif", topCfg.topActiveFieldTitle || "🏆 Top Aktif")}
+          ${configInput("topActiveTopVoiceFieldTitle", "Judul Field Top Voice", topCfg.topVoiceFieldTitle || "🎙️ Top Voice")}
+          ${configInput("topActiveTopChatFieldTitle", "Judul Field Top Chat", topCfg.topChatFieldTitle || "💬 Top Chat")}
+          ${configInput("topActiveRowArrowEmoji", "Emoji/Panah Baris Ranking", topCfg.rowArrowEmoji || "<a:Animated_Arrow_Bluelite:1512751559140839576>")}
+          ${configInput("topActiveDailyPostHourWIB", "Jam Auto Post Harian WIB", topCfg.dailyPostHourWIB ?? 0, "number")}
+        </div>
+        ${textareaInput("topActiveSubtitle", "Deskripsi Board", topCfg.subtitle || "Update otomatis dari chat dan voice bulan ini. Poin, level, dan rank di board selalu sinkron sesuai poin yang tampil.", 4)}
+        ${textareaInput("topActiveBoardUpdateText", "Teks Update Board", topCfg.boardUpdateText || "Update otomatis setiap hari pukul **00.00 WIB**", 3)}
+        ${textareaInput("topActiveThreadMessage", "Pesan Pembuka Thread Image", topCfg.autoImageThreadMessage || "🖼️ Thread otomatis dibuat buat diskusi gambar ini. Silakan ngobrol di sini ya 🤍", 3)}
+      </section>
+
+      <section class="mega-section" id="pakrw">
+        <h3>👑 Pak RW Style / MOTM Detail</h3>
+        <p class="section-note">Bagian ini buat menyamakan alur seperti contoh: pesan ucapan, reaction, thread ucapan, warna banner, dan text otomatis saat Member Of The Month muncul.</p>
+        <div class="formgrid">
+          ${configInput("motmReactionEmojis", "Reaction Otomatis MOTM", topCfg.motmReactionEmojis || "🔥,👏,🏆,🎉,🥳")}
+          ${configInput("motmThreadArchiveMinutes", "Archive Thread Ucapan MOTM", topCfg.motmThreadArchiveMinutes || 1440, "number")}
+          ${configInput("motmBannerBgStart", "Banner Background Start", topCfg.bannerBgStart || "#080704")}
+          ${configInput("motmBannerBgMiddle", "Banner Background Middle", topCfg.bannerBgMiddle || "#171006")}
+          ${configInput("motmBannerBgEnd", "Banner Background End", topCfg.bannerBgEnd || "#120c04")}
+          ${configInput("motmBannerGold", "Warna Gold Banner", topCfg.bannerGold || "#F6C75A")}
+          ${configInput("motmBannerTextColor", "Warna Text Banner", topCfg.bannerTextColor || "#FFFFFF")}
+          ${configInput("motmBannerNameLabel", "Label Nama Member", topCfg.bannerNameLabel || "NAMA MEMBER")}
+          ${configInput("motmBannerFooterText", "Teks Footer Banner", topCfg.bannerFooterText || "DESA TULUS • MEMBER PALING AKTIF")}
+          ${configInput("motmBannerAvatarRingText", "Teks Ring Avatar", topCfg.bannerAvatarRingText || "")}
+        </div>
+        ${textareaInput("motmContentTemplate", "Template Pesan MOTM", texts.motmContentTemplate || "🏆 Selamat {user} Kamu menjadi {role} **TOP AKTIF BULAN INI**!", 3)}
+        ${textareaInput("motmThreadName", "Nama Thread Ucapan MOTM", texts.motmThreadName || "Ucapkan selamat kepada {username}", 2)}
+        ${textareaInput("motmThreadMessage", "Pesan Pembuka Thread Ucapan MOTM", texts.motmThreadMessage || "🎉 Selamat untuk {user}! Silakan ucapkan selamat di thread ini ya 🤍", 3)}
+      </section>
+
+      <section class="mega-section" id="texts">
+        <h3>✍️ Semua Text Center</h3>
+        <p class="section-note">Semua text penting dibuat bisa diedit dari dashboard. Ada field simpel, daftar text otomatis dari config, tambah text baru, dan JSON semua text. Placeholder aman: {user}, {username}, {server}, {role}, {month}, {total}, {chat}, {voice}, {level}, {rank}, {memberCount}, {expiredText}.</p>
+        <div class="formgrid">
+          ${configInput("welcomeTitle", "Judul Welcome", cfg.welcome.title || "👋 Warga Baru Datang!")}
+          ${configInput("suggestionTitle", "Judul Panel Saran", cfg.suggestion.title || "💡 DESA TULUS • Kritik & Saran")}
+          ${configInput("dashboardBrandTitle", "Dashboard Brand Title", dash.brandTitle || "Pak RW")}
+          ${configInput("dashboardBrandSubtitle", "Dashboard Brand Subtitle", dash.brandSubtitle || "Pak RW Control")}
+          ${configInput("dashboardHomeTitle", "Dashboard Home Title", dash.homeTitle || "Pak RW Control")}
+          ${configInput("dashboardAccentText", "Dashboard Accent Text", dash.accentText || "DESA TULUS 🤍")}
+          ${configInput("emptyLeaderboardText", "Text Kalau Leaderboard Kosong", texts.emptyLeaderboardText || "Belum ada data bulan ini.")}
+          ${configInput("dashboardSaveSuccess", "Text Sukses Simpan Dashboard", texts.dashboardSaveSuccess || "✅ Dashboard Pak RW berhasil disimpan. Semua setting langsung live reload ke bot.")}
+          ${configInput("newTextKey", "Tambah Text Baru (key, opsional)", "")}
+        </div>
+        ${textareaInput("welcomeMessage", "Isi Welcome Message", cfg.welcome.message || "", 8)}
+        ${textareaInput("suggestionDescription", "Deskripsi Panel Saran", cfg.suggestion.description || "", 5)}
+        ${textareaInput("dashboardHomeSubtitle", "Dashboard Home Subtitle", dash.homeSubtitle || "", 4)}
+        ${textareaInput("dashboardHelpText", "Text Bantuan di Atas Dashboard", texts.dashboardHelpText || "Pilih menu, ubah isi yang kamu mau, lalu klik Simpan Semua.", 4)}
+        ${textareaInput("levelUpTopActiveTitle", "Judul Notifikasi Level-Up Top Aktif", texts.levelUpTopActiveTitle || "🆙 Warga Naik Level + Masuk Top Aktif", 3)}
+        ${textareaInput("newTextValue", "Isi Text Baru", "", 4)}
+        <div class="editor-frame">
+          <h3 style="border:0;padding:0;margin:0 0 10px">📚 Text dari Config</h3>
+          <p class="section-note">Ini otomatis membaca semua key di <code>config.texts</code>. Jadi kalau nanti ada text baru, tetap muncul di dashboard.</p>
+          ${maxtonTextKeys.map((key) => maxtonTextEditor(key, texts[key] || "")).join("")}
+        </div>
+        ${textareaInput("allTextsJson", "Advanced Semua Text JSON", allTextsJson, 10)}
+      </section>
+
+      <section class="mega-section" id="embeds-all">      <section class="mega-section" id="embeds-all">
+        <h3>🎨 Semua Embed Builder + Format</h3>
+        <p class="section-note">Semua embed yang ada di config ditampilkan otomatis. Ubah warna, judul, deskripsi, footer, thumbnail, image, content, dan format text tanpa buka code. Format Discord didukung: <code>**tebal**</code>, <code>• list</code>, <code>&lt;#channelId&gt;</code>, <code>&lt;@&roleId&gt;</code>, dan placeholder seperti <code>{user}</code>.</p>
+        <div class="quick-jump">
+          ${maxtonEmbedKeys.map((key) => `<a href="#embed-${escapeHtml(key)}">${escapeHtml(key)}</a>`).join("")}
+        </div>
+        <div class="formgrid">
+          ${configInput("newEmbedKey", "Tambah Embed Baru (key, opsional)", "")}
+          ${configInput("newEmbedTitle", "Judul Embed Baru", "")}
+        </div>
+        ${textareaInput("allEmbedsJson", "Advanced Semua Embed JSON", allEmbedsJson, 10)}
+      </section>
+      ${maxtonEmbedKeys.map((key) => maxtonEmbedEditor(key, `🎨 Embed: ${key}`, cfg.embeds[key] || {}, key === "juragan" ? 10 : 7)).join("")}
+
+      <section class="mega-section panel" id="media">
+        <h3>🖼️ Image / Media Studio</h3>
+        <p class="section-note">Tempel link gambar dari Discord CDN, GitHub raw, atau hosting gambar. Bisa buat logo dashboard, banner, background, favicon, dan gambar default embed.</p>
+        <div class="formgrid">
+          ${configInput("mediaLogoUrl", "Logo Dashboard URL", media.logoUrl || "")}
+          ${configInput("mediaBannerUrl", "Banner Dashboard URL", media.bannerUrl || "")}
+          ${configInput("mediaBackgroundUrl", "Background Dashboard URL", media.backgroundUrl || "")}
+          ${configInput("mediaFaviconUrl", "Favicon URL", media.faviconUrl || "")}
+          ${configInput("mediaDefaultEmbedImageUrl", "Default Image Embed URL", media.defaultEmbedImageUrl || "")}
+          ${configInput("mediaDefaultThumbnailUrl", "Default Thumbnail Embed URL", media.defaultThumbnailUrl || "")}
+          ${configInput("mediaMotmBackgroundImageUrl", "Background Custom MOTM URL", media.motmBackgroundImageUrl || "")}
+          ${configInput("mediaTopActiveBoardImageUrl", "Image Board Top Aktif URL", media.topActiveBoardImageUrl || "")}
+        </div>
+        <p class="section-note">Tips: upload gambar ke Discord, klik kanan Copy Link, lalu tempel di sini. Untuk embed tertentu, tetap bisa isi Image URL langsung di editor embed masing-masing.</p>
+        <div class="actions">
+          <button class="btn" type="submit">💾 Simpan Semua Dashboard</button>
+          <a class="btn secondary" href="/top-active">🏆 Top Aktif Lama</a>
+          <a class="btn secondary" href="/embeds">🎨 Embeds Lama</a>
+          <a class="btn secondary" href="/media">🖼️ Media Lama</a>
+        </div>
+      </section>
+    </form>
+
+    <section class="mega-section panel mega-danger-zone" id="json">
+      <h3>🧠 Advanced JSON Power Editor</h3>
+      <p class="section-note">Ini buat kontrol total. Hati-hati: kalau JSON salah, config tidak akan disimpan. Cocok kalau kamu mau ubah bagian yang belum ada field-nya.</p>
+      <form method="post" action="/maxton-control/json">
+        <textarea class="mega-json" name="advancedJson">${escapeHtml(JSON.stringify(cfg, null, 2))}</textarea>
+        <div class="actions">
+          <button class="btn" type="submit">🧠 Simpan Full JSON</button>
+          <a class="btn secondary" href="/api/export-config" target="_blank">Download / Export Config</a>
+          <a class="btn secondary" href="/backup">Backup Center</a>
+        </div>
+      </form>
+    </section>
+
+    <script>
+      document.querySelectorAll('.mega-tabs a').forEach((a) => {
+        a.addEventListener('click', (e) => {
+          const id = a.getAttribute('href');
+          const target = document.querySelector(id);
+          if (!target) return;
+          e.preventDefault();
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      });
+      const maxtonSearch = document.getElementById('maxtonSearch');
+      if (maxtonSearch) {
+        maxtonSearch.addEventListener('input', () => {
+          const q = maxtonSearch.value.toLowerCase().trim();
+          document.querySelectorAll('.mega-section').forEach((section) => {
+            const haystack = (section.innerText + ' ' + (section.dataset.searchName || '')).toLowerCase();
+            const hit = !q || haystack.includes(q);
+            section.style.outline = q && hit ? '2px solid rgba(245,197,66,.65)' : '';
+            section.style.opacity = q && !hit ? '.38' : '1';
+            section.style.display = q && !hit ? 'none' : '';
+          });
+        });
+      }
+
+      let lastEditor = null;
+      document.addEventListener('focusin', (e) => {
+        if (e.target && (e.target.matches('textarea') || e.target.matches('input[type="text"]'))) lastEditor = e.target;
+      });
+      document.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.insert-snippet');
+        if (!btn) return;
+        const insert = btn.dataset.insert || '';
+        const targetName = btn.dataset.target || '';
+        const target = targetName ? document.querySelector('[name="' + CSS.escape(targetName) + '"]') : lastEditor;
+        if (target && ('value' in target)) {
+          const start = target.selectionStart ?? target.value.length;
+          const end = target.selectionEnd ?? target.value.length;
+          const before = target.value.slice(0, start);
+          const after = target.value.slice(end);
+          target.value = before + insert + after;
+          const pos = start + insert.length;
+          target.focus();
+          try { target.setSelectionRange(pos, pos); } catch {}
+          target.dispatchEvent(new Event('input', { bubbles: true }));
+        } else {
+          try { await navigator.clipboard.writeText(insert); } catch {}
+        }
+      });
+
+      function refreshEmbedPreview(section) {
+        const key = (section.id || '').replace('embed-', '');
+        if (!key) return;
+        const get = (field) => section.querySelector('[name="maxton_' + key + '_' + field + '"]')?.value || '';
+        const preview = section.querySelector('[data-preview-for="' + key + '"]');
+        if (!preview) return;
+        const color = get('color') || '#FFFFFF';
+        preview.style.borderLeftColor = color;
+        preview.querySelector('.p-title').textContent = get('title') || 'Preview Judul Embed';
+        preview.querySelector('.p-desc').textContent = get('description') || 'Preview deskripsi embed akan tampil di sini.';
+        preview.querySelector('.p-footer').textContent = get('footer') || 'Footer embed akan tampil di sini.';
+      }
+      document.querySelectorAll('[id^="embed-"]').forEach((section) => {
+        section.querySelectorAll('input, textarea').forEach((el) => el.addEventListener('input', () => refreshEmbedPreview(section)));
+        refreshEmbedPreview(section);
+      });
+    </script>
+  `, "maxton");
+}
+
+function applyMaxtonControlPost(body = {}) {
+  const cfg = readConfigFile();
+  cfg.embeds = cfg.embeds || {};
+  cfg.juragan = cfg.juragan || {};
+  cfg.welcome = cfg.welcome || {};
+  cfg.ai = cfg.ai || {};
+  cfg.suggestion = cfg.suggestion || {};
+  cfg.panels = cfg.panels || {};
+  cfg.topActive = cfg.topActive || {};
+  cfg.texts = cfg.texts || {};
+  cfg.embeds.dashboard = cfg.embeds.dashboard || {};
+  cfg.embeds.dashboard.media = cfg.embeds.dashboard.media || {};
+
+  const num = (value, fallback, min = null, max = null) => {
+    let n = Number(value);
+    if (!Number.isFinite(n)) n = fallback;
+    if (min !== null) n = Math.max(min, n);
+    if (max !== null) n = Math.min(max, n);
+    return n;
+  };
+  const bool = (name) => body[name] === "on";
+  const has = (name) => Object.prototype.hasOwnProperty.call(body, name);
+  const text = (name, fallback = "") => has(name) ? String(body[name] ?? "") : fallback;
+
+  cfg.serverName = body.serverName || cfg.serverName || "DESA TULUS";
+  cfg.ownerName = body.ownerName || cfg.ownerName || "PAK RW";
+  cfg.prefix = body.prefix || cfg.prefix || "rw";
+  cfg.embedColor = body.embedColor || cfg.embedColor || "#FFFFFF";
+  cfg.activityText = body.activityText || cfg.activityText || "DESA TULUS 🤍";
+  cfg.ai.openRouterModel = body.openRouterModel || cfg.ai.openRouterModel || "openai/gpt-4o-mini";
+  cfg.ai.cooldownMs = num(body.aiCooldownMs, cfg.ai.cooldownMs ?? 4500, 0);
+  cfg.ai.maxMessageLength = num(body.aiMaxMessageLength, cfg.ai.maxMessageLength ?? 1900, 300, 4000);
+
+  cfg.aiChannelId = body.aiChannelId || cfg.aiChannelId || "";
+  cfg.curhatChannelId = body.curhatChannelId || cfg.curhatChannelId || "";
+  cfg.anonymousCurhatChannelId = body.anonymousCurhatChannelId || cfg.anonymousCurhatChannelId || "";
+  cfg.suggestionChannelId = body.suggestionChannelId || cfg.suggestionChannelId || "";
+  cfg.ticketChannelId = body.ticketChannelId || cfg.ticketChannelId || "";
+  cfg.chatWargaChannelId = body.chatWargaChannelId || cfg.chatWargaChannelId || "";
+  cfg.levelChannelId = body.levelChannelId || cfg.levelChannelId || "";
+  cfg.logChannelId = body.logChannelId || cfg.logChannelId || "";
+  cfg.rulesChannelId = body.rulesChannelId || cfg.rulesChannelId || "";
+  cfg.infoChannelId = body.infoChannelId || cfg.infoChannelId || "";
+  cfg.eventChannelId = body.eventChannelId || cfg.eventChannelId || "";
+
+  cfg.juragan.roleId = body.juraganRoleId || cfg.juragan.roleId || "";
+  cfg.juragan.boostChannelId = body.boostChannelId || cfg.juragan.boostChannelId || "";
+  cfg.juragan.enabled = bool("juraganEnabled");
+  cfg.donaturRoleId = body.donaturRoleId || cfg.donaturRoleId || "";
+  cfg.level100RoleId = body.level100RoleId || cfg.level100RoleId || "";
+  cfg.level100RoleDurationDays = num(body.level100RoleDurationDays, cfg.level100RoleDurationDays ?? 30, 1);
+  cfg.level = cfg.level || {};
+  cfg.level.mode = "totalPoints";
+  cfg.level.pointsPerLevel = num(body.levelPointsPerLevel, cfg.level.pointsPerLevel ?? 500, 1, 1000000);
+  cfg.level.chatPointsPerLevel = num(body.levelChatPointsPerLevel, cfg.level.chatPointsPerLevel ?? cfg.level.pointsPerLevel ?? 500, 1, 1000000);
+  cfg.level.voicePointsPerLevel = num(body.levelVoicePointsPerLevel, cfg.level.voicePointsPerLevel ?? cfg.level.pointsPerLevel ?? 500, 1, 1000000);
+  cfg.level.maxLevel = num(body.levelMaxLevel, cfg.level.maxLevel ?? 100, 1, 1000);
+  cfg.donaturDefaultDays = num(body.donaturDefaultDays, cfg.donaturDefaultDays ?? 30, 1);
+  cfg.donaturRpPerDay = num(body.donaturRpPerDay, cfg.donaturRpPerDay ?? 10000, 1);
+  cfg.donaturMinimumAmount = num(body.donaturMinimumAmount, cfg.donaturMinimumAmount ?? 100000, 0);
+
+  cfg.welcome.enabled = bool("welcomeEnabled");
+  cfg.welcome.sendToChatWarga = bool("welcomeSendToChatWarga");
+  cfg.welcome.title = body.welcomeTitle || cfg.welcome.title || "👋 Warga Baru Datang!";
+  cfg.welcome.message = body.welcomeMessage || cfg.welcome.message || "";
+  cfg.suggestion.enabled = bool("suggestionEnabled");
+  cfg.suggestion.title = body.suggestionTitle || cfg.suggestion.title || "💡 DESA TULUS • Kritik & Saran";
+  cfg.suggestion.description = body.suggestionDescription || cfg.suggestion.description || "";
+  cfg.panels.sendSuggestionPanelOnReady = bool("sendSuggestionPanelOnReady");
+
+  cfg.topActive.enabled = bool("topActiveEnabled");
+  cfg.topActive.channelId = body.topActiveChannelId || cfg.topActive.channelId || cfg.levelChannelId || "";
+  cfg.topActive.memberOfTheMonthRoleId = body.memberOfTheMonthRoleId || cfg.topActive.memberOfTheMonthRoleId || "";
+  cfg.topActive.pointsThreshold = num(body.topActivePointsThreshold, cfg.topActive.pointsThreshold ?? 10000, 1);
+  cfg.topActive.topLimit = num(body.topActiveLimit, cfg.topActive.topLimit ?? 10, 3, 50);
+  cfg.topActive.chatPointPerMessage = num(body.topActiveChatPoint, cfg.topActive.chatPointPerMessage ?? 5, 0.1);
+  cfg.topActive.voicePointPerMinute = num(body.topActiveVoicePoint, cfg.topActive.voicePointPerMinute ?? 5, 0.1);
+  cfg.topActive.bonusPercent = num(body.topActiveBonusPercent, cfg.topActive.bonusPercent ?? 15, 0, 500);
+  cfg.topActive.useOneChannel = bool("topActiveUseOneChannel");
+  cfg.topActive.announceLevelUp = bool("topActiveAnnounceLevelUp");
+  cfg.topActive.announceMemberOfTheMonth = bool("topActiveAnnounceMotm");
+  cfg.topActive.postBoardAfterMotm = bool("topActivePostBoardAfterMotm");
+  cfg.topActive.motmSendMode = body.motmSendMode || cfg.topActive.motmSendMode || "separate_text_image";
+  cfg.topActive.bonusEnabled = bool("topActiveBonusEnabled");
+  cfg.topActive.bannerEnabled = bool("topActiveBannerEnabled");
+  cfg.topActive.autoImageThreadEnabled = bool("topActiveAutoThread");
+  cfg.topActive.excludeOwnerFromLevel = bool("topActiveExcludeOwnerLevel");
+  cfg.topActive.excludeOwnerFromLeaderboard = bool("topActiveExcludeOwnerLeaderboard");
+  cfg.topActive.autoImageThreadArchiveMinutes = num(body.topActiveArchiveMinutes, cfg.topActive.autoImageThreadArchiveMinutes ?? 1440, 60);
+  cfg.topActive.title = body.topActiveTitle || cfg.topActive.title || "🏆 TOP AKTIF WARGA DESA TULUS";
+  cfg.topActive.subtitle = body.topActiveSubtitle || cfg.topActive.subtitle || "Update otomatis dari chat dan voice bulan ini. Poin, level, dan rank di board selalu sinkron sesuai poin yang tampil.";
+  cfg.topActive.footer = body.topActiveFooter || cfg.topActive.footer || `${cfg.serverName || "DESA TULUS"} • Top Aktif Warga`;
+  cfg.topActive.bannerTitle = body.topActiveBannerTitle || cfg.topActive.bannerTitle || "MEMBER OF THE MONTH";
+  cfg.topActive.bannerSubtitle = body.topActiveBannerSubtitle || cfg.topActive.bannerSubtitle || "TOP CHAT • TOP VOICE • TOP AKTIF";
+  cfg.topActive.bannerNameLabel = body.topActiveBannerNameLabel || body.motmBannerNameLabel || cfg.topActive.bannerNameLabel || "NAMA MEMBER";
+  cfg.topActive.bannerFooterText = body.topActiveBannerFooterText || body.motmBannerFooterText || cfg.topActive.bannerFooterText || "DESA TULUS • MEMBER PALING AKTIF";
+  cfg.topActive.bannerAvatarRingText = body.topActiveBannerAvatarRingText || body.motmBannerAvatarRingText || cfg.topActive.bannerAvatarRingText || "TOP AKTIF";
+  cfg.topActive.bannerShowStats = bool("topActiveBannerShowStats");
+  cfg.topActive.autoImageThreadName = body.topActiveThreadName || cfg.topActive.autoImageThreadName || "🖼️ Diskusi Gambar • {username}";
+  cfg.topActive.autoImageThreadMessage = body.topActiveThreadMessage || cfg.topActive.autoImageThreadMessage || "🖼️ Thread otomatis dibuat buat diskusi gambar ini. Silakan ngobrol di sini ya 🤍";
+  cfg.topActive.bannerMode = body.motmBannerMode || cfg.topActive.bannerMode || (body.topActiveBannerImageUrl ? "manual_background" : "auto");
+  cfg.topActive.manualBannerUrl = body.topActiveBannerImageUrl || cfg.topActive.manualBannerUrl || "";
+  cfg.topActive.bannerImageUrl = body.topActiveBannerImageUrl || cfg.topActive.bannerImageUrl || "";
+  cfg.topActive.bannerCategoryTemplate = body.topActiveBannerCategoryTemplate || cfg.topActive.bannerCategoryTemplate || "TOP CHAT BULAN INI";
+  cfg.topActive.bannerCardWidth = Math.max(720, Math.min(1200, Number(body.topActiveBannerCardWidth || cfg.topActive.bannerCardWidth || 900)));
+  cfg.topActive.bannerCardHeight = Math.max(405, Math.min(700, Number(body.topActiveBannerCardHeight || cfg.topActive.bannerCardHeight || 506)));
+  cfg.topActive.bannerAvatarX = Number(body.topActiveBannerAvatarX || cfg.topActive.bannerAvatarX || 0.5);
+  cfg.topActive.bannerAvatarY = Number(body.topActiveBannerAvatarY || cfg.topActive.bannerAvatarY || 0.575);
+  cfg.topActive.bannerAvatarRadius = Number(body.topActiveBannerAvatarRadius || cfg.topActive.bannerAvatarRadius || 0.112);
+  cfg.topActive.bannerNameX = Number(body.topActiveBannerNameX || cfg.topActive.bannerNameX || 0.5);
+  cfg.topActive.bannerNameY = Number(body.topActiveBannerNameY || cfg.topActive.bannerNameY || 0.725);
+  cfg.topActive.bannerNameFontSize = Number(body.topActiveBannerNameFontSize || cfg.topActive.bannerNameFontSize || 0.052);
+  cfg.topActive.bannerCategoryX = Number(body.topActiveBannerCategoryX || cfg.topActive.bannerCategoryX || 0.5);
+  cfg.topActive.bannerCategoryY = Number(body.topActiveBannerCategoryY || cfg.topActive.bannerCategoryY || 0.792);
+  cfg.topActive.bannerCategoryFontSize = Number(body.topActiveBannerCategoryFontSize || cfg.topActive.bannerCategoryFontSize || 0.037);
+  cfg.topActive.bannerTotalX = Number(body.topActiveBannerTotalX || cfg.topActive.bannerTotalX || 0.5);
+  cfg.topActive.bannerTotalY = Number(body.topActiveBannerTotalY || cfg.topActive.bannerTotalY || 0.850);
+  cfg.topActive.bannerTotalFontSize = Number(body.topActiveBannerTotalFontSize || cfg.topActive.bannerTotalFontSize || 0.038);
+  cfg.topActive.bannerTextMaxWidth = Number(body.topActiveBannerTextMaxWidth || cfg.topActive.bannerTextMaxWidth || 0.56);
+  cfg.topActive.manualBannerOverlayEnabled = bool("motmManualBannerOverlay");
+  cfg.topActive.manualBannerNameEnabled = bool("motmManualBannerOverlay");
+  cfg.topActive.manualBannerAvatarEnabled = bool("motmManualBannerAvatar");
+  cfg.topActive.manualBannerDim = bool("motmManualBannerDim");
+  cfg.topActive.boardAuthor = body.topActiveBoardAuthor || cfg.topActive.boardAuthor || `${cfg.serverName || "DESA TULUS"} • Papan peringkat warga paling aktif`;
+  cfg.topActive.boardTitleTemplate = body.topActiveBoardTitleTemplate || cfg.topActive.boardTitleTemplate || "🏆 TOP AKTIF WARGA BULAN {month}";
+  cfg.topActive.boardUpdateText = body.topActiveBoardUpdateText || cfg.topActive.boardUpdateText || "Update otomatis setiap hari pukul **00.00 WIB**";
+  cfg.topActive.topActiveFieldTitle = body.topActiveTopActiveFieldTitle || cfg.topActive.topActiveFieldTitle || "🏆 Top Aktif";
+  cfg.topActive.topVoiceFieldTitle = body.topActiveTopVoiceFieldTitle || cfg.topActive.topVoiceFieldTitle || "🎙️ Top Voice";
+  cfg.topActive.topChatFieldTitle = body.topActiveTopChatFieldTitle || cfg.topActive.topChatFieldTitle || "💬 Top Chat";
+  cfg.topActive.rowArrowEmoji = body.topActiveRowArrowEmoji || cfg.topActive.rowArrowEmoji || "<a:Animated_Arrow_Bluelite:1512751559140839576>";
+  cfg.topActive.dailyPostHourWIB = num(body.topActiveDailyPostHourWIB, cfg.topActive.dailyPostHourWIB ?? 0, 0, 23);
+  cfg.topActive.motmReactionEmojis = body.motmReactionEmojis || cfg.topActive.motmReactionEmojis || "🔥,👏,🏆,🎉,🥳";
+  cfg.topActive.motmThreadArchiveMinutes = num(body.motmThreadArchiveMinutes, cfg.topActive.motmThreadArchiveMinutes ?? 1440, 60);
+  cfg.topActive.bannerBgStart = body.motmBannerBgStart || cfg.topActive.bannerBgStart || "#080704";
+  cfg.topActive.bannerBgMiddle = body.motmBannerBgMiddle || cfg.topActive.bannerBgMiddle || "#171006";
+  cfg.topActive.bannerBgEnd = body.motmBannerBgEnd || cfg.topActive.bannerBgEnd || "#120c04";
+  cfg.topActive.bannerGold = body.motmBannerGold || cfg.topActive.bannerGold || "#F6C75A";
+  cfg.topActive.bannerTextColor = body.motmBannerTextColor || cfg.topActive.bannerTextColor || "#FFFFFF";
+
+  if (body.allTextsJson) {
+    try {
+      const parsedTexts = JSON.parse(body.allTextsJson);
+      if (parsedTexts && typeof parsedTexts === "object" && !Array.isArray(parsedTexts)) {
+        for (const [key, value] of Object.entries(parsedTexts)) {
+          if (/^[a-zA-Z0-9_-]{1,60}$/.test(key)) cfg.texts[key] = String(value ?? "");
+        }
+      }
+    } catch (err) {
+      console.log("ALL TEXTS JSON SKIPPED:", err.message);
+    }
+  }
+  for (const [field, value] of Object.entries(body)) {
+    if (field.startsWith("textKey_")) {
+      const key = field.slice("textKey_".length).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 60);
+      if (key) cfg.texts[key] = String(value ?? "");
+    }
+  }
+  if (body.newTextKey) {
+    const key = String(body.newTextKey).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 60);
+    if (key) cfg.texts[key] = String(body.newTextValue ?? "");
+  }
+
+  cfg.texts.motmContentTemplate = body.motmContentTemplate || cfg.texts.motmContentTemplate || "🏆 Selamat {user} Kamu menjadi {role} **TOP AKTIF BULAN INI**!";
+  cfg.texts.motmThreadName = body.motmThreadName || cfg.texts.motmThreadName || "Ucapkan selamat kepada {username}";
+  cfg.texts.motmThreadMessage = body.motmThreadMessage || cfg.texts.motmThreadMessage || "🎉 Selamat untuk {user}! Silakan ucapkan selamat di thread ini ya 🤍";
+  cfg.texts.emptyLeaderboardText = body.emptyLeaderboardText || cfg.texts.emptyLeaderboardText || "Belum ada data bulan ini.";
+  cfg.texts.dashboardSaveSuccess = body.dashboardSaveSuccess || cfg.texts.dashboardSaveSuccess || "✅ Dashboard Pak RW berhasil disimpan. Semua setting langsung live reload ke bot.";
+  cfg.texts.dashboardHelpText = body.dashboardHelpText || cfg.texts.dashboardHelpText || "Pilih menu, ubah isi yang kamu mau, lalu klik Simpan Semua.";
+  cfg.texts.levelUpTopActiveTitle = body.levelUpTopActiveTitle || cfg.texts.levelUpTopActiveTitle || "🆙 Warga Naik Level + Masuk Top Aktif";
+
+  if (body.allEmbedsJson) {
+    try {
+      const parsedEmbeds = JSON.parse(body.allEmbedsJson);
+      if (parsedEmbeds && typeof parsedEmbeds === "object" && !Array.isArray(parsedEmbeds)) {
+        for (const [key, value] of Object.entries(parsedEmbeds)) {
+          if (key !== "dashboard" && value && typeof value === "object" && !Array.isArray(value)) {
+            cfg.embeds[key] = { ...(cfg.embeds[key] || {}), ...value };
+          }
+        }
+      }
+    } catch (err) {
+      console.log("ALL EMBEDS JSON SKIPPED:", err.message);
+    }
+  }
+
+  if (body.newEmbedKey) {
+    const key = String(body.newEmbedKey).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 40);
+    if (key) {
+      cfg.embeds[key] = cfg.embeds[key] || {};
+      cfg.embeds[key].color = cfg.embeds[key].color || cfg.embedColor || "#FFFFFF";
+      cfg.embeds[key].title = body.newEmbedTitle || cfg.embeds[key].title || key;
+      cfg.embeds[key].description = cfg.embeds[key].description || "";
+      cfg.embeds[key].footer = cfg.embeds[key].footer || "";
+      cfg.embeds[key].image = cfg.embeds[key].image || "";
+      cfg.embeds[key].thumbnail = cfg.embeds[key].thumbnail || "";
+      cfg.embeds[key].content = cfg.embeds[key].content || "";
+      cfg.embeds[key].authorName = body.newEmbedAuthorName || cfg.embeds[key].authorName || "";
+      cfg.embeds[key].authorIcon = body.newEmbedAuthorIcon || cfg.embeds[key].authorIcon || "";
+      cfg.embeds[key].titleUrl = body.newEmbedTitleUrl || cfg.embeds[key].titleUrl || "";
+    }
+  }
+
+  const embedKeys = Object.keys(cfg.embeds || {}).filter((key) => key !== "dashboard" && !isProtectedEmbedKey(key) && cfg.embeds[key] && typeof cfg.embeds[key] === "object");
+  for (const key of embedKeys) {
+    cfg.embeds[key] = cfg.embeds[key] || {};
+    const get = (field) => body[maxtonFieldName(key, field)];
+    if (get("color") !== undefined) cfg.embeds[key].color = get("color") || cfg.embeds[key].color || cfg.embedColor || "#FFFFFF";
+    if (get("title") !== undefined) cfg.embeds[key].title = get("title") || "";
+    if (get("description") !== undefined) cfg.embeds[key].description = get("description") || "";
+    if (get("footer") !== undefined) cfg.embeds[key].footer = get("footer") || "";
+    if (get("image") !== undefined) cfg.embeds[key].image = get("image") || "";
+    if (get("thumbnail") !== undefined) cfg.embeds[key].thumbnail = get("thumbnail") || "";
+    if (get("content") !== undefined) cfg.embeds[key].content = get("content") || "";
+    if (get("authorName") !== undefined) cfg.embeds[key].authorName = get("authorName") || "";
+    if (get("authorIcon") !== undefined) cfg.embeds[key].authorIcon = get("authorIcon") || "";
+    if (get("titleUrl") !== undefined) cfg.embeds[key].titleUrl = get("titleUrl") || "";
+  }
+
+  cfg.embeds.dashboard.brandTitle = body.dashboardBrandTitle || cfg.embeds.dashboard.brandTitle || "Pak RW";
+  cfg.embeds.dashboard.brandSubtitle = body.dashboardBrandSubtitle || cfg.embeds.dashboard.brandSubtitle || "Pak RW Control";
+  cfg.embeds.dashboard.homeTitle = body.dashboardHomeTitle || cfg.embeds.dashboard.homeTitle || "Pak RW Control";
+  cfg.embeds.dashboard.homeSubtitle = body.dashboardHomeSubtitle || cfg.embeds.dashboard.homeSubtitle || "Dashboard besar untuk edit semua fitur Pak RW.";
+  cfg.embeds.dashboard.accentText = body.dashboardAccentText || cfg.embeds.dashboard.accentText || "DESA TULUS 🤍";
+  cfg.embeds.dashboard.media.logoUrl = body.mediaLogoUrl || "";
+  cfg.embeds.dashboard.media.bannerUrl = body.mediaBannerUrl || "";
+  cfg.embeds.dashboard.media.backgroundUrl = body.mediaBackgroundUrl || "";
+  cfg.embeds.dashboard.media.faviconUrl = body.mediaFaviconUrl || "";
+  cfg.embeds.dashboard.media.defaultEmbedImageUrl = body.mediaDefaultEmbedImageUrl || "";
+  cfg.embeds.dashboard.media.defaultThumbnailUrl = body.mediaDefaultThumbnailUrl || "";
+  cfg.embeds.dashboard.media.motmBackgroundImageUrl = body.mediaMotmBackgroundImageUrl || "";
+  cfg.embeds.dashboard.media.topActiveBoardImageUrl = body.mediaTopActiveBoardImageUrl || "";
+
+  const setString = (name, setter) => {
+    if (has(name)) setter(String(body[name] ?? ""));
+  };
+  setString("serverName", (v) => { cfg.serverName = v || "DESA TULUS"; });
+  setString("ownerName", (v) => { cfg.ownerName = v || "PAK RW"; });
+  setString("prefix", (v) => { cfg.prefix = v || "rw"; });
+  setString("embedColor", (v) => { cfg.embedColor = v || "#FFFFFF"; });
+  setString("activityText", (v) => { cfg.activityText = v || "DESA TULUS 🤍"; });
+  ["aiChannelId", "curhatChannelId", "anonymousCurhatChannelId", "suggestionChannelId", "ticketChannelId", "chatWargaChannelId", "levelChannelId", "cekPoinChannelId", "logChannelId", "rulesChannelId", "infoChannelId", "eventChannelId"].forEach((name) => {
+    setString(name, (v) => { cfg[name] = v; });
+  });
+  setString("juraganRoleId", (v) => { cfg.juragan.roleId = v; });
+  setString("boostChannelId", (v) => { cfg.juragan.boostChannelId = v; });
+  setString("donaturRoleId", (v) => { cfg.donaturRoleId = v; });
+  setString("level100RoleId", (v) => { cfg.level100RoleId = v; });
+  setString("memberOfTheMonthRoleId", (v) => { cfg.topActive.memberOfTheMonthRoleId = v; });
+  setString("topActiveChannelId", (v) => { cfg.topActive.channelId = v; });
+  setString("topActiveBannerImageUrl", (v) => { cfg.topActive.bannerImageUrl = v; cfg.topActive.manualBannerUrl = v; cfg.topActive.bannerMode = v ? "manual_background" : (cfg.topActive.bannerMode || "auto"); });
+  setString("topActiveManualBannerUrl", (v) => { cfg.topActive.manualBannerUrl = v; cfg.topActive.bannerImageUrl = v; cfg.topActive.bannerMode = v ? "manual_background" : "auto"; });
+  setString("mediaLogoUrl", (v) => { cfg.embeds.dashboard.media.logoUrl = v; });
+  setString("mediaBannerUrl", (v) => { cfg.embeds.dashboard.media.bannerUrl = v; });
+  setString("mediaBackgroundUrl", (v) => { cfg.embeds.dashboard.media.backgroundUrl = v; });
+  setString("mediaFaviconUrl", (v) => { cfg.embeds.dashboard.media.faviconUrl = v; });
+  setString("mediaDefaultEmbedImageUrl", (v) => { cfg.embeds.dashboard.media.defaultEmbedImageUrl = v; });
+  setString("mediaDefaultThumbnailUrl", (v) => { cfg.embeds.dashboard.media.defaultThumbnailUrl = v; });
+  setString("mediaMotmBackgroundImageUrl", (v) => { cfg.embeds.dashboard.media.motmBackgroundImageUrl = v; });
+  setString("mediaTopActiveBoardImageUrl", (v) => { cfg.embeds.dashboard.media.topActiveBoardImageUrl = v; });
+
+  writeConfigFile(cfg);
+  return cfg;
+}
+
+function renderTopActiveDashboard(req, saved = false, error = "") {
+  const cfg = readConfigFile();
+  cfg.topActive = cfg.topActive || {};
+  const guild = typeof getDashboardGuild === "function" ? getDashboardGuild() : client.guilds.cache.first();
+  const topCfg = { ...getTopActiveConfig(), ...(cfg.topActive || {}) };
+  const limit = Number(topCfg.topLimit || 10);
+  const rows = guild ? getTopActiveRows(guild.id, "active", limit, guild.ownerId) : [];
+  const chatRows = guild ? getTopActiveRows(guild.id, "chat", limit, guild.ownerId) : [];
+  const voiceRows = guild ? getTopActiveRows(guild.id, "voice", limit, guild.ownerId) : [];
+
+  const rowHtml = (items, kind) => items.length
+    ? items.map((u, i) => {
+        const points = getLeaderboardPoints(u, kind);
+        const info = getLeaderboardLevelInfo(u, kind);
+        return `<tr><td><b>${i + 1}</b></td><td><span class="copy-chip">&lt;@${escapeHtml(u.userId)}&gt;</span></td><td>${escapeHtml(info.current.name)}</td><td>Level ${escapeHtml(info.current.level)}</td><td><b>${escapeHtml(formatNumber(points))}</b> poin</td></tr>`;
+      }).join("")
+    : `<tr><td colspan="5">Belum ada data bulan ini.</td></tr>`;
+
+  return dashboardLayout(`
+    <div class="topbar">
+      <div class="title">
+        <h2>🏆 Top Aktif Warga</h2>
+        <p>Atur papan peringkat yang alurnya jelas: Top Chat = poin chat bulan ini, Top Voice = poin voice bulan ini, Top Aktif = gabungan chat + voice bulan ini. Level/rank di tabel ikut poin bulan ini, jadi tidak campur dengan level total/lifetime.</p>
+      </div>
+      <div class="pill">${topCfg.enabled !== false ? "● Aktif" : "○ Nonaktif"}</div>
+    </div>
+
+    ${saved ? `<div class="alert">✅ Top Aktif berhasil disimpan dan langsung reload ke bot.</div>` : ""}
+    ${error ? `<div class="alert danger">❌ ${escapeHtml(error)}</div>` : ""}
+
+    <section class="max-hero">
+      <div class="max-eyebrow">DESA TULUS • MEMBER OF THE MONTH</div>
+      <h2>Papan peringkat aktif yang nyambung ke level warga.</h2>
+      <p>Chat, voice, Top Chat, Top Voice, Top Aktif, dan reward Member Of The Month dibuat masuk rapi ke channel Top Aktif. Notifikasi level-up tetap pisah ke Channel Level OT.</p>
+      <div class="studio-kpis">
+        <div class="studio-kpi"><b>${escapeHtml(formatNumber(topCfg.pointsThreshold || 10000))}</b><span>Target poin MOTM</span></div>
+        <div class="studio-kpi"><b>${escapeHtml(String(topCfg.chatPointPerMessage || 5))}</b><span>Poin per chat</span></div>
+        <div class="studio-kpi"><b>${escapeHtml(String(topCfg.voicePointPerMinute || 2))}</b><span>Poin per menit voice</span></div>
+        <div class="studio-kpi"><b>+${escapeHtml(String(topCfg.bonusPercent || 15))}%</b><span>Bonus Booster/Juragan/Donatur</span></div>
+      </div>
+    </section>
+
+    <form method="post" action="/top-active" class="panel">
+      <h3>⚙️ Setting Top Aktif</h3>
+      <div class="formgrid">
+        <div><label>Status Fitur</label><select name="enabled"><option value="on" ${topCfg.enabled !== false ? "selected" : ""}>Aktif</option><option value="off" ${topCfg.enabled === false ? "selected" : ""}>Nonaktif</option></select></div>
+        <div><label>Mode 1 Channel</label><select name="useOneChannel"><option value="on" ${topCfg.useOneChannel !== false ? "selected" : ""}>Aktif - Top Aktif/MOTM 1 channel</option><option value="off" ${topCfg.useOneChannel === false ? "selected" : ""}>Nonaktif</option></select></div>
+        ${guild ? selectField("channelId", "Channel Top Aktif (1 Channel)", channelOptions(guild, topCfg.channelId || cfg.levelChannelId, "text")) : configInput("channelId", "Channel Top Aktif ID (1 Channel)", topCfg.channelId || cfg.levelChannelId || "")}
+        ${guild ? selectField("memberOfTheMonthRoleId", "Role Member Of The Month", roleOptions(guild, topCfg.memberOfTheMonthRoleId || "")) : configInput("memberOfTheMonthRoleId", "Role Member Of The Month ID", topCfg.memberOfTheMonthRoleId || "")}
+        ${configInput("pointsThreshold", "Target Poin Member Of The Month", topCfg.pointsThreshold || 10000, "number")}
+        ${configInput("topLimit", "Jumlah Ranking Ditampilkan", topCfg.topLimit || 10, "number")}
+        ${configInput("chatPointPerMessage", "Poin per Chat", topCfg.chatPointPerMessage || 5, "number")}
+        ${configInput("voicePointPerMinute", "Poin per Menit Voice", topCfg.voicePointPerMinute || 2, "number")}
+        ${configInput("levelPointsPerLevel", "Poin per Level", cfg.level?.pointsPerLevel ?? 500, "number")}
+        ${configInput("levelMaxLevel", "Level Maksimal", cfg.level?.maxLevel ?? 100, "number")}
+        <div><label>Bonus Poin Booster/Juragan/Donatur</label><select name="bonusEnabled"><option value="on" ${topCfg.bonusEnabled !== false ? "selected" : ""}>Aktif - tambah poin otomatis</option><option value="off" ${topCfg.bonusEnabled === false ? "selected" : ""}>Nonaktif</option></select></div>
+        ${configInput("bonusPercent", "Persen Bonus Ekstra", topCfg.bonusPercent || 15, "number")}
+        <div><label>Banner MOTM</label><select name="bannerEnabled"><option value="on" ${topCfg.bannerEnabled !== false ? "selected" : ""}>Aktif</option><option value="off" ${topCfg.bannerEnabled === false ? "selected" : ""}>Nonaktif</option></select></div>
+        <div><label>Salinan Level-up ke Top Aktif</label><select name="announceLevelUp"><option value="on" ${topCfg.announceLevelUp === true ? "selected" : ""}>Aktif - kirim juga ke Top Aktif</option><option value="off" ${topCfg.announceLevelUp !== true ? "selected" : ""}>Nonaktif - level-up hanya ke Channel Level</option></select></div>
+        <div><label>MOTM Otomatis</label><select name="announceMemberOfTheMonth"><option value="off" ${topCfg.announceMemberOfTheMonth === false || topCfg.motmAwardMode === "manual_only" ? "selected" : ""}>Nonaktif - manual dari dashboard</option><option value="on" ${topCfg.announceMemberOfTheMonth !== false && topCfg.motmAwardMode !== "manual_only" ? "selected" : ""}>Aktif - otomatis saat target tercapai</option></select></div>
+        <div><label>Kirim Board Setelah MOTM</label><select name="postBoardAfterMotm"><option value="off" ${topCfg.postBoardAfterMotm !== true ? "selected" : ""}>Nonaktif - board dipisah pakai command</option><option value="on" ${topCfg.postBoardAfterMotm === true ? "selected" : ""}>Aktif - gabung setelah MOTM</option></select></div>
+        <div><label>Mode Kirim MOTM</label><select name="motmSendMode"><option value="separate_text_image" ${topCfg.motmSendMode !== "combined" ? "selected" : ""}>Teks ucapan + gambar di bawah</option><option value="combined" ${topCfg.motmSendMode === "combined" ? "selected" : ""}>Legacy gabung embed</option></select></div>
+        <div><label>Auto Thread Saat Kirim Image</label><select name="autoImageThreadEnabled"><option value="on" ${topCfg.autoImageThreadEnabled !== false ? "selected" : ""}>Aktif - buat thread otomatis</option><option value="off" ${topCfg.autoImageThreadEnabled === false ? "selected" : ""}>Nonaktif</option></select></div>
+        <div><label>Owner Masuk Level?</label><select name="excludeOwnerFromLevel"><option value="on" ${topCfg.excludeOwnerFromLevel !== false ? "selected" : ""}>Tidak - owner tidak dihitung level</option><option value="off" ${topCfg.excludeOwnerFromLevel === false ? "selected" : ""}>Ya - owner ikut level</option></select></div>
+        <div><label>Owner Muncul Leaderboard?</label><select name="excludeOwnerFromLeaderboard"><option value="on" ${topCfg.excludeOwnerFromLeaderboard !== false ? "selected" : ""}>Tidak - owner disembunyikan</option><option value="off" ${topCfg.excludeOwnerFromLeaderboard === false ? "selected" : ""}>Ya - owner tampil</option></select></div>
+        ${configInput("autoImageThreadArchiveMinutes", "Durasi Arsip Thread (menit)", topCfg.autoImageThreadArchiveMinutes || 1440, "number")}
+      </div>
+
+      <h3 style="margin-top:24px">🎨 Teks & Tampilan</h3>
+      <div class="formgrid">
+        ${configInput("title", "Judul Board", topCfg.title || "")}
+        ${configInput("footer", "Footer Board", topCfg.footer || "")}
+        ${configInput("bannerTitle", "Judul Banner", topCfg.bannerTitle || "")}
+        ${configInput("bannerSubtitle", "Subjudul Banner", topCfg.bannerSubtitle || "")}
+        ${configInput("bannerNameLabel", "Label Nama di Bawah Foto", topCfg.bannerNameLabel || "NAMA MEMBER")}
+        ${configInput("bannerFooterText", "Teks Bawah Banner", topCfg.bannerFooterText || "DESA TULUS • MEMBER PALING AKTIF")}
+        ${configInput("bannerAvatarRingText", "Teks Ring Avatar", topCfg.bannerAvatarRingText || "")}
+        <div><label>Mode Banner MOTM</label><select name="bannerMode"><option value="manual_image" ${topCfg.bannerMode === "manual_image" || !topCfg.bannerMode ? "selected" : ""}>Manual Image Saja (tanpa generate)</option><option value="manual_background" ${topCfg.bannerMode === "manual_background" ? "selected" : ""}>Manual Background + teks otomatis</option><option value="desa_tulus_template" ${topCfg.bannerMode === "desa_tulus_template" ? "selected" : ""}>Template DESA TULUS + Overlay Otomatis</option><option value="auto" ${topCfg.bannerMode === "auto" ? "selected" : ""}>Auto Premium DESA TULUS</option></select></div>
+        ${configInput("manualBannerUrl", "URL Banner Manual MOTM", topCfg.manualBannerUrl || topCfg.bannerImageUrl || "")}
+        <div class="section-note">Mode <b>Manual Image Saja</b>: MOTM tidak otomatis. Pilih member di menu <b>Manual MOTM</b>, tempel banner jadi dari Canva/Discord, lalu kirim manual. Bot tidak menambah avatar/nama/teks ke gambar kalau overlay mati.</div>
+        ${configInput("bannerCategoryTemplate", "Teks Prestasi Banner", topCfg.bannerCategoryTemplate || "TOP CHAT BULAN INI")}
+        ${configInput("bannerCardWidth", "Lebar Card Banner MOTM", topCfg.bannerCardWidth || 900, "number")}
+        ${configInput("bannerCardHeight", "Tinggi Card Banner MOTM", topCfg.bannerCardHeight || 506, "number")}
+        ${configInput("bannerAvatarX", "Posisi Foto X (0 kiri - 1 kanan)", topCfg.bannerAvatarX || 0.5, "number")}
+        ${configInput("bannerAvatarY", "Posisi Foto Y (0 atas - 1 bawah)", topCfg.bannerAvatarY ?? 0.575, "number")}
+        ${configInput("bannerAvatarRadius", "Ukuran Foto / Radius", topCfg.bannerAvatarRadius ?? 0.112, "number")}
+        ${configInput("bannerNameX", "Posisi Nama X", topCfg.bannerNameX ?? 0.5, "number")}
+        ${configInput("bannerNameY", "Posisi Nama Y", topCfg.bannerNameY ?? 0.725, "number")}
+        ${configInput("bannerNameFontSize", "Ukuran Font Nama", topCfg.bannerNameFontSize ?? 0.052, "number")}
+        ${configInput("bannerCategoryX", "Posisi Teks Prestasi X", topCfg.bannerCategoryX ?? 0.5, "number")}
+        ${configInput("bannerCategoryY", "Posisi Teks Prestasi Y", topCfg.bannerCategoryY ?? 0.792, "number")}
+        ${configInput("bannerCategoryFontSize", "Ukuran Font Prestasi", topCfg.bannerCategoryFontSize ?? 0.037, "number")}
+        ${configInput("bannerTotalX", "Posisi Total Poin X", topCfg.bannerTotalX ?? 0.5, "number")}
+        ${configInput("bannerTotalY", "Posisi Total Poin Y", topCfg.bannerTotalY ?? 0.850, "number")}
+        ${configInput("bannerTotalFontSize", "Ukuran Font Total Poin", topCfg.bannerTotalFontSize ?? 0.038, "number")}
+        ${configInput("bannerTextMaxWidth", "Lebar Maks Text Banner", topCfg.bannerTextMaxWidth ?? 0.56, "number")}
+        <div><label>Nama Member di Banner Manual</label><select name="manualBannerOverlayEnabled"><option value="on" ${topCfg.manualBannerOverlayEnabled !== false && topCfg.manualBannerNameEnabled !== false ? "selected" : ""}>Aktif - nama tetap muncul</option><option value="off" ${topCfg.manualBannerOverlayEnabled === false || topCfg.manualBannerNameEnabled === false ? "selected" : ""}>Nonaktif</option></select></div>
+        <div><label>Foto Profil di Banner Manual</label><select name="manualBannerAvatarEnabled"><option value="on" ${topCfg.manualBannerAvatarEnabled !== false ? "selected" : ""}>Aktif</option><option value="off" ${topCfg.manualBannerAvatarEnabled === false ? "selected" : ""}>Nonaktif</option></select></div>
+        <div><label>Gelapkan Banner Manual</label><select name="manualBannerDim"><option value="on" ${topCfg.manualBannerDim !== false ? "selected" : ""}>Aktif - text lebih jelas</option><option value="off" ${topCfg.manualBannerDim === false ? "selected" : ""}>Nonaktif</option></select></div>
+        ${configInput("rowArrowEmoji", "Emoji/Panah Baris Ranking", topCfg.rowArrowEmoji || "<a:Animated_Arrow_Bluelite:1512751559140839576>")}
+        ${configInput("autoImageThreadName", "Nama Thread Image", topCfg.autoImageThreadName || "🖼️ Diskusi Gambar • {username}")}
+      </div>
+      ${textareaInput("subtitle", "Deskripsi Board", topCfg.subtitle || "", 4)}
+      ${textareaInput("autoImageThreadMessage", "Pesan Pembuka Thread Image", topCfg.autoImageThreadMessage || "🖼️ Thread otomatis dibuat buat diskusi gambar ini. Silakan ngobrol di sini ya 🤍", 3)}
+
+      <div class="actions">
+        <button class="btn" type="submit">💾 Simpan Top Aktif</button>
+        <a class="btn secondary" href="/api/top-active/preview" target="_blank">Preview JSON</a>
+        <a class="btn secondary" href="/manual-motm">👑 Buka Manual MOTM</a>
+      </div>
+    </form>
+
+    <section class="panel">
+      <h3>📊 Data Bulan Ini — Poin, Level, dan Rank Sudah Sinkron</h3><p class="section-note">Top Chat menampilkan poin chat bulan ini saja. Top Voice menampilkan poin voice bulan ini saja. Top Aktif menampilkan total chat + voice bulan ini. Level/rank di tabel dihitung dari poin yang tampil, bukan data lifetime, supaya hasilnya jelas.</p>
+      <div class="table-wrap"><table><thead><tr><th>#</th><th>User</th><th>Rank Bulan Ini</th><th>Level Bulan Ini</th><th>Poin Bulan Ini</th></tr></thead><tbody>${rowHtml(rows, "active")}</tbody></table></div>
+      <div class="two-col" style="margin-top:18px">
+        <div class="panel" style="margin-top:0"><h3>💬 Top Chat</h3><div class="table-wrap"><table><thead><tr><th>#</th><th>User</th><th>Rank Bulan Ini</th><th>Level Bulan Ini</th><th>Poin Bulan Ini</th></tr></thead><tbody>${rowHtml(chatRows, "chat")}</tbody></table></div></div>
+        <div class="panel" style="margin-top:0"><h3>🎙️ Top Voice</h3><div class="table-wrap"><table><thead><tr><th>#</th><th>User</th><th>Rank Bulan Ini</th><th>Level Bulan Ini</th><th>Poin Bulan Ini</th></tr></thead><tbody>${rowHtml(voiceRows, "voice")}</tbody></table></div></div>
+      </div>
+    </section>
+  `, "topactive");
+}
+
+function renderConfig(req, saved = false, error = "") {
+  const cfg = readConfigFile();
+  return dashboardLayout(`
+    <div class="topbar">
+      <div class="title">
+        <h2>Config Editor</h2>
+        <p>Ubah pengaturan penting Pak RW tanpa buka file manual.</p>
+      </div>
+      <div class="pill">⚙️ config.json</div>
+    </div>
+
+    ${saved ? `<div class="alert">✅ Config berhasil disimpan dan langsung di-reload ke bot. Kalau tidak berubah di browser, refresh halaman dashboard.</div>` : ""}
+    ${error ? `<div class="alert danger">❌ ${escapeHtml(error)}</div>` : ""}
+
+    <form method="post" action="/config" class="panel">
+      <h3>🤍 Basic</h3>
+      <div class="formgrid">
+        ${configInput("serverName", "Server Name", cfg.serverName)}
+        ${configInput("ownerName", "Owner Name", cfg.ownerName)}
+        ${configInput("prefix", "Prefix", cfg.prefix)}
+        ${configInput("embedColor", "Embed Color", cfg.embedColor)}
+        ${configInput("activityText", "Activity Text", cfg.activityText)}
+        ${configInput("openRouterModel", "OpenRouter Model", cfg.ai?.openRouterModel)}
+      </div>
+
+      <h3 style="margin-top:24px">📌 Channel IDs</h3>
+      <div class="formgrid">
+        ${configInput("aiChannelId", "AI Channel ID", cfg.aiChannelId)}
+        ${configInput("curhatChannelId", "Curhat Channel ID", cfg.curhatChannelId)}
+        ${configInput("anonymousCurhatChannelId", "Anonymous Curhat Channel ID", cfg.anonymousCurhatChannelId)}
+        ${configInput("suggestionChannelId", "Suggestion Channel ID", cfg.suggestionChannelId)}
+        ${configInput("chatWargaChannelId", "Chat Warga Channel ID", cfg.chatWargaChannelId)}
+        ${configInput("levelChannelId", "Level Channel ID", cfg.levelChannelId)}
+      </div>
+
+      <h3 style="margin-top:24px">💎 Role & Donatur</h3>
+      <div class="formgrid">
+        ${configInput("juraganRoleId", "Juragan Role ID", cfg.juragan?.roleId)}
+        ${configInput("boostChannelId", "Boost Channel ID", cfg.juragan?.boostChannelId)}
+        ${configInput("donaturRoleId", "Donatur Role ID", cfg.donaturRoleId)}
+        ${configInput("donaturRpPerDay", "Donatur Rp Per Day", cfg.donaturRpPerDay || 10000, "number")}
+        ${configInput("donaturMinimumAmount", "Donatur Minimum Amount", cfg.donaturMinimumAmount || 100000, "number")}
+        ${configInput("level100RoleId", "Level 100 Role ID", cfg.level100RoleId)}
+      </div>
+
+      <h3 style="margin-top:24px">👋 Welcome Message</h3>
+      <div>
+        <label>Welcome Message</label>
+        <textarea name="welcomeMessage">${escapeHtml(cfg.welcome?.message || "")}</textarea>
+      </div>
+
+      <div class="actions">
+        <button class="btn" type="submit">💾 Simpan Config</button>
+        <a class="btn secondary" href="/">Batal</a>
+      </div>
+    </form>
+  `, "config");
+}
+
+
+function textareaInput(name, label, value, rows = 5) {
+  return `<div><label>${escapeHtml(label)}</label><textarea name="${escapeHtml(name)}" style="min-height:${rows * 24}px">${escapeHtml(value ?? "")}</textarea></div>`;
+}
+
+
+function dashboardAutocompleteData() {
+  const guild = typeof getDashboardGuild === "function"
+    ? getDashboardGuild()
+    : client.guilds.cache.first();
+
+  const channels = guild
+    ? guild.channels.cache
+        .filter((ch) => ch.type === ChannelType.GuildText || ch.type === ChannelType.GuildVoice || ch.type === ChannelType.GuildCategory)
+        .sort((a, b) => (a.rawPosition || 0) - (b.rawPosition || 0))
+        .map((ch) => ({
+          id: ch.id,
+          name: ch.name,
+          type: ch.type,
+          insert: `<#${ch.id}>`,
+          desc: `Channel ID: ${ch.id}`
+        }))
+    : [];
+
+  const roles = guild
+    ? guild.roles.cache
+        .filter((role) => role.name !== "@everyone")
+        .sort((a, b) => (b.position || 0) - (a.position || 0))
+        .map((role) => ({
+          id: role.id,
+          name: role.name,
+          insert: `<@&${role.id}>`,
+          rawId: role.id,
+          desc: `Role ID: ${role.id}`
+        }))
+    : [];
+
+  const placeholders = [
+    // User / Member
+    { key: "{user}", label: "{user}", insert: "{user}", desc: "Mention user/member" },
+    { key: "{username}", label: "{username}", insert: "{username}", desc: "Username Discord" },
+    { key: "{displayName}", label: "{displayName}", insert: "{displayName}", desc: "Display name member" },
+    { key: "{userId}", label: "{userId}", insert: "{userId}", desc: "ID user/member" },
+    { key: "{avatar}", label: "{avatar}", insert: "{avatar}", desc: "Avatar URL user jika tersedia" },
+    { key: "{nickname}", label: "{nickname}", insert: "{nickname}", desc: "Nickname member jika tersedia" },
+
+    // Server
+    { key: "{server}", label: "{server}", insert: "{server}", desc: "Nama server" },
+    { key: "{serverName}", label: "{serverName}", insert: "{serverName}", desc: "Nama server" },
+    { key: "{serverId}", label: "{serverId}", insert: "{serverId}", desc: "ID server Discord" },
+    { key: "{memberCount}", label: "{memberCount}", insert: "{memberCount}", desc: "Jumlah member server" },
+    { key: "{guildCount}", label: "{guildCount}", insert: "{guildCount}", desc: "Jumlah server bot" },
+    { key: "{owner}", label: "{owner}", insert: "{owner}", desc: "Nama owner dari config" },
+    { key: "{ownerName}", label: "{ownerName}", insert: "{ownerName}", desc: "Nama owner dari config" },
+
+    // Bot
+    { key: "{bot}", label: "{bot}", insert: "{bot}", desc: "Mention bot" },
+    { key: "{botName}", label: "{botName}", insert: "{botName}", desc: "Nama bot" },
+    { key: "{botTag}", label: "{botTag}", insert: "{botTag}", desc: "Tag bot Discord" },
+    { key: "{botId}", label: "{botId}", insert: "{botId}", desc: "ID bot" },
+    { key: "{prefix}", label: "{prefix}", insert: "{prefix}", desc: "Prefix command" },
+    { key: "{activityText}", label: "{activityText}", insert: "{activityText}", desc: "Activity text bot" },
+
+    // Channel ID config
+    { key: "{channelId}", label: "{channelId}", insert: "{channelId}", desc: "ID channel umum" },
+    { key: "{channelName}", label: "{channelName}", insert: "{channelName}", desc: "Nama channel umum" },
+    { key: "{aiChannelId}", label: "{aiChannelId}", insert: "{aiChannelId}", desc: "ID channel AI" },
+    { key: "{curhatChannelId}", label: "{curhatChannelId}", insert: "{curhatChannelId}", desc: "ID channel curhat" },
+    { key: "{anonymousCurhatChannelId}", label: "{anonymousCurhatChannelId}", insert: "{anonymousCurhatChannelId}", desc: "ID channel curhat anonim" },
+    { key: "{suggestionChannelId}", label: "{suggestionChannelId}", insert: "{suggestionChannelId}", desc: "ID channel saran" },
+    { key: "{chatWargaChannelId}", label: "{chatWargaChannelId}", insert: "{chatWargaChannelId}", desc: "ID channel chat warga" },
+    { key: "{levelChannelId}", label: "{levelChannelId}", insert: "{levelChannelId}", desc: "ID channel level" },
+    { key: "{ticketChannelId}", label: "{ticketChannelId}", insert: "{ticketChannelId}", desc: "ID channel ticket" },
+    { key: "{boostChannelId}", label: "{boostChannelId}", insert: "{boostChannelId}", desc: "ID channel boost/juragan" },
+
+    // Role
+    { key: "{roleId}", label: "{roleId}", insert: "{roleId}", desc: "ID role umum" },
+    { key: "{roleName}", label: "{roleName}", insert: "{roleName}", desc: "Nama role umum" },
+    { key: "{donaturRoleId}", label: "{donaturRoleId}", insert: "{donaturRoleId}", desc: "ID role Donatur" },
+    { key: "{donaturRole}", label: "{donaturRole}", insert: "{donaturRole}", desc: "Role Donatur" },
+    { key: "{juraganRoleId}", label: "{juraganRoleId}", insert: "{juraganRoleId}", desc: "ID role Juragan" },
+    { key: "{juraganRole}", label: "{juraganRole}", insert: "{juraganRole}", desc: "Role Juragan" },
+    { key: "{level100RoleId}", label: "{level100RoleId}", insert: "{level100RoleId}", desc: "ID role reward level 100" },
+    { key: "{level100Role}", label: "{level100Role}", insert: "{level100Role}", desc: "Role reward level 100" },
+
+    // Donatur
+    { key: "{amount}", label: "{amount}", insert: "{amount}", desc: "Nominal donasi mentah" },
+    { key: "{nominal}", label: "{nominal}", insert: "{nominal}", desc: "Nominal donasi" },
+    { key: "{rupiah}", label: "{rupiah}", insert: "{rupiah}", desc: "Nominal format Rupiah" },
+    { key: "{days}", label: "{days}", insert: "{days}", desc: "Durasi hari Donatur" },
+    { key: "{expiredText}", label: "{expiredText}", insert: "{expiredText}", desc: "Masa aktif Donatur" },
+    { key: "{expiresAt}", label: "{expiresAt}", insert: "{expiresAt}", desc: "Tanggal expired role" },
+    { key: "{givenAt}", label: "{givenAt}", insert: "{givenAt}", desc: "Tanggal role diberikan" },
+    { key: "{givenBy}", label: "{givenBy}", insert: "{givenBy}", desc: "Admin/owner pemberi role" },
+
+    // Level
+    { key: "{level}", label: "{level}", insert: "{level}", desc: "Level user" },
+    { key: "{rank}", label: "{rank}", insert: "{rank}", desc: "Rank level" },
+    { key: "{badge}", label: "{badge}", insert: "{badge}", desc: "Badge/emoji level" },
+    { key: "{total}", label: "{total}", insert: "{total}", desc: "Total poin" },
+    { key: "{chat}", label: "{chat}", insert: "{chat}", desc: "Poin chat" },
+    { key: "{voice}", label: "{voice}", insert: "{voice}", desc: "Poin voice" },
+    { key: "{nextLevel}", label: "{nextLevel}", insert: "{nextLevel}", desc: "Level berikutnya" },
+    { key: "{nextRank}", label: "{nextRank}", insert: "{nextRank}", desc: "Rank berikutnya" },
+    { key: "{chatNeed}", label: "{chatNeed}", insert: "{chatNeed}", desc: "Sisa poin chat" },
+    { key: "{voiceNeed}", label: "{voiceNeed}", insert: "{voiceNeed}", desc: "Sisa poin voice" },
+
+    // Message / Reason / General
+    { key: "{message}", label: "{message}", insert: "{message}", desc: "Isi pesan" },
+    { key: "{title}", label: "{title}", insert: "{title}", desc: "Judul" },
+    { key: "{reason}", label: "{reason}", insert: "{reason}", desc: "Alasan" },
+    { key: "{count}", label: "{count}", insert: "{count}", desc: "Jumlah/count" },
+    { key: "{status}", label: "{status}", insert: "{status}", desc: "Status" },
+
+    // Date / Time
+    { key: "{date}", label: "{date}", insert: "{date}", desc: "Tanggal sekarang" },
+    { key: "{time}", label: "{time}", insert: "{time}", desc: "Jam sekarang" },
+    { key: "{datetime}", label: "{datetime}", insert: "{datetime}", desc: "Tanggal dan jam sekarang" },
+    { key: "{year}", label: "{year}", insert: "{year}", desc: "Tahun" },
+    { key: "{month}", label: "{month}", insert: "{month}", desc: "Bulan angka" },
+    { key: "{day}", label: "{day}", insert: "{day}", desc: "Tanggal angka" },
+
+    // Formatting
+    { key: "{newline}", label: "{newline}", insert: "{newline}", desc: "Baris baru" },
+    { key: "{br}", label: "{br}", insert: "{br}", desc: "Baris baru" },
+    { key: "{separator}", label: "{separator}", insert: "{separator}", desc: "Garis pemisah" }
+  ];
+
+  return { channels, roles, placeholders };
+}
+
+function dashboardAutocompleteScript() {
+  const data = dashboardAutocompleteData();
+  const json = JSON.stringify(data).replace(/</g, "\\u003c");
+
+  return `<script>
+(() => {
+  const data = ${json};
+  const box = document.createElement("div");
+  box.className = "ac-box";
+  document.body.appendChild(box);
+
+  let activeInput = null;
+  let trigger = "";
+  let triggerPos = -1;
+  let currentItems = [];
+
+  const placeholderItems = (data.placeholders || []).map((x) => ({
+    title: x.label,
+    insert: x.insert,
+    desc: x.desc,
+    tag: "placeholder"
+  }));
+
+  const roleItems = (data.roles || []).map((r) => ({
+    title: "@" + r.name,
+    insert: r.insert,
+    desc: "Masukkan mention role: @" + r.name,
+    tag: "role mention"
+  }));
+
+  const channelItems = (data.channels || []).flatMap((c) => [
+    {
+      title: "#" + c.name,
+      insert: c.insert,
+      desc: c.desc,
+      tag: "channel"
+    },
+    {
+      title: "channelId: " + c.name,
+      insert: c.id,
+      desc: c.desc,
+      tag: "channel id"
+    }
+  ]);
+
+  function getCaretXY(el) {
+    const rect = el.getBoundingClientRect();
+    return {
+      x: Math.min(rect.left + 24, window.innerWidth - 340),
+      y: Math.min(rect.bottom + 8, window.innerHeight - 300)
+    };
+  }
+
+  function findTrigger(el) {
+    const value = el.value || "";
+    const pos = el.selectionStart || 0;
+    const before = value.slice(0, pos);
+    const at = before.lastIndexOf("@");
+    const hash = before.lastIndexOf("#");
+    const brace = before.lastIndexOf("{");
+
+    let idx = Math.max(at, hash, brace);
+    if (idx < 0) return null;
+
+    const char = before[idx];
+    const query = before.slice(idx + 1);
+
+    if (/\\s/.test(query) || query.length > 32) return null;
+    if (char === "{" && before.slice(idx).includes("}")) return null;
+
+    return { char, idx, query: query.toLowerCase() };
+  }
+
+  function getItems(char, query) {
+    let base = [];
+    if (char === "@") base = [...roleItems];
+    if (char === "#") base = [...channelItems];
+    if (char === "{") base = [...placeholderItems];
+
+    if (!query) return base.slice(0, 18);
+
+    return base.filter((item) =>
+      item.title.toLowerCase().includes(query) ||
+      item.insert.toLowerCase().includes(query) ||
+      item.desc.toLowerCase().includes(query)
+    ).slice(0, 18);
+  }
+
+  function hideBox() {
+    box.style.display = "none";
+    currentItems = [];
+    activeInput = null;
+    trigger = "";
+    triggerPos = -1;
+  }
+
+  function insertItem(item) {
+    if (!activeInput) return;
+
+    const value = activeInput.value || "";
+    const pos = activeInput.selectionStart || 0;
+    const before = value.slice(0, triggerPos);
+    const after = value.slice(pos);
+    const needsSpace = after && !/^\\s/.test(after) ? " " : "";
+
+    activeInput.value = before + item.insert + needsSpace + after;
+
+    const nextPos = (before + item.insert + needsSpace).length;
+    activeInput.focus();
+    activeInput.setSelectionRange(nextPos, nextPos);
+    activeInput.dispatchEvent(new Event("input", { bubbles: true }));
+    hideBox();
+  }
+
+  function render(el) {
+    const found = findTrigger(el);
+    if (!found) return hideBox();
+
+    const items = getItems(found.char, found.query);
+    if (!items.length) return hideBox();
+
+    activeInput = el;
+    trigger = found.char;
+    triggerPos = found.idx;
+    currentItems = items;
+
+    box.innerHTML = items.map((item, i) => \`
+      <div class="ac-item" data-i="\${i}">
+        <div class="ac-left">
+          <div class="ac-title">\${escapeHtml(item.title)}</div>
+          <div class="ac-desc">\${escapeHtml(item.desc)}</div>
+        </div>
+        <div class="ac-tag">\${escapeHtml(item.tag)}</div>
+      </div>
+    \`).join("");
+
+    const xy = getCaretXY(el);
+    box.style.left = xy.x + "px";
+    box.style.top = xy.y + "px";
+    box.style.display = "block";
+  }
+
+  function escapeHtml(str) {
+    return String(str || "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  document.addEventListener("input", (e) => {
+    const el = e.target;
+    if (!el.matches("textarea, input[type='text'], input:not([type])")) return;
+    if (!el.closest("form")) return;
+    render(el);
+  });
+
+  document.addEventListener("keyup", (e) => {
+    const el = e.target;
+    if (!el.matches("textarea, input[type='text'], input:not([type])")) return;
+    if (["Escape", "ArrowLeft", "ArrowRight"].includes(e.key)) {
+      if (e.key === "Escape") hideBox();
+      return;
+    }
+    render(el);
+  });
+
+  document.addEventListener("click", (e) => {
+    const item = e.target.closest(".ac-item");
+    if (item) {
+      const idx = Number(item.dataset.i);
+      const selected = currentItems[idx];
+      if (selected) insertItem(selected);
+      return;
+    }
+
+    if (!e.target.closest(".ac-box") && !e.target.matches("textarea, input")) {
+      hideBox();
+    }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (box.style.display !== "block") return;
+
+    const items = [...box.querySelectorAll(".ac-item")];
+    if (!items.length) return;
+
+    let current = items.findIndex((el) => el.classList.contains("active"));
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      current = current < 0 ? 0 : Math.min(items.length - 1, current + 1);
+      items.forEach((el) => el.classList.remove("active"));
+      items[current].classList.add("active");
+      items[current].scrollIntoView({ block: "nearest" });
+    }
+
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      current = current < 0 ? items.length - 1 : Math.max(0, current - 1);
+      items.forEach((el) => el.classList.remove("active"));
+      items[current].classList.add("active");
+      items[current].scrollIntoView({ block: "nearest" });
+    }
+
+    if (e.key === "Enter" && current >= 0) {
+      e.preventDefault();
+      const selected = currentItems[current];
+      if (selected) insertItem(selected);
+    }
+  });
+})();
+</script>`;
+}
+
+
+function embedFormName(key, field) {
+  return `embed_${key}_${field}`;
+}
+
+function embedFieldName(key, index, field) {
+  return `embed_${key}_field_${index}_${field}`;
+}
+
+function safeEmbedKey(key = "") {
+  return String(key || "")
+    .replace(/[^a-zA-Z0-9_-]/g, "")
+    .slice(0, 50);
+}
+
+const PROTECTED_EMBED_KEYS = new Set(["levelUp", "levelProfile", "memberOfTheMonth", "topActiveBoard"]);
+
+function isProtectedEmbedKey(key = "") {
+  return PROTECTED_EMBED_KEYS.has(String(key || ""));
+}
+
+function carlInput(name, label, value = "", placeholder = "", max = "") {
+  const maxText = max ? `<span class="carl-count">0/${escapeHtml(max)}</span>` : "";
+  return `<div class="carl-field">
+    <label><span>${escapeHtml(label)}</span>${maxText}</label>
+    <input name="${escapeHtml(name)}" value="${escapeHtml(value || "")}" placeholder="${escapeHtml(placeholder || "")}" ${max ? `maxlength="${escapeHtml(max)}" data-max="${escapeHtml(max)}"` : ""}>
+  </div>`;
+}
+
+function carlTextarea(name, label, value = "", rows = 5, max = "") {
+  const maxText = max ? `<span class="carl-count">0/${escapeHtml(max)}</span>` : "";
+  return `<div class="carl-field carl-field-full">
+    <label><span>${escapeHtml(label)}</span>${maxText}</label>
+    <textarea name="${escapeHtml(name)}" rows="${rows}" ${max ? `maxlength="${escapeHtml(max)}" data-max="${escapeHtml(max)}"` : ""}>${escapeHtml(value || "")}</textarea>
+  </div>`;
+}
+
+function carlSelect(name, label, optionsHtml = "", selected = "") {
+  return `<div class="carl-field">
+    <label><span>${escapeHtml(label)}</span></label>
+    <select name="${escapeHtml(name)}" data-selected="${escapeHtml(selected || "")}">
+      <option value="">Please select a channel</option>
+      ${optionsHtml}
+    </select>
+  </div>`;
+}
+
+function renderCarlFieldRows(key, fields = []) {
+  const safeKey = safeEmbedKey(key);
+  const rows = [];
+  for (let i = 0; i < 25; i++) {
+    const field = fields[i] || {};
+    rows.push(`<details class="carl-field-row" ${i < Math.max(1, Math.min(3, fields.length || 1)) ? "open" : ""}>
+      <summary>Field ${i + 1} <span>${escapeHtml(field.name || "kosong")}</span></summary>
+      <div class="carl-field-grid small">
+        ${carlInput(embedFieldName(safeKey, i, "name"), "Field name", field.name || "", "Nama field", "256")}
+        ${carlTextarea(embedFieldName(safeKey, i, "value"), "Field value", field.value || "", 3, "1024")}
+        <label class="carl-check"><input type="checkbox" name="${escapeHtml(embedFieldName(safeKey, i, "inline"))}" ${field.inline ? "checked" : ""}> Inline field</label>
+      </div>
+    </details>`);
+  }
+  return rows.join("");
+}
+
+function renderCarlbotEmbedEditor(key, embed = {}, channelHtml = "", savedDestination = "") {
+  const safeKey = safeEmbedKey(key);
+  const title = embed.title || "";
+  const description = embed.description || "";
+  const footer = embed.footer || "";
+  const color = embed.color || "#2B2D31";
+  const fields = Array.isArray(embed.fields) ? embed.fields : [];
+  const raw = JSON.stringify({
+    content: embed.content || "",
+    embeds: [{
+      color,
+      author: embed.authorName || embed.authorIcon || embed.authorUrl ? {
+        name: embed.authorName || "",
+        icon_url: embed.authorIcon || "",
+        url: embed.authorUrl || ""
+      } : undefined,
+      title,
+      url: embed.titleUrl || "",
+      description,
+      fields,
+      image: embed.image ? { url: embed.image } : undefined,
+      thumbnail: embed.thumbnail ? { url: embed.thumbnail } : undefined,
+      footer: footer || embed.footerIcon ? { text: makeOTFooter(footer), icon_url: embed.footerIcon || "" } : undefined,
+      timestamp: embed.timestamp ? new Date().toISOString() : undefined
+    }]
+  }, null, 2);
+
+  return `<section class="carl-builder" id="embed-${escapeHtml(safeKey)}" data-carl-embed="${escapeHtml(safeKey)}">
+    <div class="carl-builder-head">
+      <div>
+        <p class="carl-kicker">Embed</p>
+        <h3>${escapeHtml(key)}</h3>
+        <span>Embed builder seperti Carl-bot: isi text, author, title, description, fields, image, thumbnail, footer, destination, preview, dan Raw JSON.</span>
+      </div>
+      <div class="carl-head-actions">
+        <div class="carl-tag">Live Config</div>
+        <button class="btn secondary carl-preview-btn" type="button">Preview</button>
+        <button class="btn ghost carl-reset-preview" type="button">Reset Preview</button>
+      </div>
+    </div>
+
+    <div class="carl-workspace">
+      <div class="carl-form-panel">
+        <div class="carl-section-title">Normal text sent with the embed</div>
+        ${carlTextarea(embedFormName(safeKey, "content"), "Normal text sent with the embed", embed.content || "", 3, "2000")}
+        <div class="mention-help">Tips: ketik @ lalu pilih role. Dashboard preview akan tampil sebagai @Role, bukan ID.</div>
+
+        <div class="carl-section-title">Author</div>
+        <div class="carl-field-grid">
+          ${carlInput(embedFormName(safeKey, "authorIcon"), "Icon url", embed.authorIcon || "", "https://...")}
+          ${carlInput(embedFormName(safeKey, "authorName"), "Name", embed.authorName || "", "Author name", "256")}
+          ${carlInput(embedFormName(safeKey, "authorUrl"), "Name url", embed.authorUrl || "", "https://...")}
+        </div>
+
+        <div class="carl-section-title">Embed</div>
+        <div class="carl-field-grid">
+          ${carlInput(embedFormName(safeKey, "color"), "Color HEX", color, "#2B2D31")}
+          ${carlInput(embedFormName(safeKey, "title"), "Title", title, "Judul embed", "256")}
+          ${carlInput(embedFormName(safeKey, "titleUrl"), "Title url", embed.titleUrl || "", "https://...")}
+        </div>
+        ${carlTextarea(embedFormName(safeKey, "description"), "Description", description, 7, "2048")}
+        <div class="mention-help">Untuk mention role di embed, pakai format Discord <code>&lt;@&amp;ROLE_ID&gt;</code> atau ketik @ di field ini.</div>
+
+        <details class="carl-fields-box">
+          <summary>Fields <span>${fields.length}/25 fields</span></summary>
+          ${renderCarlFieldRows(safeKey, fields)}
+        </details>
+
+        <div class="carl-section-title">Images</div>
+        <div class="carl-field-grid">
+          ${carlInput(embedFormName(safeKey, "image"), "Image url (big at the bottom)", embed.image || "", "https://...")}
+          ${carlInput(embedFormName(safeKey, "thumbnail"), "Thumbnail url (small top right)", embed.thumbnail || "", "avatar atau https://...")}
+        </div>
+
+        <div class="carl-section-title">Footer</div>
+        <div class="carl-field-grid">
+          ${carlInput(embedFormName(safeKey, "footer"), "Footer", footer, "Footer text", "2048")}
+          ${carlInput(embedFormName(safeKey, "footerIcon"), "Footer icon", embed.footerIcon || "", "https://...")}
+        </div>
+
+        <div class="carl-section-title">Date & Destination</div>
+        <div class="carl-field-grid">
+          <label class="carl-check"><input type="checkbox" name="${escapeHtml(embedFormName(safeKey, "timestamp"))}" ${embed.timestamp ? "checked" : ""}> Select date / tampilkan timestamp</label>
+          ${carlSelect(embedFormName(safeKey, "destinationChannelId"), "Destination", channelHtml, embed.destinationChannelId || savedDestination || "")}
+          <div class="carl-send-box">
+            <button class="btn" type="submit" formaction="/embeds/send/${encodeURIComponent(safeKey)}" formmethod="post">🚀 Kirim Embed Ini</button>
+            <small>Pilih channel tujuan dulu, lalu klik kirim. Setting embed ikut tersimpan.</small>
+          </div>
+        </div>
+      </div>
+
+      <aside class="carl-preview-panel">
+        <div class="carl-preview-title">Preview</div>
+        <div class="carl-discord-preview">
+          <div class="carl-normal-preview">${escapeHtml(dashboardDiscordPreviewText(embed.content || "Normal text preview"))}</div>
+          <div class="carl-embed-preview" style="border-left-color:${escapeHtml(color)}">
+            <div class="carl-author-preview">${escapeHtml(embed.authorName || "Author preview")}</div>
+            <div class="carl-title-preview">${escapeHtml(dashboardDiscordPreviewText(title || "Preview title"))}</div>
+            <div class="carl-desc-preview">${escapeHtml(dashboardDiscordPreviewText(description || "Description preview akan tampil di sini."))}</div>
+            <div class="carl-fields-preview">${fields.slice(0, 6).map((f) => `<div><b>${escapeHtml(dashboardDiscordPreviewText(f.name || "Field"))}</b><span>${escapeHtml(dashboardDiscordPreviewText(f.value || "Value"))}</span></div>`).join("")}</div>
+            <div class="carl-img-preview">${embed.image ? `Image: ${escapeHtml(embed.image)}` : "Image preview"}</div>
+            <div class="carl-footer-preview">${escapeHtml(dashboardDiscordPreviewText(footer || "Footer preview"))}</div>
+          </div>
+        </div>
+        <details class="carl-raw-details">
+          <summary>Advanced / Raw JSON <span>dibuka kalau butuh backup manual</span></summary>
+          <textarea class="carl-raw-json" name="${escapeHtml(embedFormName(safeKey, "rawJson"))}" rows="12">${escapeHtml(raw)}</textarea>
+          <p class="carl-note">Note: Raw JSON hanya untuk cek/backup. Default disembunyikan supaya editor tidak sempit.</p>
+          <button class="btn secondary carl-copy-json" type="button">Copy Setting</button>
+        </details>
+      </aside>
+    </div>
+  </section>`;
+}
+
+function renderEmbedsPage(req, saved = false, error = "", actionMessage = "") {
+  const cfg = readConfigFile();
+  cfg.embeds = cfg.embeds || {};
+  const guild = typeof getDashboardGuild === "function" ? getDashboardGuild() : null;
+  const channelHtml = guild ? channelOptions(guild, "", "text") : "";
+  const embedKeys = Object.keys(cfg.embeds)
+    .filter((key) => key !== "dashboard" && !isProtectedEmbedKey(key) && cfg.embeds[key] && typeof cfg.embeds[key] === "object" && !Array.isArray(cfg.embeds[key]))
+    .sort((a, b) => a.localeCompare(b));
+
+  return dashboardLayout(`
+    <style>
+      .carl-shell { display:grid; grid-template-columns: 230px 1fr; gap:18px; align-items:start; }
+      .carl-side { position:sticky; top:18px; border:1px solid rgba(255,255,255,.10); background:rgba(12,16,31,.72); border-radius:22px; padding:14px; box-shadow:0 22px 70px rgba(0,0,0,.22); }
+      .carl-side b { display:block; color:#fff; margin:0 0 10px; }
+      .carl-side a { display:block; padding:10px 11px; border-radius:12px; color:rgba(248,251,255,.68); font-weight:800; font-size:13px; }
+      .carl-side a:hover { background:rgba(255,255,255,.08); color:#fff; }
+      .carl-builder { margin-bottom:18px; border:1px solid rgba(255,255,255,.11); border-radius:26px; background:linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.04)); box-shadow:0 22px 80px rgba(0,0,0,.24); overflow:hidden; }
+      .carl-builder-head { display:flex; justify-content:space-between; gap:14px; align-items:flex-start; padding:20px; border-bottom:1px solid rgba(255,255,255,.09); background:rgba(0,0,0,.15); }
+      .carl-builder-head h3 { margin:0; font-size:22px; color:#fff; }
+      .carl-builder-head span { display:block; margin-top:6px; color:rgba(248,251,255,.60); line-height:1.55; }
+      .carl-kicker { margin:0 0 4px; color:#8bd3ff; font-weight:1000; text-transform:uppercase; letter-spacing:1px; font-size:11px; }
+      .carl-tag { padding:8px 10px; border-radius:999px; background:rgba(45,212,191,.13); border:1px solid rgba(45,212,191,.25); color:#7ef7df; font-weight:900; white-space:nowrap; }
+      .carl-workspace { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(330px,.75fr); gap:18px; padding:18px; }
+      .carl-form-panel, .carl-preview-panel { min-width:0; }
+      .carl-section-title { margin:18px 0 10px; color:#fff; font-size:14px; font-weight:1000; letter-spacing:.2px; }
+      .carl-section-title:first-child { margin-top:0; }
+      .carl-field-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+      .carl-field-grid.small { grid-template-columns:1fr 1.3fr auto; align-items:end; }
+      .carl-field-full { margin-top:10px; }
+      .carl-field label { display:flex; justify-content:space-between; gap:12px; color:rgba(248,251,255,.62); font-weight:900; font-size:12px; margin-bottom:7px; }
+      .carl-count { color:rgba(248,251,255,.35); }
+      .carl-field input, .carl-field textarea, .carl-field select, .carl-raw-json { width:100%; border:1px solid rgba(255,255,255,.13); background:rgba(4,8,18,.70); color:#f8fbff; border-radius:14px; padding:11px 12px; outline:none; font:inherit; }
+      .carl-field textarea, .carl-raw-json { resize:vertical; line-height:1.55; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .carl-field input:focus, .carl-field textarea:focus, .carl-field select:focus, .carl-raw-json:focus { border-color:rgba(139,180,255,.70); box-shadow:0 0 0 4px rgba(139,180,255,.11); }
+      .carl-check { display:flex; align-items:center; gap:9px; min-height:46px; padding:11px 12px; border:1px solid rgba(255,255,255,.12); background:rgba(4,8,18,.50); border-radius:14px; color:rgba(248,251,255,.78); font-weight:850; }
+      .carl-check input { width:auto; }
+      .carl-send-box { min-height:46px; padding:10px 12px; border:1px solid rgba(45,212,191,.18); background:rgba(45,212,191,.07); border-radius:14px; display:flex; flex-direction:column; gap:7px; justify-content:center; }
+      .carl-send-box .btn { width:100%; text-align:center; }
+      .carl-send-box small { color:rgba(248,251,255,.54); line-height:1.35; font-weight:800; }
+      .carl-fields-box { margin-top:12px; border:1px solid rgba(255,255,255,.10); border-radius:18px; background:rgba(0,0,0,.16); padding:10px; }
+      .carl-fields-box > summary, .carl-field-row > summary { cursor:pointer; color:#fff; font-weight:1000; padding:8px 10px; }
+      .carl-fields-box > summary span, .carl-field-row > summary span { color:rgba(248,251,255,.46); font-weight:800; margin-left:8px; }
+      .carl-field-row { border-top:1px solid rgba(255,255,255,.08); padding:6px 0; }
+      .carl-preview-panel { position:sticky; top:18px; border:1px solid rgba(255,255,255,.10); border-radius:20px; padding:14px; background:rgba(4,8,18,.58); }
+      .carl-preview-title { font-weight:1000; color:#fff; margin-bottom:10px; }
+      .carl-preview-title.raw { margin-top:14px; }
+      .carl-discord-preview { background:#313338; border-radius:16px; padding:14px; border:1px solid rgba(255,255,255,.08); }
+      .carl-normal-preview { color:#dbdee1; font-size:13px; margin-bottom:10px; white-space:pre-wrap; }
+      .carl-embed-preview { background:#2b2d31; border-left:4px solid #5865F2; border-radius:6px; padding:12px; color:#dbdee1; max-width:520px; }
+      .carl-author-preview { font-size:12px; font-weight:800; color:#f2f3f5; margin-bottom:7px; }
+      .carl-title-preview { color:#00a8fc; font-weight:1000; margin-bottom:7px; }
+      .carl-desc-preview { white-space:pre-wrap; color:#dbdee1; line-height:1.48; font-size:13px; }
+      .carl-fields-preview { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:10px; }
+      .carl-fields-preview div { background:rgba(255,255,255,.04); border-radius:8px; padding:8px; }
+      .carl-fields-preview b { display:block; color:#fff; font-size:12px; }
+      .carl-fields-preview span { display:block; color:#b5bac1; font-size:12px; margin-top:3px; white-space:pre-wrap; }
+      .carl-img-preview { margin-top:10px; min-height:42px; border:1px dashed rgba(255,255,255,.15); border-radius:10px; color:#949ba4; display:grid; place-items:center; font-size:12px; overflow:hidden; text-align:center; padding:8px; }
+      .carl-footer-preview { color:#949ba4; font-size:12px; margin-top:10px; }
+      .carl-note { color:rgba(248,251,255,.46); font-size:12px; line-height:1.5; }
+      .carl-actions { position:sticky; bottom:14px; z-index:20; margin-top:18px; padding:12px; border:1px solid rgba(255,255,255,.11); border-radius:20px; background:rgba(8,12,24,.86); backdrop-filter:blur(16px); display:flex; gap:10px; flex-wrap:wrap; }
+
+      .embed-control-strip{display:flex;gap:12px;flex-wrap:wrap;align-items:end;justify-content:space-between;margin:0 0 22px;padding:18px;border:1px solid rgba(255,255,255,.11);background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.04));border-radius:26px;box-shadow:0 20px 70px rgba(0,0,0,.22)}
+      .embed-control-strip .left{display:grid;grid-template-columns:minmax(260px,420px) minmax(220px,360px);gap:14px;align-items:end}.embed-control-strip label{font-size:14px!important}.embed-control-strip select,.embed-control-strip input{width:100%;min-height:52px!important;border-radius:18px!important;background:rgba(4,8,18,.72)!important;border:1px solid rgba(255,255,255,.14)!important;color:#fff!important;padding:13px 15px!important}.embed-control-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.carl-shell{display:grid;grid-template-columns:minmax(0,1fr)!important;gap:24px!important}.carl-side{position:relative!important;top:auto!important;display:grid!important;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:0!important;padding:16px!important}.carl-side b{grid-column:1/-1;font-size:15px!important}.carl-side a{min-height:42px;display:flex!important;align-items:center!important}.carl-builder{border-radius:32px!important;margin-bottom:26px!important;}.carl-builder-head{padding:24px 26px!important}.carl-builder-head h3{font-size:24px!important}.carl-builder-head span{font-size:14px!important;max-width:760px}.carl-head-actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap;justify-content:flex-end}.carl-workspace{grid-template-columns:minmax(0,1.55fr) minmax(360px,.72fr)!important;gap:24px!important;padding:24px!important}.carl-form-panel{display:block}.carl-preview-panel{position:sticky!important;top:20px!important;border-radius:24px!important;padding:18px!important;background:rgba(4,8,18,.62)!important}.carl-section-title{font-size:17px!important;margin:26px 0 14px!important;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,.08)}.carl-field-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:18px!important}.carl-field-grid.small{grid-template-columns:1fr!important}.carl-field-full{margin-top:16px!important}.carl-field label{font-size:14px!important;margin-bottom:9px!important}.carl-field input,.carl-field textarea,.carl-field select,.carl-raw-json{border-radius:18px!important;min-height:54px!important;padding:14px 15px!important;font-size:15px!important}.carl-field textarea{min-height:220px!important;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Arial,sans-serif!important}.carl-field [name$="_content"]{min-height:130px!important}.carl-field [name$="_description"]{min-height:260px!important}.carl-fields-box{margin-top:20px!important;border-radius:22px!important;padding:14px!important}.carl-field-row{padding:10px 0!important}.carl-check{min-height:54px!important;border-radius:18px!important;font-size:14px!important}.carl-send-box{min-height:86px!important;border-radius:18px!important}.carl-discord-preview{padding:18px!important;border-radius:18px!important}.carl-embed-preview{max-width:100%!important;padding:16px!important;border-left-width:5px!important}.carl-desc-preview{font-size:14px!important;line-height:1.6!important}.carl-img-preview{min-height:88px!important}.carl-raw-details{margin-top:16px;border:1px solid rgba(255,255,255,.11);border-radius:20px;background:rgba(0,0,0,.18);padding:12px}.carl-raw-details summary{cursor:pointer;color:#fff;font-weight:1000;padding:8px 10px}.carl-raw-details summary span{color:rgba(248,251,255,.46);font-weight:800;margin-left:8px;font-size:12px}.carl-raw-json{margin-top:10px;min-height:260px!important;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace!important}.carl-actions{bottom:18px!important;padding:14px 16px!important;border-radius:22px!important;justify-content:flex-end!important}.carl-actions:before{content:"Perubahan belum masuk Discord sampai kamu klik Simpan.";color:rgba(248,251,255,.58);font-weight:850;margin-right:auto;align-self:center}.carl-builder.hidden-by-embed-search{display:none!important}body.hide-embed-preview .carl-workspace{grid-template-columns:1fr!important}body.hide-embed-preview .carl-preview-panel{display:none!important}body.focus-edit .carl-workspace{grid-template-columns:minmax(0,1.7fr) minmax(340px,.62fr)!important}body.focus-edit .carl-side{display:none!important}@media(max-width:1180px){.carl-workspace{grid-template-columns:1fr!important}.carl-preview-panel{position:relative!important;top:auto!important}.embed-control-strip .left{grid-template-columns:1fr!important}.carl-field-grid{grid-template-columns:1fr!important}}@media(max-width:760px){.embed-control-strip{padding:14px}.embed-control-actions{width:100%}.embed-control-actions .btn,.embed-control-actions .premium-tool{width:100%}.carl-builder-head{flex-direction:column!important}.carl-head-actions{justify-content:flex-start!important}.carl-actions{position:relative!important;bottom:auto!important}.carl-actions:before{width:100%;margin:0 0 8px}.carl-actions .btn{width:100%}}
+
+            @media(max-width:1100px){ .carl-shell,.carl-workspace{grid-template-columns:1fr}.carl-side,.carl-preview-panel{position:relative;top:auto}.carl-field-grid,.carl-field-grid.small{grid-template-columns:1fr} }
+    </style>
+
+    <div class="topbar">
+      <div class="title">
+        <h2>Embeds</h2>
+        <p>Embed builder dibuat mirip Carl-bot: semua embed Pak RW punya form yang sama, bisa pilih channel tujuan, kirim langsung ke Discord, lihat Preview, dan cek Raw JSON. Cocok buat edit Juragan, Donatur, Level, Cek Poin, Curhat, Saran, MOTM, dan Top Aktif tanpa buka code.</p>
+      </div>
+      <div class="pill">🎨 Carlbot-like Builder</div>
+    </div>
+
+    ${saved ? `<div class="alert">✅ Semua embed berhasil disimpan. Config langsung live reload ke bot.</div>` : ""}
+    ${actionMessage ? `<div class="alert">${escapeHtml(actionMessage)}</div>` : ""}
+    ${error ? `<div class="alert danger">❌ ${escapeHtml(error)}</div>` : ""}
+    <div class="premium-form-note">🔒 Mode aman aktif: embed Level Up, Level Profile/Cek Poin, MOTM, dan Top Aktif dikunci dari editor ini supaya sistem Level, Top Aktif/MOTM, dan Cek Poin tidak berubah.</div>
+    <div class="premium-form-note">🎭 Fix role mention: saat edit pakai @role, preview dashboard menampilkan <b>@Nama Role</b>. Config tetap menyimpan ID/mention Discord agar pengiriman embed tetap aman.</div>
+
+    <div class="embed-control-strip">
+      <div class="left">
+        <div>
+          <label>Pilih Embed</label>
+          <select id="embedJumpSelect">
+            <option value="">Pilih embed yang mau diedit...</option>
+            ${embedKeys.map((key) => `<option value="embed-${escapeHtml(key)}">${escapeHtml(key)}</option>`).join("")}
+          </select>
+        </div>
+        <div>
+          <label>Search Embed</label>
+          <input id="embedSearchBox" placeholder="Cari: juragan, level, mabar, MOTM..." autocomplete="off" />
+        </div>
+      </div>
+      <div class="embed-control-actions">
+        <button class="premium-tool" id="embedFocusBtn" type="button">🎯 Focus Edit Mode</button>
+        <button class="premium-tool" id="embedHidePreviewBtn" type="button">👁️ Sembunyikan Preview</button>
+        <a class="btn secondary" href="/">Kembali ke Dashboard</a>
+      </div>
+    </div>
+
+    <form method="post" action="/embeds">
+      <div class="carl-shell">
+        <aside class="carl-side">
+          <b>Carlbot Style Menu</b>
+          ${embedKeys.map((key) => `<a href="#embed-${escapeHtml(key)}">${escapeHtml(key)}</a>`).join("")}
+          <hr style="border:0;border-top:1px solid rgba(255,255,255,.10);margin:12px 0">
+          <a href="#new-embed">+ New Embed</a>
+          <a href="/preview">Preview Studio</a>
+          <a href="/backup">Backup</a>
+        </aside>
+        <main>
+          ${embedKeys.map((key) => renderCarlbotEmbedEditor(key, cfg.embeds[key] || {}, guild ? channelOptions(guild, cfg.embeds[key]?.destinationChannelId || "", "text") : "")).join("")}
+
+          <section class="carl-builder" id="new-embed">
+            <div class="carl-builder-head">
+              <div>
+                <p class="carl-kicker">New</p>
+                <h3>Buat Embed Baru</h3>
+                <span>Tambah key embed baru ke config. Setelah disimpan, embed ini muncul otomatis di builder.</span>
+              </div>
+            </div>
+            <div class="carl-workspace" style="grid-template-columns:1fr">
+              <div class="carl-field-grid">
+                ${carlInput("newEmbedKey", "Embed key", "", "contoh: rulesPanel")}
+                ${carlInput("newEmbedTitle", "Title", "", "Judul embed")}
+                ${carlInput("newEmbedAuthorName", "Author name", "", "DESA TULUS")}
+              </div>
+            </div>
+          </section>
+
+          <div class="carl-actions">
+            <button class="btn" type="submit">💾 Simpan Semua Embed</button>
+            <a class="btn secondary" href="/">Dashboard</a>
+            <a class="btn secondary" href="/backup">Backup</a>
+          </div>
+        </main>
+      </div>
+    </form>
+
+    <script>
+    (() => {
+      const roleMap = ${JSON.stringify(guild ? Object.fromEntries(guild.roles.cache.filter((role) => role.name !== "@everyone").map((role) => [role.id, role.name])) : {}).replace(/</g, "\u003c")};
+      const channelMap = ${JSON.stringify(guild ? Object.fromEntries(guild.channels.cache.map((ch) => [ch.id, ch.name])) : {}).replace(/</g, "\u003c")};
+      function previewDiscordText(value) {
+        return String(value || "")
+          .replace(/<@&(\d{15,25})>/g, (m, id) => roleMap[id] ? "@" + roleMap[id] : m)
+          .replace(/<#(\d{15,25})>/g, (m, id) => channelMap[id] ? "#" + channelMap[id] : m);
+      }
+      function updateCounts(scope = document) {
+        scope.querySelectorAll('[data-max]').forEach((el) => {
+          const label = el.closest('.carl-field')?.querySelector('.carl-count');
+          if (!label) return;
+          const max = el.getAttribute('data-max') || '';
+          label.textContent = (el.value || '').length + '/' + max;
+        });
+      }
+      function refresh(section) {
+        const get = (field) => section.querySelector('[name="embed_' + section.dataset.carlEmbed + '_' + field + '"]')?.value || '';
+        const color = get('color') || '#5865F2';
+        const preview = section.querySelector('.carl-embed-preview');
+        if (preview) preview.style.borderLeftColor = color;
+        const normal = section.querySelector('.carl-normal-preview');
+        if (normal) normal.textContent = previewDiscordText(get('content') || 'Normal text preview');
+        const author = section.querySelector('.carl-author-preview');
+        if (author) author.textContent = previewDiscordText(get('authorName') || 'Author preview');
+        const title = section.querySelector('.carl-title-preview');
+        if (title) title.textContent = previewDiscordText(get('title') || 'Preview title');
+        const desc = section.querySelector('.carl-desc-preview');
+        if (desc) desc.textContent = previewDiscordText(get('description') || 'Description preview akan tampil di sini.');
+        const img = section.querySelector('.carl-img-preview');
+        if (img) img.textContent = get('image') ? 'Image: ' + get('image') : 'Image preview';
+        const footer = section.querySelector('.carl-footer-preview');
+        if (footer) footer.textContent = previewDiscordText(get('footer') || 'Footer preview');
+      }
+      document.querySelectorAll('[data-carl-embed]').forEach((section) => {
+        section.addEventListener('input', () => { updateCounts(section); refresh(section); });
+        updateCounts(section); refresh(section);
+      });
+      updateCounts();
+      const jump = document.getElementById('embedJumpSelect');
+      if (jump) jump.addEventListener('change', () => {
+        const id = jump.value;
+        if (!id) return;
+        document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        history.replaceState(null, '', '#' + id);
+      });
+      const search = document.getElementById('embedSearchBox');
+      if (search) search.addEventListener('input', () => {
+        const q = search.value.trim().toLowerCase();
+        document.querySelectorAll('.carl-builder[data-carl-embed]').forEach((builder) => {
+          const key = (builder.dataset.carlEmbed || '').toLowerCase();
+          builder.classList.toggle('hidden-by-embed-search', q && !key.includes(q));
+        });
+      });
+      const focus = document.getElementById('embedFocusBtn');
+      if (focus) focus.addEventListener('click', () => {
+        document.body.classList.toggle('focus-edit');
+        focus.classList.toggle('active', document.body.classList.contains('focus-edit'));
+      });
+      const hidePrev = document.getElementById('embedHidePreviewBtn');
+      if (hidePrev) hidePrev.addEventListener('click', () => {
+        document.body.classList.toggle('hide-embed-preview');
+        hidePrev.classList.toggle('active', document.body.classList.contains('hide-embed-preview'));
+      });
+      document.querySelectorAll('.carl-reset-preview').forEach((btn) => btn.addEventListener('click', () => {
+        const section = btn.closest('[data-carl-embed]');
+        if (!section) return;
+        refresh(section);
+        btn.textContent = 'Preview direset';
+        setTimeout(() => btn.textContent = 'Reset Preview', 900);
+      }));
+      document.querySelectorAll('.carl-copy-json').forEach((btn) => btn.addEventListener('click', async () => {
+        const txt = btn.closest('.carl-raw-details')?.querySelector('.carl-raw-json')?.value || '';
+        try { await navigator.clipboard.writeText(txt); btn.textContent = 'Tersalin'; } catch { btn.textContent = 'Copy manual'; }
+        setTimeout(() => btn.textContent = 'Copy Setting', 900);
+      }));
+    })();
+    </script>
+
+    ${dashboardAutocompleteScript()}
+  `, "embeds");
+}
+
+function getDashboardGuild() {
+  const first = client.guilds.cache.first();
+  return first || null;
+}
+
+function optionList(items, selected = "") {
+  return items.map((item) => {
+    const isSelected = String(item.id) === String(selected) ? "selected" : "";
+    const title = item.id ? `ID: ${item.id}` : "";
+    return `<option value="${escapeHtml(item.id)}" title="${escapeHtml(title)}" ${isSelected}>${escapeHtml(item.name)}</option>`;
+  }).join("");
+}
+
+function channelOptions(guild, selected = "", type = "text") {
+  if (!guild) return "";
+
+  const channels = guild.channels.cache
+    .filter((ch) => {
+      if (type === "text") return ch.type === ChannelType.GuildText;
+      if (type === "voice") return ch.type === ChannelType.GuildVoice;
+      if (type === "category") return ch.type === ChannelType.GuildCategory;
+      return true;
+    })
+    .sort((a, b) => (a.rawPosition || 0) - (b.rawPosition || 0))
+    .map((ch) => ({ id: ch.id, name: `# ${ch.name}` }));
+
+  return optionList(channels, selected);
+}
+
+function roleOptions(guild, selected = "") {
+  if (!guild) return "";
+
+  const roles = guild.roles.cache
+    .filter((role) => role.name !== "@everyone")
+    .sort((a, b) => (b.position || 0) - (a.position || 0))
+    .map((role) => ({ id: role.id, name: `@${role.name}` }));
+
+  return optionList(roles, selected);
+}
+
+function parseDiscordId(input = "") {
+  const text = String(input || "").trim();
+  const match = text.match(/\d{15,25}/);
+  return match ? match[0] : text;
+}
+
+function getDashboardActivityPath() {
+  return path.join(__dirname, "dashboard-activity.json");
+}
+
+function readDashboardActivity(limit = 12) {
+  try {
+    const filePath = getDashboardActivityPath();
+    if (!fs.existsSync(filePath)) return [];
+    const data = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    const list = Array.isArray(data.activities) ? data.activities : [];
+    return list.slice(0, limit);
+  } catch (err) {
+    console.log("READ DASHBOARD ACTIVITY ERROR:", err.message);
+    return [];
+  }
+}
+
+function appendDashboardActivity(type = "info", title = "Activity", detail = "") {
+  try {
+    const filePath = getDashboardActivityPath();
+    let data = { activities: [] };
+    if (fs.existsSync(filePath)) data = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    if (!Array.isArray(data.activities)) data.activities = [];
+    data.activities.unshift({ type, title, detail, at: new Date().toISOString() });
+    data.activities = data.activities.slice(0, 80);
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
+  } catch (err) {
+    console.log("DASHBOARD ACTIVITY WRITE WARN:", err.message);
+  }
+}
+
+function formatActivityTime(iso = "") {
+  try {
+    return new Date(iso).toLocaleString("id-ID", { timeZone: "Asia/Jakarta", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short" });
+  } catch {
+    return "-";
+  }
+}
+
+// ================= EMBED FULL SYNC DASHBOARD =================
+function getEmbedTemplatesPath() {
+  return path.join(__dirname, "embed-templates.json");
+}
+
+function defaultEmbedTemplateRegistry() {
+  const cfg = readConfigFile();
+  const registry = {};
+  const embeds = cfg.embeds || {};
+  const protectedKeys = new Set((cfg.embedSync?.protectedEmbeds || ["levelUp", "levelProfile", "topActiveBoard", "memberOfTheMonth"]));
+  const featureMap = { juragan: "Juragan", donatur: "Donatur", anonimPanel: "Curhat", curhatReply: "Curhat", suggestionResult: "Saran", cariMabar: "Mabar", levelUp: "Protected", levelProfile: "Protected", topActiveBoard: "Protected", memberOfTheMonth: "Protected" };
+  for (const [key, value] of Object.entries(embeds)) {
+    if (!value || typeof value !== "object" || key === "dashboard") continue;
+    const name = `pakrw-${key}`;
+    const embed = {};
+    if (value.title) embed.title = String(value.title);
+    if (value.description) embed.description = String(value.description);
+    if (value.color) embed.color = hexToIntColor(value.color);
+    if (value.titleUrl) embed.url = String(value.titleUrl);
+    if (value.authorName) embed.author = { name: String(value.authorName), icon_url: value.authorIcon || undefined };
+    if (value.thumbnail && value.thumbnail !== "avatar") embed.thumbnail = { url: String(value.thumbnail) };
+    if (value.image) embed.image = { url: String(value.image) };
+    if (value.footer) embed.footer = { text: String(value.footer) };
+    registry[name] = {
+      name,
+      feature: featureMap[key] || "System",
+      status: protectedKeys.has(key) ? "Protected" : (embed.title || embed.description ? "Aktif" : "Belum lengkap"),
+      protected: protectedKeys.has(key),
+      defaultChannelId: "",
+      lastMessageId: "",
+      sourceChannelId: "",
+      sourceMessageId: "",
+      content: value.content || "",
+      embed,
+      components: [],
+      lastEditedAt: "",
+      lastSentAt: "",
+      lastSyncedFromDiscordAt: "",
+      configKey: key
+    };
+  }
+  if (cfg.welcome) {
+    registry["pakrw-welcome-message"] = {
+      name: "pakrw-welcome-message",
+      feature: "Welcome",
+      status: "Aktif",
+      protected: false,
+      defaultChannelId: cfg.chatWargaChannelId || "",
+      lastMessageId: "",
+      sourceChannelId: "",
+      sourceMessageId: "",
+      content: "",
+      embed: { title: cfg.welcome.title || "👋 Warga Baru Datang!", description: cfg.welcome.message || "", color: hexToIntColor(cfg.embedColor || "#FFFFFF") },
+      components: [],
+      lastEditedAt: "",
+      lastSentAt: "",
+      lastSyncedFromDiscordAt: "",
+      configKey: "welcome"
+    };
+  }
+  return registry;
+}
+
+function mergeDefaultEmbedTemplates(data = { templates: {} }) {
+  if (!data.templates || typeof data.templates !== "object") data.templates = {};
+  const defaults = defaultEmbedTemplateRegistry();
+  for (const [name, tpl] of Object.entries(defaults)) {
+    if (!data.templates[name]) data.templates[name] = tpl;
+    else {
+      data.templates[name].feature = data.templates[name].feature || tpl.feature;
+      data.templates[name].status = data.templates[name].status || tpl.status;
+      data.templates[name].protected = Boolean(data.templates[name].protected || tpl.protected);
+      data.templates[name].configKey = data.templates[name].configKey || tpl.configKey;
+    }
+  }
+  return data;
+}
+
+function readEmbedTemplatesFile() {
+  const filePath = getEmbedTemplatesPath();
+  try {
+    if (!fs.existsSync(filePath)) {
+      fs.writeFileSync(filePath, JSON.stringify({ templates: {} }, null, 2), "utf8");
+    }
+    const data = mergeDefaultEmbedTemplates(JSON.parse(fs.readFileSync(filePath, "utf8")));
+    return data;
+  } catch (err) {
+    console.log("READ EMBED TEMPLATES ERROR:", err.message);
+    return mergeDefaultEmbedTemplates({ templates: {} });
+  }
+}
+
+function writeEmbedTemplatesFile(data) {
+  const filePath = getEmbedTemplatesPath();
+  const safeData = data && typeof data === "object" ? data : { templates: {} };
+  if (!safeData.templates || typeof safeData.templates !== "object") safeData.templates = {};
+  try {
+    if (fs.existsSync(filePath)) {
+      const backup = path.join(__dirname, `embed-templates.backup-${Date.now()}.json`);
+      fs.copyFileSync(filePath, backup);
+    }
+  } catch (err) {
+    console.log("EMBED TEMPLATE BACKUP WARN:", err.message);
+  }
+  fs.writeFileSync(filePath, JSON.stringify(safeData, null, 2), "utf8");
+}
+
+function intToHexColor(color) {
+  if (!color && color !== 0) return "#5865F2";
+  if (typeof color === "string") return color.startsWith("#") ? color : `#${color}`;
+  const hex = Number(color || 0).toString(16).padStart(6, "0").slice(-6);
+  return `#${hex}`.toUpperCase();
+}
+
+function hexToIntColor(hex) {
+  const clean = String(hex || "#5865F2").replace("#", "").trim();
+  const parsed = parseInt(clean || "5865F2", 16);
+  return Number.isFinite(parsed) ? parsed : 0x5865F2;
+}
+
+function normalizeEmbedTemplateName(name = "") {
+  return String(name || "")
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 64) || `embed-${Date.now()}`;
+}
+
+function embedDataToTemplate(name, feature, content = "", embed = {}, meta = {}) {
+  const data = embed && typeof embed.toJSON === "function" ? embed.toJSON() : JSON.parse(JSON.stringify(embed || {}));
+  const firstEmbed = data || {};
+  return {
+    name: normalizeEmbedTemplateName(name),
+    feature: feature || "Imported",
+    status: meta.protected ? "Protected" : (firstEmbed.title || firstEmbed.description ? "Aktif" : "Belum lengkap"),
+    protected: Boolean(meta.protected),
+    defaultChannelId: meta.channelId || "",
+    lastMessageId: meta.messageId || "",
+    sourceChannelId: meta.sourceChannelId || meta.channelId || "",
+    sourceMessageId: meta.sourceMessageId || meta.messageId || "",
+    content: content || "",
+    embed: firstEmbed,
+    components: Array.isArray(meta.components) ? meta.components : [],
+    lastEditedAt: new Date().toISOString(),
+    lastSentAt: meta.lastSentAt || "",
+    lastSyncedFromDiscordAt: meta.lastSyncedFromDiscordAt || ""
+  };
+}
+
+function formToEmbedTemplate(body = {}) {
+  const fields = [];
+  for (let i = 0; i < 25; i++) {
+    const name = String(body[`fieldName_${i}`] || "").trim();
+    const value = String(body[`fieldValue_${i}`] || "").trim();
+    const inline = body[`fieldInline_${i}`] === "on" || body[`fieldInline_${i}`] === "true";
+    if (name || value) fields.push({ name: name || "Field", value: value || "-", inline });
+  }
+
+  let rawComponents = [];
+  try {
+    const raw = String(body.componentsJson || "").trim();
+    if (raw) rawComponents = JSON.parse(raw);
+    if (!Array.isArray(rawComponents)) rawComponents = [];
+  } catch {
+    rawComponents = [];
+  }
+
+  const embed = {
+    title: String(body.title || "").slice(0, 256),
+    description: String(body.description || "").slice(0, 4096),
+    color: hexToIntColor(body.color || "#5865F2"),
+    url: String(body.url || "").trim() || undefined,
+    author: String(body.authorName || "").trim() ? {
+      name: String(body.authorName || "").slice(0, 256),
+      icon_url: String(body.authorIconUrl || "").trim() || undefined,
+      url: String(body.authorUrl || "").trim() || undefined
+    } : undefined,
+    thumbnail: String(body.thumbnailUrl || "").trim() ? { url: String(body.thumbnailUrl || "").trim() } : undefined,
+    image: String(body.imageUrl || "").trim() ? { url: String(body.imageUrl || "").trim() } : undefined,
+    footer: String(body.footerText || "").trim() ? {
+      text: String(body.footerText || "").slice(0, 2048),
+      icon_url: String(body.footerIconUrl || "").trim() || undefined
+    } : undefined,
+    timestamp: body.timestampEnabled === "on" ? new Date().toISOString() : undefined,
+    fields
+  };
+
+  for (const key of Object.keys(embed)) {
+    if (embed[key] === undefined || embed[key] === "") delete embed[key];
+  }
+  if (!embed.fields || !embed.fields.length) delete embed.fields;
+
+  return {
+    name: normalizeEmbedTemplateName(body.templateName || "custom-embed"),
+    feature: String(body.feature || "Custom").trim() || "Custom",
+    status: String(body.status || "Aktif").trim() || "Aktif",
+    protected: body.protected === "on",
+    defaultChannelId: parseDiscordId(body.defaultChannelId || body.destinationChannelId || ""),
+    lastMessageId: parseDiscordId(body.lastMessageId || ""),
+    sourceChannelId: parseDiscordId(body.sourceChannelId || ""),
+    sourceMessageId: parseDiscordId(body.sourceMessageId || ""),
+    content: String(body.content || "").slice(0, 2000),
+    embed,
+    components: rawComponents,
+    lastEditedAt: new Date().toISOString(),
+    lastSentAt: String(body.lastSentAt || ""),
+    lastSyncedFromDiscordAt: String(body.lastSyncedFromDiscordAt || "")
+  };
+}
+
+function templateToEmbedBuilder(template = {}) {
+  const embed = template.embed || {};
+  const builder = new EmbedBuilder();
+  if (embed.color !== undefined) builder.setColor(Number(embed.color));
+  if (embed.title) builder.setTitle(String(embed.title).slice(0, 256));
+  if (embed.description) builder.setDescription(String(embed.description).slice(0, 4096));
+  if (embed.url) builder.setURL(String(embed.url));
+  if (embed.author?.name) builder.setAuthor({
+    name: String(embed.author.name).slice(0, 256),
+    iconURL: embed.author.icon_url || embed.author.iconURL || undefined,
+    url: embed.author.url || undefined
+  });
+  const thumb = embed.thumbnail?.url || embed.thumbnail;
+  if (thumb) builder.setThumbnail(String(thumb));
+  const img = embed.image?.url || embed.image;
+  if (img) builder.setImage(String(img));
+  if (embed.footer?.text) builder.setFooter(makeOTFooterData(
+    String(embed.footer.text).slice(0, 2048),
+    embed.footer.icon_url || embed.footer.iconURL || ""
+  ));
+  if (embed.timestamp) builder.setTimestamp(new Date(embed.timestamp));
+  const fields = Array.isArray(embed.fields) ? embed.fields.slice(0, 25).filter((f) => f && (f.name || f.value)) : [];
+  if (fields.length) builder.addFields(fields.map((f) => ({
+    name: String(f.name || "Field").slice(0, 256),
+    value: String(f.value || "-").slice(0, 1024),
+    inline: Boolean(f.inline)
+  })));
+  return builder;
+}
+
+function getTemplateField(template = {}, pathKey = "") {
+  const embed = template.embed || {};
+  if (pathKey === "color") return intToHexColor(embed.color);
+  if (pathKey === "title") return embed.title || "";
+  if (pathKey === "description") return embed.description || "";
+  if (pathKey === "url") return embed.url || "";
+  if (pathKey === "authorName") return embed.author?.name || "";
+  if (pathKey === "authorIconUrl") return embed.author?.icon_url || embed.author?.iconURL || "";
+  if (pathKey === "authorUrl") return embed.author?.url || "";
+  if (pathKey === "thumbnailUrl") return embed.thumbnail?.url || "";
+  if (pathKey === "imageUrl") return embed.image?.url || "";
+  if (pathKey === "footerText") return embed.footer?.text || "";
+  if (pathKey === "footerIconUrl") return embed.footer?.icon_url || embed.footer?.iconURL || "";
+  return "";
+}
+
+function renderSyncInput(name, label, value = "", helper = "", type = "text") {
+  return `<div class="sync-field"><label>${escapeHtml(label)}</label><input type="${escapeHtml(type)}" name="${escapeHtml(name)}" value="${escapeHtml(value || "")}" placeholder="${escapeHtml(helper || "")}"/><small>${escapeHtml(helper || "")}</small></div>`;
+}
+
+function renderSyncTextarea(name, label, value = "", helper = "", rows = 8) {
+  return `<div class="sync-field full"><label>${escapeHtml(label)}</label><textarea name="${escapeHtml(name)}" rows="${rows}" placeholder="${escapeHtml(helper || "")}">${escapeHtml(value || "")}</textarea><small>${escapeHtml(helper || "")}</small></div>`;
+}
+
+function renderEmbedSyncPage(req, opts = {}) {
+  const cfg = readConfigFile();
+  const guild = getDashboardGuild();
+  const data = readEmbedTemplatesFile();
+  const templates = data.templates || {};
+  const selectedName = normalizeEmbedTemplateName(req.query.template || opts.selectedName || Object.keys(templates)[0] || "new-template");
+  const selected = opts.importedTemplate || templates[selectedName] || embedDataToTemplate(selectedName, "Custom", "", { color: 0x5865F2, title: "", description: "" }, {});
+  const channelHtml = guild ? channelOptions(guild, selected.defaultChannelId || "", "text") : "";
+  const templateNames = Object.keys(templates).sort((a,b)=>a.localeCompare(b));
+  const fields = Array.isArray(selected.embed?.fields) ? selected.embed.fields.slice(0, 25) : [];
+  while (fields.length < 3) fields.push({ name: "", value: "", inline: false });
+  const rawJson = JSON.stringify({ content: selected.content || "", embed: selected.embed || {}, components: selected.components || [] }, null, 2);
+  const componentsJson = JSON.stringify(selected.components || [], null, 2);
+
+  const templateCards = templateNames.length ? templateNames.map((name) => {
+    const t = templates[name] || {};
+    const status = t.protected ? "Protected" : (t.status || "Aktif");
+    const feature = t.feature || "Custom";
+    return `<div class="sync-template-card ${t.protected ? "protected" : ""}" data-template-card data-name="${escapeHtml(name.toLowerCase())}" data-feature="${escapeHtml(String(feature).toLowerCase())}" data-status="${escapeHtml(String(status).toLowerCase())}">
+      <div><b>${escapeHtml(name)}</b><span>${escapeHtml(feature)} • ${escapeHtml(status)}${t.lastSentAt ? " • pernah dikirim" : ""}</span></div>
+      <div class="sync-mini-actions">
+        <a class="btn secondary" href="/embed-sync?template=${encodeURIComponent(name)}">Edit</a>
+        <form method="post" action="/embed-sync/duplicate" style="display:inline"><input type="hidden" name="templateName" value="${escapeHtml(name)}"><button class="btn secondary" type="submit">Duplicate</button></form>
+      </div>
+    </div>`;
+  }).join("") : `<div class="premium-form-note">Belum ada template custom. Import dari Discord atau simpan template pertama.</div>`;
+
+  return dashboardLayout(`
+    <style>
+      .sync-hero{border:1px solid rgba(255,255,255,.11);border-radius:32px;padding:26px;background:linear-gradient(135deg,rgba(124,92,255,.18),rgba(34,211,238,.10)),rgba(255,255,255,.045);box-shadow:0 24px 90px rgba(0,0,0,.26);margin-bottom:24px}.sync-hero h2{margin:0;font-size:32px;letter-spacing:-.9px}.sync-hero p{color:rgba(248,251,255,.64);line-height:1.65;max-width:980px}.sync-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(360px,.65fr);gap:24px;align-items:start}.sync-card{border:1px solid rgba(255,255,255,.11);border-radius:28px;background:linear-gradient(180deg,rgba(255,255,255,.075),rgba(255,255,255,.04));box-shadow:0 22px 80px rgba(0,0,0,.22);padding:24px;margin-bottom:22px}.sync-card h3{margin:0 0 8px;color:#fff;font-size:21px}.sync-card p{color:rgba(248,251,255,.60);line-height:1.55}.sync-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:16px}.sync-field.full{grid-column:1/-1}.sync-field label{display:block;color:rgba(248,251,255,.75);font-weight:950;font-size:14px;margin-bottom:8px}.sync-field input,.sync-field textarea,.sync-field select{width:100%;min-height:54px;border-radius:18px;border:1px solid rgba(255,255,255,.13);background:rgba(4,8,18,.70);color:#f8fbff;padding:14px 15px;font-size:15px;outline:none}.sync-field textarea{min-height:220px;resize:vertical;line-height:1.62}.sync-field small{display:block;color:rgba(248,251,255,.44);font-size:12px;margin-top:7px;line-height:1.45}.sync-field input:focus,.sync-field textarea:focus,.sync-field select:focus{border-color:rgba(139,180,255,.70);box-shadow:0 0 0 4px rgba(139,180,255,.12)}.sync-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}.sync-actions .btn{min-height:46px}.sync-template-card{display:flex;justify-content:space-between;gap:14px;align-items:center;padding:15px;border:1px solid rgba(255,255,255,.11);background:rgba(255,255,255,.045);border-radius:20px;margin-bottom:10px}.sync-template-card.protected{border-color:rgba(255,209,102,.20);background:rgba(255,209,102,.055)}.sync-template-card b{display:block;color:#fff}.sync-template-card span{display:block;color:rgba(248,251,255,.55);font-size:12px;margin-top:5px}.sync-mini-actions{display:flex;gap:8px;flex-wrap:wrap}.sync-preview{position:sticky;top:22px}.discord-preview{background:#313338;border-radius:18px;padding:18px;border:1px solid rgba(255,255,255,.08)}.discord-head{display:flex;gap:10px;align-items:center;color:#f2f3f5;font-weight:950;margin-bottom:10px}.discord-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#7c5cff,#22d3ee)}.discord-content{white-space:pre-wrap;color:#dbdee1;margin:10px 0}.discord-embed{background:#2b2d31;border-left:5px solid ${escapeHtml(getTemplateField(selected,"color"))};border-radius:8px;padding:14px;max-width:540px}.discord-author{font-size:12px;font-weight:900;color:#f2f3f5;margin-bottom:8px}.discord-title{font-weight:1000;color:#00a8fc;margin-bottom:8px}.discord-desc{white-space:pre-wrap;color:#dbdee1;line-height:1.56}.discord-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:12px}.discord-fields div{background:rgba(255,255,255,.04);border-radius:8px;padding:9px}.discord-fields b{display:block;color:#fff;font-size:12px}.discord-fields span{display:block;color:#b5bac1;font-size:12px;white-space:pre-wrap;margin-top:4px}.discord-img{margin-top:12px;border:1px dashed rgba(255,255,255,.15);border-radius:12px;overflow:hidden;min-height:70px;display:grid;place-items:center;color:#949ba4;font-size:12px}.discord-img img{width:100%;max-height:260px;object-fit:cover}.discord-footer{margin-top:12px;color:#949ba4;font-size:12px}.sync-advanced{border:1px solid rgba(255,255,255,.11);border-radius:22px;background:rgba(0,0,0,.18);padding:12px;margin-top:18px}.sync-advanced summary{cursor:pointer;color:#fff;font-weight:1000;padding:8px 10px}.sync-readonly{opacity:.78;pointer-events:none}.sync-badge{display:inline-flex;padding:7px 10px;border-radius:999px;background:rgba(45,212,191,.11);border:1px solid rgba(45,212,191,.22);font-size:12px;font-weight:1000;color:#8cf8e3}.sync-filter{margin:10px 0 16px}.sync-filter-grid{display:grid;grid-template-columns:1fr 220px;gap:12px;align-items:center}.control-activity{display:grid;gap:10px}.activity-row{display:grid;grid-template-columns:86px 1fr auto;gap:12px;align-items:center;padding:13px;border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.04);border-radius:18px}.activity-row b{color:#fff}.activity-row span{color:rgba(248,251,255,.58);font-size:12px}.activity-tag{padding:7px 9px;border-radius:999px;background:rgba(117,167,255,.10);border:1px solid rgba(117,167,255,.18);font-size:11px;font-weight:1000;color:#dce7ff}@media(max-width:1180px){.sync-grid{grid-template-columns:1fr}.sync-preview{position:relative;top:auto}.sync-form-grid{grid-template-columns:1fr}.discord-fields{grid-template-columns:1fr}}
+    </style>
+    <div class="sync-hero">
+      <span class="sync-badge">Discord ↔ Dashboard Full Sync</span>
+      <h2>🔁 Embed Sync Manager • Discord ↔ Dashboard</h2>
+      <p>Import embed dari Discord, edit semua bagian di dashboard, simpan template, kirim baru, atau update pesan embed lama tanpa spam pesan baru. Preview dulu, data lama aman, dan Raw JSON disembunyikan di Advanced.</p>
+    </div>
+    ${opts.notice ? `<div class="alert">${escapeHtml(opts.notice)}</div>` : ""}
+    ${opts.error ? `<div class="alert danger">${escapeHtml(opts.error)}</div>` : ""}
+
+    <div class="sync-grid">
+      <main>
+        <section class="sync-card">
+          <h3>📥 Import Embed from Discord</h3>
+          <p>Masukkan link pesan Discord atau Channel ID + Message ID. Import tidak langsung menimpa template lama; hasilnya masuk preview dulu.</p>
+          <form method="post" action="/embed-sync/import">
+            <div class="sync-form-grid">
+              ${renderSyncInput("messageLink", "Link Pesan Discord", "", "Opsional. Bisa paste link message Discord.")}
+              <div class="sync-field"><label>Pilih Channel</label><select name="channelId"><option value="">Pilih channel...</option>${channelHtml}</select><small>Atau isi Channel ID manual di bawah.</small></div>
+              ${renderSyncInput("manualChannelId", "Channel ID Manual", "", "Isi kalau tidak pakai dropdown.")}
+              ${renderSyncInput("messageId", "Message ID", "", "ID pesan yang mau diambil.")}
+              ${renderSyncInput("templateName", "Nama Template Baru", selected.name || "imported-embed", "Aman: tidak overwrite otomatis.")}
+            </div>
+            <div class="sync-actions"><button class="btn" type="submit">📥 Ambil Embed</button><a class="btn secondary" href="/embeds">Embed Editor Lama</a></div>
+          </form>
+        </section>
+
+        <section class="sync-card">
+          <h3>🗂️ Embed Template Manager</h3>
+          <p>Template tersimpan di <code>embed-templates.json</code>. Protected template diberi label dan tidak menyentuh logic Level, Top Aktif/MOTM, atau Cek Poin.</p>
+          <div class="sync-filter-grid">
+            <input class="sync-filter" id="syncTemplateSearch" placeholder="Cari template: juragan, welcome, saran, mabar..." style="width:100%;min-height:52px;border-radius:18px;background:rgba(4,8,18,.70);border:1px solid rgba(255,255,255,.13);color:#fff;padding:13px 15px">
+            <select id="syncFeatureFilter" style="width:100%;min-height:52px;border-radius:18px;background:rgba(4,8,18,.70);border:1px solid rgba(255,255,255,.13);color:#fff;padding:13px 15px">
+              <option value="">Semua fitur</option><option value="juragan">Juragan</option><option value="donatur">Donatur</option><option value="welcome">Welcome</option><option value="curhat">Curhat</option><option value="saran">Saran</option><option value="mabar">Mabar</option><option value="system">System</option><option value="protected">Protected</option>
+            </select>
+          </div>
+          <div id="syncTemplateList">${templateCards}</div>
+        </section>
+
+        <section class="sync-card">
+          <h3>✏️ Editor Template</h3>
+          <p>Form edit besar dan lega. Semua field embed utama bisa diedit. Raw JSON dan components ada di Advanced supaya tidak bikin pusing.</p>
+          <form method="post" action="/embed-sync/save" id="syncEditorForm">
+            <div class="sync-form-grid">
+              ${renderSyncInput("templateName", "Nama Template", selected.name || "new-template", "Contoh: welcome-panel atau juragan-boost")}
+              ${renderSyncInput("feature", "Fitur / Kategori", selected.feature || "Custom", "Juragan, Donatur, Welcome, Saran, Mabar, Panel, System")}
+              <div class="sync-field"><label>Status</label><select name="status"><option ${selected.status === "Aktif" ? "selected" : ""}>Aktif</option><option ${selected.status === "Draft" ? "selected" : ""}>Draft</option><option ${selected.status === "Belum lengkap" ? "selected" : ""}>Belum lengkap</option><option ${selected.status === "Protected" ? "selected" : ""}>Protected</option></select><small>Status hanya untuk dashboard/template manager.</small></div>
+              <div class="sync-field"><label>Target Channel Default</label><select name="defaultChannelId"><option value="">Pilih channel...</option>${channelHtml}</select><small>Channel default untuk kirim embed.</small></div>
+              ${renderSyncInput("lastMessageId", "Message ID terakhir", selected.lastMessageId || "", "Dipakai untuk update pesan Discord lama.")}
+              ${renderSyncInput("sourceChannelId", "Channel asal import", selected.sourceChannelId || "", "Terisi otomatis setelah import.")}
+              ${renderSyncInput("sourceMessageId", "Message ID asal import", selected.sourceMessageId || "", "Terisi otomatis setelah import.")}
+              ${renderSyncTextarea("content", "Message Content", selected.content || "", "Teks biasa di atas embed. Support {user}, {server}, {memberCount}, mention role/user/channel.", 5)}
+              ${renderSyncInput("title", "Title", getTemplateField(selected,"title"), "Maks 256 karakter.")}
+              ${renderSyncInput("url", "Title URL", getTemplateField(selected,"url"), "Opsional: link saat title diklik.")}
+              ${renderSyncInput("color", "Color HEX", getTemplateField(selected,"color"), "Contoh: #7C6DFF", "color")}
+              ${renderSyncTextarea("description", "Description", getTemplateField(selected,"description"), "Isi utama embed. Maks Discord 4096 karakter.", 10)}
+              ${renderSyncInput("authorName", "Author name", getTemplateField(selected,"authorName"), "Nama kecil di atas embed.")}
+              ${renderSyncInput("authorIconUrl", "Author icon URL", getTemplateField(selected,"authorIconUrl"), "URL icon author.")}
+              ${renderSyncInput("authorUrl", "Author URL", getTemplateField(selected,"authorUrl"), "Opsional.")}
+              ${renderSyncInput("thumbnailUrl", "Thumbnail URL", getTemplateField(selected,"thumbnailUrl"), "Gambar kecil kanan atas.")}
+              ${renderSyncInput("imageUrl", "Image URL", getTemplateField(selected,"imageUrl"), "Gambar besar di bawah embed.")}
+              ${renderSyncInput("footerText", "Footer text", getTemplateField(selected,"footerText"), "Teks footer embed.")}
+              ${renderSyncInput("footerIconUrl", "Footer icon URL", getTemplateField(selected,"footerIconUrl"), "Opsional.")}
+              <div class="sync-field"><label>Timestamp</label><label class="premium-toggle ${selected.embed?.timestamp ? "on" : ""}"><input type="checkbox" name="timestampEnabled" ${selected.embed?.timestamp ? "checked" : ""}> <span class="dot"></span> Aktif</label><small>Menampilkan waktu di footer.</small></div>
+            </div>
+            <div class="sync-card" style="box-shadow:none;margin-top:22px">
+              <h3>🧩 Fields</h3>
+              <p>Tambah/edit field. Kosongkan field kalau tidak dipakai.</p>
+              ${fields.map((f,i)=>`<div class="sync-form-grid" style="border-top:1px solid rgba(255,255,255,.08);padding-top:16px;margin-top:14px">
+                ${renderSyncInput(`fieldName_${i}`, `Field ${i+1} Name`, f.name || "", "Nama field.")}
+                ${renderSyncTextarea(`fieldValue_${i}`, `Field ${i+1} Value`, f.value || "", "Value field.", 3)}
+                <div class="sync-field"><label>Inline</label><label class="premium-toggle ${f.inline ? "on" : ""}"><input type="checkbox" name="fieldInline_${i}" ${f.inline ? "checked" : ""}> <span class="dot"></span> Inline</label><small>Kalau aktif field bisa sejajar.</small></div>
+              </div>`).join("")}
+            </div>
+            <details class="sync-advanced">
+              <summary>Advanced / Raw JSON <span style="color:rgba(248,251,255,.45);font-size:12px">disembunyikan default</span></summary>
+              ${renderSyncTextarea("componentsJson", "Buttons / Components JSON", componentsJson, "Kalau import embed dengan tombol, data lama disimpan di sini. Edit hati-hati.", 8)}
+              ${renderSyncTextarea("rawJsonPreview", "Raw JSON Preview", rawJson, "Copy JSON untuk backup. Tidak wajib diedit.", 10)}
+            </details>
+            <div class="sync-actions">
+              <button class="btn" type="submit">💾 Simpan Template</button>
+              <button class="btn secondary" type="submit" formaction="/embed-sync/send">🚀 Kirim ke Discord</button>
+              <button class="btn secondary" type="submit" formaction="/embed-sync/update">🔄 Update Pesan Discord</button>
+              <button class="btn secondary" type="button" id="syncCopyJson">📋 Copy JSON</button>
+              <a class="btn secondary" href="/embed-sync">Reset Preview</a>
+              <a class="btn secondary" href="/">Kembali</a>
+            </div>
+          </form>
+        </section>
+      </main>
+      <aside class="sync-preview">
+        <section class="sync-card">
+          <h3>👀 Discord Preview</h3>
+          <p>Preview mirip Discord. Update otomatis saat form diedit.</p>
+          <div class="discord-preview" id="syncDiscordPreview">
+            <div class="discord-head"><div class="discord-avatar"></div><div>Pak RW <span style="font-size:11px;color:#949ba4;font-weight:800">BOT</span><br><small style="color:#949ba4">Preview dashboard</small></div></div>
+            <div class="discord-content" data-prev="content">${escapeHtml(selected.content || "")}</div>
+            <div class="discord-embed" data-prev="embed" style="border-left-color:${escapeHtml(getTemplateField(selected,"color"))}">
+              <div class="discord-author" data-prev="author">${escapeHtml(getTemplateField(selected,"authorName"))}</div>
+              <div class="discord-title" data-prev="title">${escapeHtml(getTemplateField(selected,"title") || "Title embed")}</div>
+              <div class="discord-desc" data-prev="description">${escapeHtml(getTemplateField(selected,"description") || "Description akan tampil di sini...")}</div>
+              <div class="discord-fields" data-prev="fields">${(Array.isArray(selected.embed?.fields)?selected.embed.fields:[]).slice(0,6).map(f=>`<div><b>${escapeHtml(f.name || "Field")}</b><span>${escapeHtml(f.value || "-")}</span></div>`).join("")}</div>
+              <div class="discord-img" data-prev="image">${getTemplateField(selected,"imageUrl") ? `<img src="${escapeHtml(getTemplateField(selected,"imageUrl"))}">` : "Image preview"}</div>
+              <div class="discord-footer" data-prev="footer">${escapeHtml(getTemplateField(selected,"footerText") || "Footer preview")}</div>
+            </div>
+          </div>
+        </section>
+      </aside>
+    </div>
+    <script>
+    (() => {
+      const form = document.getElementById('syncEditorForm');
+      const listSearch = document.getElementById('syncTemplateSearch');
+      if (listSearch) listSearch.addEventListener('input', () => {
+        const q = listSearch.value.toLowerCase();
+        document.querySelectorAll('.sync-template-card').forEach(card => card.style.display = card.innerText.toLowerCase().includes(q) ? '' : 'none');
+      });
+      function get(name){ return form?.querySelector('[name="'+name+'"]')?.value || ''; }
+      function renderFields(){
+        const box = document.querySelector('[data-prev="fields"]'); if (!box) return;
+        let html = '';
+        for(let i=0;i<25;i++){
+          const n = get('fieldName_'+i); const v = get('fieldValue_'+i);
+          if(n || v) html += '<div><b>'+escapeHtmlClient(n||'Field')+'</b><span>'+escapeHtmlClient(v||'-')+'</span></div>';
+        }
+        box.innerHTML = html;
+      }
+      function escapeHtmlClient(x){ return String(x||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])); }
+      function refresh(){
+        if(!form) return;
+        const color = get('color') || '#5865F2';
+        const set = (sel, val) => { const el = document.querySelector(sel); if(el) el.textContent = val || ''; };
+        set('[data-prev="content"]', get('content'));
+        set('[data-prev="author"]', get('authorName'));
+        set('[data-prev="title"]', get('title') || 'Title embed');
+        set('[data-prev="description"]', get('description') || 'Description akan tampil di sini...');
+        set('[data-prev="footer"]', get('footerText') || 'Footer preview');
+        const emb = document.querySelector('[data-prev="embed"]'); if(emb) emb.style.borderLeftColor = color;
+        const img = document.querySelector('[data-prev="image"]'); if(img){ const u=get('imageUrl'); img.innerHTML = u ? '<img src="'+escapeHtmlClient(u)+'">' : 'Image preview'; }
+        renderFields();
+      }
+      if(form) form.addEventListener('input', refresh);
+      const copy = document.getElementById('syncCopyJson');
+      if(copy) copy.addEventListener('click', async () => {
+        const data = { content:get('content'), embed:{ title:get('title'), description:get('description'), color:get('color'), url:get('url'), author:{name:get('authorName'), icon_url:get('authorIconUrl'), url:get('authorUrl')}, thumbnail:{url:get('thumbnailUrl')}, image:{url:get('imageUrl')}, footer:{text:get('footerText'), icon_url:get('footerIconUrl')} } };
+        try{ await navigator.clipboard.writeText(JSON.stringify(data,null,2)); copy.textContent='Tersalin'; }catch{ copy.textContent='Copy manual'; }
+        setTimeout(()=>copy.textContent='📋 Copy JSON', 1000);
+      });
+    })();
+    </script>
+  `, "embedsync");
+}
+
+function selectField(name, label, optionsHtml, placeholder = "Pilih data dari Discord") {
+  return `<div>
+    <label>${escapeHtml(label)}</label>
+    <select name="${escapeHtml(name)}">
+      <option value="">${escapeHtml(placeholder)}</option>
+      ${optionsHtml}
+    </select>
+    <small class="setting-helper">Dashboard menampilkan nama role/channel. Config tetap menyimpan ID agar Discord aman.</small>
+  </div>`;
+}
+
+
+function dashboardRoleLabel(roleId = "") {
+  const id = parseDiscordId(roleId);
+  const guild = typeof getDashboardGuild === "function" ? getDashboardGuild() : null;
+  if (!id) return "Belum diatur";
+  const role = guild?.roles?.cache?.get(id);
+  return role ? `@${role.name}` : `Role ID: ${id}`;
+}
+
+function dashboardChannelLabel(channelId = "") {
+  const id = parseDiscordId(channelId);
+  const guild = typeof getDashboardGuild === "function" ? getDashboardGuild() : null;
+  if (!id) return "Belum diatur";
+  const channel = guild?.channels?.cache?.get(id);
+  return channel ? `#${channel.name}` : `Channel ID: ${id}`;
+}
+
+function dashboardDiscordPreviewText(text = "") {
+  const guild = typeof getDashboardGuild === "function" ? getDashboardGuild() : null;
+  let out = String(text || "");
+
+  if (guild) {
+    out = out.replace(/<@&(\d{15,25})>/g, (match, id) => {
+      const role = guild.roles.cache.get(id);
+      return role ? `@${role.name}` : match;
+    });
+    out = out.replace(/<#(\d{15,25})>/g, (match, id) => {
+      const channel = guild.channels.cache.get(id);
+      return channel ? `#${channel.name}` : match;
+    });
+  }
+
+  return out;
+}
+
+function renderDiscordManager(req, saved = false, error = "", actionMessage = "") {
+  const cfg = readConfigFile();
+  const guild = getDashboardGuild();
+
+  const guildInfo = guild
+    ? `Terhubung ke **${guild.name}** dengan ${guild.memberCount || "?"} member.`
+    : "Bot belum membaca server. Pastikan bot sudah online dan masuk server.";
+
+  return dashboardLayout(`
+    <div class="topbar">
+      <div class="title">
+        <h2>Discord Manager</h2>
+        <p>Dashboard ini langsung membaca channel dan role dari Discord lewat bot Pak RW.</p>
+      </div>
+      <div class="pill">🔗 ${guild ? escapeHtml(guild.name) : "No Guild"}</div>
+    </div>
+
+    ${saved ? `<div class="alert">✅ Pengaturan Discord berhasil disimpan ke config.json.</div>` : ""}
+    ${error ? `<div class="alert danger">❌ ${escapeHtml(error)}</div>` : ""}
+    ${actionMessage ? `<div class="alert">${escapeHtml(actionMessage)}</div>` : ""}
+
+    <section class="grid">
+      <div class="card"><h3>Server</h3><p class="big">${guild ? escapeHtml(guild.name) : "-"}</p><div class="sub">Server aktif</div></div>
+      <div class="card"><h3>Channels</h3><p class="big">${guild ? guild.channels.cache.size : 0}</p><div class="sub">Dibaca dari Discord</div></div>
+      <div class="card"><h3>Roles</h3><p class="big">${guild ? guild.roles.cache.size : 0}</p><div class="sub">Dropdown otomatis</div></div>
+      <div class="card"><h3>Members</h3><p class="big">${guild ? (guild.memberCount || 0) : 0}</p><div class="sub">Bisa pakai mention/ID</div></div>
+    </section>
+
+    <form method="post" action="/discord/save" class="panel">
+      <h3>📌 Pilih Channel dari Discord</h3>
+      <div class="formgrid">
+        ${selectField("aiChannelId", "Channel AI Pak RW", channelOptions(guild, cfg.aiChannelId, "text"))}
+        ${selectField("curhatChannelId", "Channel Curhat", channelOptions(guild, cfg.curhatChannelId, "text"))}
+        ${selectField("anonymousCurhatChannelId", "Channel Curhat Anonim", channelOptions(guild, cfg.anonymousCurhatChannelId, "text"))}
+        ${selectField("suggestionChannelId", "Channel Saran", channelOptions(guild, cfg.suggestionChannelId, "text"))}
+        ${selectField("chatWargaChannelId", "Channel Chat Warga", channelOptions(guild, cfg.chatWargaChannelId, "text"))}
+        ${selectField("levelChannelId", "Channel Level OT", channelOptions(guild, cfg.levelChannelId, "text"))}
+        ${selectField("boostChannelId", "Channel Boost/Juragan", channelOptions(guild, cfg.juragan?.boostChannelId, "text"))}
+        ${selectField("ticketChannelId", "Channel Ticket", channelOptions(guild, cfg.ticketChannelId, "text"))}
+      </div>
+
+      <h3 style="margin-top:28px">💎 Pilih Role dari Discord</h3>
+      <div class="formgrid">
+        ${selectField("juraganRoleId", "Role Juragan", roleOptions(guild, cfg.juragan?.roleId))}
+        ${selectField("donaturRoleId", "Role Donatur", roleOptions(guild, cfg.donaturRoleId))}
+        ${selectField("level100RoleId", "Role Reward Level 100", roleOptions(guild, cfg.level100RoleId))}
+      </div>
+
+      <div class="actions">
+        <button class="btn" type="submit">💾 Simpan Pilihan Discord</button>
+        <a class="btn secondary" href="/config">Edit Manual Config</a>
+      </div>
+    </form>
+
+    <section class="panel">
+      <h3>💸 Kasih Role Donatur dari Dashboard</h3>
+      <p style="color:var(--muted); margin-top:-6px">Masukkan mention atau ID member. Contoh: <b>@KADES</b> atau <b>150xxxxxxxx</b>. Durasi dihitung otomatis dari nominal.</p>
+      <form method="post" action="/discord/grant-donatur">
+        <div class="formgrid">
+          ${configInput("memberInput", "Mention / ID Member", "")}
+          ${configInput("nominal", "Nominal Donasi", "100k")}
+        </div>
+        <div class="actions">
+          <button class="btn" type="submit">✅ Kasih Role Donatur</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h3>🧠 Catatan</h3>
+      <div class="commands">
+        <div class="cmd"><b>Role Dropdown</b><span>Ambil langsung dari role server Discord</span></div>
+        <div class="cmd"><b>Channel Dropdown</b><span>Ambil langsung dari channel server Discord</span></div>
+        <div class="cmd"><b>Member</b><span>Pakai mention/ID karena member search butuh query khusus</span></div>
+        <div class="cmd"><b>Permission</b><span>Bot tetap harus punya Manage Roles dan role bot di atas role target</span></div>
+      </div>
+    </section>
+  `, "discord");
+}
+
+
+
+function safeArrayMap(collection, mapper) {
+  try {
+    return Array.from(collection || []).map(mapper);
+  } catch {
+    return [];
+  }
+}
+
+function readGodLevelRows(guildId, limit = 10, ownerId = "") {
+  try {
+    if (typeof readLevelData !== "function") return [];
+    const data = readLevelData();
+    return Object.values(data.users || {})
+      .filter((u) => !guildId || u.guildId === guildId)
+      .filter((u) => !shouldExcludeOwnerFromLeaderboard(ownerId, u.userId))
+      .sort((a, b) => {
+        const at = typeof getTotalLevelPoints === "function" ? getTotalLevelPoints(a) : ((a.chat || 0) + (a.voice || 0));
+        const bt = typeof getTotalLevelPoints === "function" ? getTotalLevelPoints(b) : ((b.chat || 0) + (b.voice || 0));
+        return bt - at;
+      })
+      .slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
+function readGodTempRoles(guildId, limit = 20) {
+  try {
+    if (typeof readTempRoles !== "function") return [];
+    const data = readTempRoles();
+    return (data.roles || [])
+      .filter((r) => !guildId || r.guildId === guildId)
+      .sort((a, b) => (a.expiresAt || 0) - (b.expiresAt || 0))
+      .slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
+function formatGodTime(ts) {
+  if (!ts) return "-";
+  try {
+    return new Date(ts).toLocaleString("id-ID", {
+      timeZone: "Asia/Jakarta",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  } catch {
+    return String(ts);
+  }
+}
+
+function renderControlCenter(req, saved = false, error = "", actionMessage = "") {
+  const cfg = readConfigFile();
+  const guild = getDashboardGuild ? getDashboardGuild() : client.guilds.cache.first();
+  const textOptions = guild ? channelOptions(guild, "", "text") : "";
+
+  return dashboardLayout(`
+    <div class="hero-banner">
+      <h2>🧠 GOD MODE Control Center</h2>
+      <p>Panel pusat buat kontrol Pak RW seperti bot besar: kirim pengumuman, quick embed, cek koneksi Discord, dan akses action penting dari satu tempat.</p>
+      <div class="mini-row">
+        <span class="mini-pill">🤖 Bot: ${escapeHtml(client?.user?.tag || "Belum online")}</span>
+        <span class="mini-pill">🏠 Server: ${escapeHtml(guild?.name || "-")}</span>
+        <span class="mini-pill">💎 Donatur Role: ${escapeHtml(dashboardRoleLabel(cfg.donaturRoleId))}</span>
+        <span class="mini-pill">🔝 Level Channel: ${escapeHtml(cfg.levelChannelId || "-")}</span>
+      </div>
+    </div>
+
+    ${saved ? `<div class="alert">✅ Action berhasil dijalankan.</div>` : ""}
+    ${error ? `<div class="alert danger">❌ ${escapeHtml(error)}</div>` : ""}
+    ${actionMessage ? `<div class="alert">${escapeHtml(actionMessage)}</div>` : ""}
+
+    <div class="two-col">
+      <section class="panel">
+        <h3>📣 Quick Send Message</h3>
+        <p style="color:var(--muted); margin-top:-6px">Kirim pesan langsung ke channel Discord dari dashboard.</p>
+        <form method="post" action="/control/send-message">
+          <div class="formgrid">
+            ${selectField("channelId", "Pilih Channel", textOptions, "Pilih channel tujuan")}
+            ${configInput("title", "Judul Embed (opsional)", "")}
+          </div>
+          <div style="margin-top:14px">
+            <label>Isi Pesan</label>
+            <textarea name="message" placeholder="Tulis pengumuman / pesan dashboard di sini..."></textarea>
+          </div>
+          <div class="formgrid" style="margin-top:14px">
+            ${configInput("color", "Warna Embed", "#7C5CFF")}
+            ${configInput("image", "Image/GIF URL (opsional)", "")}
+          </div>
+          <div class="actions">
+            <button class="btn" type="submit">🚀 Kirim ke Discord</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel">
+        <h3>⚡ Quick Actions</h3>
+        <div class="commands">
+          <a class="cmd" href="/discord"><b>🔗 Discord Manager</b><span>Pilih role/channel langsung</span></a>
+          <a class="cmd" href="/embeds"><b>🎨 Embeds & Texts</b><span>Edit semua embed</span></a>
+          <a class="cmd" href="/analytics"><b>📊 Analytics</b><span>Lihat statistik server</span></a>
+          <a class="cmd" href="/data-center"><b>🗄️ Data Center</b><span>Cek level dan temp role</span></a>
+          <a class="cmd" href="/config"><b>⚙️ Config</b><span>Edit config utama</span></a>
+          <a class="cmd" href="/commands"><b>⌨️ Commands</b><span>Lihat command bot</span></a>
+        </div>
+      </section>
+    </div>
+
+    <section class="panel">
+      <h3>🧩 Module Status</h3>
+      <div class="commands">
+        <div class="cmd"><b>AI Pak RW</b><span>${escapeHtml(cfg.ai?.openRouterModel || "-")}</span></div>
+        <div class="cmd"><b>Donatur System</b><span>${cfg.donaturRoleId ? "Aktif" : "Belum isi role"}</span></div>
+        <div class="cmd"><b>Level System</b><span>${cfg.levelChannelId ? "Aktif" : "Belum isi channel"}</span></div>
+        <div class="cmd"><b>Juragan Boost</b><span>${cfg.juragan?.enabled ? "Aktif" : "Nonaktif"}</span></div>
+        <div class="cmd"><b>Curhat Anonim</b><span>${cfg.anonymousCurhatChannelId ? "Aktif" : "Belum isi channel"}</span></div>
+        <div class="cmd"><b>Dashboard Password</b><span>${process.env.DASHBOARD_PASSWORD ? "Custom" : "Default"}</span></div>
+      </div>
+    </section>
+  `, "control");
+}
+
+function renderAnalyticsPage(req) {
+  const cfg = readConfigFile();
+  const guild = getDashboardGuild ? getDashboardGuild() : client.guilds.cache.first();
+  const levelRows = readGodLevelRows(guild?.id, 10, guild?.ownerId);
+  const tempRoles = readGodTempRoles(guild?.id, 8);
+
+  const textChannels = guild ? guild.channels.cache.filter((c) => c.type === ChannelType.GuildText).size : 0;
+  const voiceChannels = guild ? guild.channels.cache.filter((c) => c.type === ChannelType.GuildVoice).size : 0;
+  const roles = guild ? guild.roles.cache.size : 0;
+
+  const topRowsHtml = levelRows.length
+    ? levelRows.map((u, i) => {
+        const info = typeof getLevelInfo === "function" ? getLevelInfo(u) : { current: { level: u.level || 1, name: "Warga" } };
+        const total = typeof getTotalLevelPoints === "function" ? getTotalLevelPoints(u) : ((u.chat || 0) + (u.voice || 0));
+        return `<tr><td>${i + 1}</td><td><@${escapeHtml(u.userId)}</td><td>${escapeHtml(info.current.name)}</td><td>${escapeHtml(info.current.level)}</td><td>${escapeHtml(formatNumber ? formatNumber(total) : total)}</td></tr>`;
+      }).join("")
+    : `<tr><td colspan="5">Belum ada data level.</td></tr>`;
+
+  return dashboardLayout(`
+    <div class="hero-banner">
+      <h2>📊 Analytics Center</h2>
+      <p>Pantau server, fitur, level, role sementara, dan data penting Pak RW dari dashboard.</p>
+      <div class="mini-row">
+        <span class="mini-pill">🏠 ${escapeHtml(guild?.name || "No Guild")}</span>
+        <span class="mini-pill">👥 ${escapeHtml(guild?.memberCount || 0)} Members</span>
+        <span class="mini-pill">#️⃣ ${textChannels} Text</span>
+        <span class="mini-pill">🎙️ ${voiceChannels} Voice</span>
+        <span class="mini-pill">🎭 ${roles} Roles</span>
+      </div>
+    </div>
+
+    <section class="grid">
+      <div class="card"><h3>Members</h3><p class="big">${escapeHtml(guild?.memberCount || 0)}</p><div class="sub">Total member Discord</div></div>
+      <div class="card"><h3>Text Channels</h3><p class="big">${textChannels}</p><div class="sub">Channel text</div></div>
+      <div class="card"><h3>Voice Channels</h3><p class="big">${voiceChannels}</p><div class="sub">Channel voice</div></div>
+      <div class="card"><h3>Temp Roles</h3><p class="big">${tempRoles.length}</p><div class="sub">Role sementara aktif</div></div>
+    </section>
+
+    <div class="two-col">
+      <section class="panel">
+        <h3>🏆 Top Level Warga</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>#</th><th>User</th><th>Rank</th><th>Level</th><th>Total Poin</th></tr></thead>
+            <tbody>${topRowsHtml}</tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3>💎 Temp Role Aktif</h3>
+        <div class="commands">
+          ${tempRoles.length ? tempRoles.map((r) => `<div class="cmd"><b>${escapeHtml(r.roleName || r.roleId)}</b><span>User: ${escapeHtml(r.userId)}<br>Expired: ${escapeHtml(formatGodTime(r.expiresAt))}</span></div>`).join("") : `<div class="cmd"><b>Kosong</b><span>Belum ada role sementara aktif.</span></div>`}
+        </div>
+      </section>
+    </div>
+  `, "analytics");
+}
+
+function renderDataCenter(req, error = "") {
+  const guild = getDashboardGuild ? getDashboardGuild() : client.guilds.cache.first();
+  const levelRows = readGodLevelRows(guild?.id, 50, guild?.ownerId);
+  const tempRoles = readGodTempRoles(guild?.id, 50);
+
+  const levelHtml = levelRows.length
+    ? levelRows.map((u, i) => {
+        const info = typeof getLevelInfo === "function" ? getLevelInfo(u) : { current: { level: u.level || 1, name: "Warga" } };
+        const total = typeof getTotalLevelPoints === "function" ? getTotalLevelPoints(u) : ((u.chat || 0) + (u.voice || 0));
+        return `<tr>
+          <td>${i + 1}</td>
+          <td class="mono">${escapeHtml(u.userId)}</td>
+          <td>${escapeHtml(info.current.name)}</td>
+          <td>${escapeHtml(info.current.level)}</td>
+          <td>${escapeHtml(u.chat || 0)}</td>
+          <td>${escapeHtml(u.voice || 0)}</td>
+          <td>${escapeHtml(total)}</td>
+        </tr>`;
+      }).join("")
+    : `<tr><td colspan="7">Belum ada data level.</td></tr>`;
+
+  const tempHtml = tempRoles.length
+    ? tempRoles.map((r, i) => `<tr>
+        <td>${i + 1}</td>
+        <td class="mono">${escapeHtml(r.userId)}</td>
+        <td>${escapeHtml(r.roleName || r.roleId)}</td>
+        <td>${escapeHtml(formatGodTime(r.givenAt))}</td>
+        <td>${escapeHtml(formatGodTime(r.expiresAt))}</td>
+      </tr>`).join("")
+    : `<tr><td colspan="5">Belum ada data temp role.</td></tr>`;
+
+  return dashboardLayout(`
+    <div class="hero-banner">
+      <h2>🗄️ Data Center</h2>
+      <p>Lihat data level dan role sementara yang tersimpan. Aman buat monitoring tanpa buka file manual.</p>
+      <div class="mini-row">
+        <span class="mini-pill">🔝 Level Rows: ${levelRows.length}</span>
+        <span class="mini-pill">💎 Temp Roles: ${tempRoles.length}</span>
+      </div>
+    </div>
+
+    ${error ? `<div class="alert danger">❌ ${escapeHtml(error)}</div>` : ""}
+
+    <section class="panel">
+      <h3>🔝 Level Data</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>User ID</th><th>Rank</th><th>Level</th><th>Chat</th><th>Voice</th><th>Total</th></tr></thead>
+          <tbody>${levelHtml}</tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3>💎 Temporary Roles</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>User ID</th><th>Role</th><th>Diberikan</th><th>Expired</th></tr></thead>
+          <tbody>${tempHtml}</tbody>
+        </table>
+      </div>
+    </section>
+  `, "data");
+}
+
+
+
+function checkboxInput(name, label, checked) {
+  return `<label style="display:flex;gap:10px;align-items:center;background:rgba(0,0,0,.20);border:1px solid var(--line);padding:13px;border-radius:14px;margin:0">
+    <input type="checkbox" name="${escapeHtml(name)}" ${checked ? "checked" : ""} style="width:auto" />
+    <span>${escapeHtml(label)}</span>
+  </label>`;
+}
+
+function renderModulesPage(req, saved = false, error = "") {
+  const cfg = readConfigFile();
+
+  return dashboardLayout(`
+    <div class="hero-banner">
+      <h2>🧩 Feature Settings</h2>
+      <p>Ubah setting fitur Pak RW langsung dari dashboard: AI, welcome, Juragan, Donatur, Level, Saran, channel, role, dan panel. Dibuat supaya kamu tidak perlu bolak-balik edit file manual.</p>
+      <div class="mini-row">
+        <span class="mini-pill">⚙️ General</span>
+        <span class="mini-pill">🤖 AI</span>
+        <span class="mini-pill">💎 Donatur</span>
+        <span class="mini-pill">🔝 Level</span>
+        <span class="mini-pill">👋 Welcome</span>
+      </div>
+    </div>
+
+    ${saved ? `<div class="alert">✅ Feature Settings berhasil disimpan dan langsung di-reload ke bot.</div>` : ""}
+    ${error ? `<div class="alert danger">❌ ${escapeHtml(error)}</div>` : ""}
+
+    <div class="edit-helper">
+      <div class="mini-pill">⚙️ General</div>
+      <div class="mini-pill">🤖 AI</div>
+      <div class="mini-pill">💎 Role</div>
+      <div class="mini-pill">📌 Channel</div>
+    </div>
+    <div class="editor-note">Edit fitur pelan-pelan. Kalau hanya mau ganti role/channel, lebih gampang lewat Discord Manager.</div>
+    <form method="post" action="/modules" class="panel">
+      <h3>⚙️ General Bot Settings</h3>
+      <div class="formgrid">
+        ${configInput("serverName", "Nama Server", cfg.serverName || "")}
+        ${configInput("ownerName", "Nama Owner", cfg.ownerName || "")}
+        ${configInput("prefix", "Prefix Command", cfg.prefix || "!")}
+        ${configInput("embedColor", "Warna Embed Default", cfg.embedColor || "#FFFFFF")}
+        ${configInput("activityText", "Activity Text Bot", cfg.activityText || "")}
+        ${configInput("ticketChannelId", "Ticket Channel ID", cfg.ticketChannelId || "")}
+      </div>
+
+      <h3 style="margin-top:28px">🤖 AI Settings</h3>
+      <div class="formgrid">
+        ${configInput("openRouterModel", "OpenRouter Model", cfg.ai?.openRouterModel || "openai/gpt-4o-mini")}
+        ${configInput("aiCooldownMs", "AI Cooldown Ms", cfg.ai?.cooldownMs ?? 4500, "number")}
+        ${configInput("aiMaxMessageLength", "AI Max Message Length", cfg.ai?.maxMessageLength ?? 1900, "number")}
+        ${configInput("aiChannelId", "AI Channel ID", cfg.aiChannelId || "")}
+        ${configInput("curhatChannelId", "Curhat Channel ID", cfg.curhatChannelId || "")}
+        ${configInput("anonymousCurhatChannelId", "Anonymous Curhat Channel ID", cfg.anonymousCurhatChannelId || "")}
+      </div>
+
+      <div class="panel bbo-ai-box" style="margin-top:18px">
+        <h3>🎭 Tanya Pak RW Style Engine</h3>
+        <p class="section-note">Atur cara Pak RW menyesuaikan gaya bahasa warga. Mode auto akan membaca apakah user pakai lu/gua, aku/kamu, atau saya/anda.</p>
+        <div class="formgrid">
+          ${selectField("aiStyleMode", "Mode Gaya Bahasa", `
+            <option value="auto_mirror" ${(cfg.ai?.styleMode || "auto_mirror") === "auto_mirror" ? "selected" : ""}>Auto Mirror - Ikuti gaya user</option>
+            <option value="soft_clean" ${cfg.ai?.styleMode === "soft_clean" ? "selected" : ""}>Soft Clean - Tetap halus</option>
+            <option value="premium" ${cfg.ai?.styleMode === "premium" ? "selected" : ""}>Premium - Lebih rapi formal</option>
+          `)}
+          ${selectField("aiPronounMode", "Mode Panggilan", `
+            <option value="auto" ${(cfg.ai?.pronounMode || "auto") === "auto" ? "selected" : ""}>Auto - Ikuti user</option>
+            <option value="aku_kamu" ${cfg.ai?.pronounMode === "aku_kamu" ? "selected" : ""}>Aku / Kamu</option>
+            <option value="gua_lu" ${cfg.ai?.pronounMode === "gua_lu" ? "selected" : ""}>Gua / Lu</option>
+            <option value="saya_anda" ${cfg.ai?.pronounMode === "saya_anda" ? "selected" : ""}>Saya / Anda</option>
+          `)}
+          ${checkboxInput("aiAllowMildProfanity", "Boleh Ikut Kata Kasar Ringan", cfg.ai?.allowMildProfanity !== false)}
+          ${checkboxInput("aiSafeMirror", "Safe Mirror Tetap Aktif", cfg.ai?.safeMirror !== false)}
+        </div>
+        <div class="ai-style-preview">
+          <b>Contoh alur:</b><br>
+          User: “lu bisa bantu gua fiks ini ga?” → Pak RW jawab pakai lu/gua.<br>
+          User: “aku mau tanya dong” → Pak RW jawab pakai aku/kamu.<br>
+          User kasar → Pak RW boleh santai sedikit, tapi tetap tidak menyerang, tidak hate speech, dan tidak bahaya.
+        </div>
+      </div>
+
+      <h3 style="margin-top:28px">👋 Welcome Settings</h3>
+      <div class="formgrid">
+        ${checkboxInput("welcomeEnabled", "Welcome Aktif", cfg.welcome?.enabled !== false)}
+        ${checkboxInput("welcomeSendToChatWarga", "Kirim Welcome ke Chat Warga", cfg.welcome?.sendToChatWarga !== false)}
+        ${configInput("welcomeTitle", "Judul Welcome", cfg.welcome?.title || "")}
+        ${configInput("chatWargaChannelId", "Chat Warga Channel ID", cfg.chatWargaChannelId || "")}
+      </div>
+      ${textareaInput("welcomeMessage", "Isi Welcome Message", cfg.welcome?.message || "", 8)}
+
+      <h3 style="margin-top:28px">💎 Juragan / Booster Settings</h3>
+      <div class="formgrid">
+        ${checkboxInput("juraganEnabled", "Juragan System Aktif", cfg.juragan?.enabled !== false)}
+        ${checkboxInput("juraganAutoSetupChannels", "Auto Buat Channel/Category Juragan (dimatikan)", false)}
+        ${configInput("juraganRoleId", "Role ID Juragan", cfg.juragan?.roleId || "")}
+        ${configInput("boostChannelId", "Boost Channel ID", cfg.juragan?.boostChannelId || "")}
+        ${configInput("juraganCategoryName", "Nama Category Juragan (tidak auto dibuat)", cfg.juragan?.categoryName || "")}
+        ${configInput("juraganAiChannelName", "Nama AI Channel Juragan (tidak auto dibuat)", cfg.juragan?.aiChannelName || "")}
+      </div>
+
+      <h3 style="margin-top:28px">💸 Donatur Settings</h3>
+      <div class="formgrid">
+        ${configInput("donaturRoleId", "Role ID Donatur", cfg.donaturRoleId || "")}
+        ${configInput("donaturDefaultDays", "Default Days", cfg.donaturDefaultDays ?? 30, "number")}
+        ${configInput("donaturRpPerDay", "Rp Per 1 Hari", cfg.donaturRpPerDay ?? 10000, "number")}
+        ${configInput("donaturMinimumAmount", "Minimal Donasi", cfg.donaturMinimumAmount ?? 100000, "number")}
+      </div>
+
+      <h3 style="margin-top:28px">🔝 Level Settings</h3>
+      <div class="formgrid">
+        ${configInput("levelChannelId", "Level Up Channel ID", cfg.levelChannelId || "")}
+        ${configInput("cekPoinChannelId", "Cek Poin Channel ID", cfg.cekPoinChannelId || cfg.level?.checkPointChannelId || cfg.levelChannelId || "")}
+        ${configInput("level100RoleId", "Role ID Level 100", cfg.level100RoleId || "")}
+        ${configInput("level100RoleDurationDays", "Durasi Role Level 100 (hari)", cfg.level100RoleDurationDays ?? 30, "number")}
+      </div>
+
+      <h3 style="margin-top:28px">💡 Suggestion / Panel Settings</h3>
+      <div class="formgrid">
+        ${checkboxInput("suggestionEnabled", "Suggestion Aktif", cfg.suggestion?.enabled !== false)}
+        ${checkboxInput("sendSuggestionPanelOnReady", "Kirim Panel Saran saat Bot Online", cfg.panels?.sendSuggestionPanelOnReady === true)}
+        ${configInput("suggestionChannelId", "Suggestion Channel ID", cfg.suggestionChannelId || "")}
+        ${configInput("suggestionTitle", "Judul Panel Saran", cfg.suggestion?.title || "")}
+      </div>
+      ${textareaInput("suggestionDescription", "Deskripsi Panel Saran", cfg.suggestion?.description || "", 5)}
+
+      <h3 style="margin-top:28px">📌 Other Channel IDs</h3>
+      <div class="formgrid">
+        ${configInput("logChannelId", "Log Channel ID", cfg.logChannelId || "")}
+        ${configInput("rulesChannelId", "Rules Channel ID", cfg.rulesChannelId || "")}
+        ${configInput("infoChannelId", "Info Channel ID", cfg.infoChannelId || "")}
+        ${configInput("eventChannelId", "Event Channel ID", cfg.eventChannelId || "")}
+      </div>
+
+      <div class="panel" style="margin-top:22px; background:rgba(0,0,0,.18)">
+        <h3>📌 Placeholder Welcome</h3>
+        <div class="commands">
+          <div class="cmd"><b>{user}</b><span>Mention member baru</span></div>
+          <div class="cmd"><b>{server}</b><span>Nama server</span></div>
+          <div class="cmd"><b>{memberCount}</b><span>Jumlah member</span></div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn" type="submit">💾 Simpan Feature Settings</button>
+        <a class="btn secondary" href="/discord">Discord Manager</a>
+        <a class="btn secondary" href="/embeds">Embeds & Texts</a>
+      </div>
+    </form>
+
+    ${dashboardAutocompleteScript()}
+  `, "modules");
+}
+
+
+
+function safeFileReadForDashboard(fileName) {
+  const allowed = {
+    "config.json": path.join(__dirname, "config.json"),
+    "index.js": path.join(__dirname, "index.js"),
+    "README.md": path.join(__dirname, "README.md"),
+    "package.json": path.join(__dirname, "package.json")
+  };
+
+  const filePath = allowed[fileName] || allowed["config.json"];
+
+  try {
+    return fs.readFileSync(filePath, "utf8");
+  } catch (err) {
+    return `File tidak bisa dibaca: ${err.message}`;
+  }
+}
+
+
+function smartCheckStatus(ok, title, desc) {
+  const cls = ok === true ? "ok" : ok === false ? "bad" : "warn";
+  const icon = ok === true ? "✅" : ok === false ? "❌" : "⚠️";
+  return `<div class="mega-check ${cls}"><b>${icon} ${escapeHtml(title)}</b><span>${escapeHtml(desc)}</span></div>`;
+}
+
+function checkIdValue(value) {
+  const text = String(value || "");
+  if (!text) return false;
+  if (text.includes("ISI_ID")) return false;
+  return /^\d{15,25}$/.test(text);
+}
+
+function checkOptionalId(value) {
+  const text = String(value || "");
+  if (!text) return null;
+  if (text.includes("ISI_ID")) return false;
+  return /^\d{15,25}$/.test(text);
+}
+
+function smartDashboardAnalyze() {
+  const cfg = readConfigFile();
+  const guild = typeof getDashboardGuild === "function" ? getDashboardGuild() : client.guilds.cache.first();
+  const botMember = guild?.members?.me || null;
+
+  const checks = [];
+
+  checks.push({
+    key: "Bot Login",
+    ok: Boolean(client?.user),
+    desc: client?.user ? `Bot online sebagai ${client.user.tag}` : "Bot belum login."
+  });
+
+  checks.push({
+    key: "Server Discord",
+    ok: Boolean(guild),
+    desc: guild ? `Terhubung ke ${guild.name}` : "Bot belum membaca server."
+  });
+
+  checks.push({
+    key: "Juragan Role",
+    ok: checkIdValue(cfg.juragan?.roleId),
+    desc: checkIdValue(cfg.juragan?.roleId) ? `ID: ${cfg.juragan.roleId}` : "Role Juragan belum valid."
+  });
+
+  checks.push({
+    key: "Boost Channel",
+    ok: checkIdValue(cfg.juragan?.boostChannelId),
+    desc: checkIdValue(cfg.juragan?.boostChannelId) ? `ID: ${cfg.juragan.boostChannelId}` : "Channel boost/Juragan belum valid."
+  });
+
+  checks.push({
+    key: "Donatur Role",
+    ok: checkIdValue(cfg.donaturRoleId),
+    desc: checkIdValue(cfg.donaturRoleId) ? `ID: ${cfg.donaturRoleId}` : "Role Donatur belum valid."
+  });
+
+  checks.push({
+    key: "Level Channel",
+    ok: checkIdValue(cfg.levelChannelId),
+    desc: checkIdValue(cfg.levelChannelId) ? `ID: ${cfg.levelChannelId}` : "Channel level belum valid."
+  });
+
+  checks.push({
+    key: "AI Channel",
+    ok: checkIdValue(cfg.aiChannelId),
+    desc: checkIdValue(cfg.aiChannelId) ? `ID: ${cfg.aiChannelId}` : "Channel AI belum valid."
+  });
+
+  checks.push({
+    key: "Curhat Anonim",
+    ok: checkIdValue(cfg.anonymousCurhatChannelId),
+    desc: checkIdValue(cfg.anonymousCurhatChannelId) ? `ID: ${cfg.anonymousCurhatChannelId}` : "Channel curhat anonim belum valid."
+  });
+
+  checks.push({
+    key: "Auto Juragan Channel",
+    ok: cfg.juragan?.autoSetupChannels === false,
+    desc: cfg.juragan?.autoSetupChannels === false ? "Nonaktif sesuai request." : "Masih aktif, bisa bikin channel otomatis."
+  });
+
+  checks.push({
+    key: "Dashboard Password",
+    ok: process.env.DASHBOARD_PASSWORD ? true : null,
+    desc: process.env.DASHBOARD_PASSWORD ? "Sudah pakai password custom." : "Masih pakai password default."
+  });
+
+  if (guild && cfg.juragan?.roleId && checkIdValue(cfg.juragan.roleId)) {
+    const role = guild.roles.cache.get(cfg.juragan.roleId);
+    checks.push({
+      key: "Role Juragan Terbaca",
+      ok: Boolean(role),
+      desc: role ? `Role ditemukan: ${role.name}` : "Role Juragan tidak ditemukan di server."
+    });
+  }
+
+  if (guild && cfg.donaturRoleId && checkIdValue(cfg.donaturRoleId)) {
+    const role = guild.roles.cache.get(cfg.donaturRoleId);
+    checks.push({
+      key: "Role Donatur Terbaca",
+      ok: Boolean(role),
+      desc: role ? `Role ditemukan: ${role.name}` : "Role Donatur tidak ditemukan di server."
+    });
+  }
+
+  if (guild && cfg.levelChannelId && checkIdValue(cfg.levelChannelId)) {
+    const channel = guild.channels.cache.get(cfg.levelChannelId);
+    checks.push({
+      key: "Channel Level Terbaca",
+      ok: Boolean(channel),
+      desc: channel ? `Channel ditemukan: #${channel.name}` : "Channel level tidak ditemukan di server."
+    });
+  }
+
+  if (botMember) {
+    const perms = botMember.permissions;
+    const manageRoles = perms.has(PermissionsBitField.Flags.ManageRoles);
+    const manageChannels = perms.has(PermissionsBitField.Flags.ManageChannels);
+    const sendMessages = perms.has(PermissionsBitField.Flags.SendMessages);
+    const embedLinks = perms.has(PermissionsBitField.Flags.EmbedLinks);
+
+    checks.push({ key: "Permission Manage Roles", ok: manageRoles, desc: manageRoles ? "Bot bisa kelola role." : "Bot belum punya Manage Roles." });
+    checks.push({ key: "Permission Manage Channels", ok: manageChannels, desc: manageChannels ? "Bot bisa kelola channel." : "Bot belum punya Manage Channels." });
+    checks.push({ key: "Permission Send Messages", ok: sendMessages, desc: sendMessages ? "Bot bisa kirim pesan." : "Bot belum punya Send Messages." });
+    checks.push({ key: "Permission Embed Links", ok: embedLinks, desc: embedLinks ? "Bot bisa kirim embed." : "Bot belum punya Embed Links." });
+  }
+
+  const okCount = checks.filter((c) => c.ok === true).length;
+  const badCount = checks.filter((c) => c.ok === false).length;
+  const warnCount = checks.filter((c) => c.ok === null).length;
+  const score = Math.round((okCount / Math.max(1, checks.length)) * 100);
+
+  return { cfg, guild, checks, okCount, badCount, warnCount, score };
+}
+
+function renderMegaSmartCenter(req) {
+  const result = smartDashboardAnalyze();
+  const cfg = result.cfg;
+  const embed = cfg.embeds?.juragan || {};
+  const score = result.score;
+
+  const checklist = result.checks
+    .map((c) => smartCheckStatus(c.ok, c.key, c.desc))
+    .join("");
+
+  const suggestions = [];
+  if (result.badCount > 0) suggestions.push("Perbaiki item yang merah dulu di Discord Manager atau Feature Settings.");
+  if (!process.env.DASHBOARD_PASSWORD) suggestions.push("Tambahkan ENV hosting DASHBOARD_PASSWORD supaya dashboard lebih aman.");
+  if (!checkIdValue(cfg.levelChannelId)) suggestions.push("Isi Level Channel ID agar level-up masuk ke channel yang benar.");
+  if (!checkIdValue(cfg.donaturRoleId)) suggestions.push("Isi Donatur Role ID agar fitur Donatur bisa jalan.");
+  if (cfg.juragan?.autoSetupChannels !== false) suggestions.push("Matikan autoSetupChannels supaya bot tidak bikin channel/category Juragan otomatis.");
+  if (!suggestions.length) suggestions.push("Setup terlihat aman. Tinggal test rwtestboost, rwcekpoin, dan rwtanya.");
+
+  return dashboardLayout(`
+    <div class="mega-hero">
+      <span class="mega-badge">🧠 MEGA MAX SMART CENTER</span>
+      <h2>Dashboard pintar buat cek, benerin, dan ngatur Pak RW lebih cepat.</h2>
+      <p>Halaman ini otomatis membaca config, server Discord, role, channel, permission, dan setting penting. Jadi kamu bisa tahu mana yang sudah aman dan mana yang harus diperbaiki.</p>
+      <div class="max-actions">
+        <a class="btn" href="/discord">🔗 Benerin Role/Channel</a>
+        <a class="btn secondary" href="/modules">🧩 Feature Settings</a>
+        <a class="btn secondary" href="/embeds">🎨 Edit Embed</a>
+        <a class="btn secondary" href="/api/mega-diagnose">🛰️ API Diagnose</a>
+      </div>
+    </div>
+
+    <div class="mega-grid">
+      <section class="panel">
+        <h3>✅ Smart Diagnose Checklist</h3>
+        <div class="mega-check-grid">
+          ${checklist}
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3>📈 Setup Score</h3>
+        <div class="mega-score">
+          <div>
+            <strong>${score}%</strong>
+            <span>${result.okCount} aman • ${result.badCount} perlu diperbaiki • ${result.warnCount} catatan</span>
+            <div class="mega-meter"><div style="width:${score}%"></div></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="mega-grid" style="margin-top:18px">
+      <section class="panel">
+        <h3>🧩 Smart Fix Guide</h3>
+        <div class="mega-list">
+          ${suggestions.map((s) => `<div class="mega-list-item">➤ ${escapeHtml(s)}</div>`).join("")}
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3>💎 Preview Embed Juragan</h3>
+        <div class="mega-preview" style="border-left-color:${escapeHtml(embed.color || "#FF4FD8")}">
+          <h4>${escapeHtml(embed.title || "Embed Juragan")}</h4>${escapeHtml(embed.description || "Belum ada deskripsi.")}
+        </div>
+      </section>
+    </div>
+
+    <section class="panel" style="margin-top:18px">
+      <h3>⚡ Mega Quick Templates</h3>
+      <div class="mega-template-grid">
+        <div class="mega-template"><b>Boost Juragan</b><span>Template animated Boost sudah jadi default untuk embed Juragan.</span></div>
+        <div class="mega-template"><b>No Auto Channel</b><span>Auto-create category/channel Juragan tetap nonaktif sesuai request.</span></div>
+        <div class="mega-template"><b>Persistent Level</b><span>Gunakan DisCloud data folder /data agar level tidak reset saat update.</span></div>
+        <div class="mega-template"><b>Discord Manager</b><span>Pilih role/channel dari dropdown, tidak perlu copy ID manual.</span></div>
+        <div class="mega-template"><b>Source Studio</b><span>Lihat coding utama, config, package, dan README langsung dari dashboard.</span></div>
+        <div class="mega-template"><b>Ctrl + K</b><span>Buka quick menu dashboard supaya navigasi lebih cepat.</span></div>
+      </div>
+    </section>
+  `, "smart");
+}
+
+
+
+
+function renderEasyStart(req) {
+  const cfg = readConfigFile();
+  const prefix = cfg.prefix || "rw";
+
+  return dashboardLayout(`
+    <div class="calm-hero">
+      <span class="calm-label">🧭 Easy Start</span>
+      <h2>Mulai dari sini kalau bingung mau pencet yang mana.</h2>
+      <p>Ikuti alur simpel ini: edit → cek → test → backup. Cocok buat update kecil maupun update besar.</p>
+    </div>
+
+    <div class="calm-layout">
+      <section class="calm-panel">
+        <h3>✅ Alur paling gampang</h3>
+        <div class="calm-row"><b>1. Edit teks/embed</b>Buka <a href="/embeds">Embeds & Texts</a> kalau mau ubah kata-kata embed.</div>
+        <div class="calm-row"><b>2. Edit fitur</b>Buka <a href="/modules">Feature Settings</a> kalau mau ubah prefix, AI, welcome, Donatur, Level, atau channel ID.</div>
+        <div class="calm-row"><b>3. Pilih role/channel</b>Buka <a href="/discord">Discord Manager</a> supaya tinggal pilih dari dropdown.</div>
+        <div class="calm-row"><b>4. Cek setup</b>Buka <a href="/smart">Smart Center</a> untuk lihat yang masih merah/kuning.</div>
+        <div class="calm-row"><b>5. Test Discord</b>Gunakan <code>${escapeHtml(prefix)}testboost</code> dan <code>rwcekpoin</code>.</div>
+      </section>
+
+      <section class="calm-panel">
+        <h3>🚀 Tombol cepat</h3>
+        <div class="calm-card-grid">
+          <a class="calm-card" href="/embeds"><b>🎨 Edit Embed</b><span>Juragan, Donatur, Level, Anonim.</span></a>
+          <a class="calm-card" href="/modules"><b>🧩 Edit Fitur</b><span>AI, welcome, level, donatur.</span></a>
+          <a class="calm-card" href="/discord"><b>🔗 Role/Channel</b><span>Dropdown Discord.</span></a>
+          <a class="calm-card" href="/test-center"><b>🧪 Test</b><span>Command test.</span></a>
+        </div>
+      </section>
+    </div>
+  `, "easy");
+}
+
+
+
+function renderQuickEdit(req, saved = false, error = "") {
+  const cfg = readConfigFile();
+
+  return dashboardLayout(`
+    <div class="topbar">
+      <div class="title">
+        <h2>⚡ Quick Edit</h2>
+        <p>Edit bagian yang paling sering diganti tanpa masuk ke form panjang. Lebih cepat, lebih simpel, dan tetap aman.</p>
+      </div>
+      <div class="pill">Comfort</div>
+    </div>
+
+    ${saved ? `<div class="alert">✅ Quick Edit berhasil disimpan dan langsung di-reload.</div>` : ""}
+    ${error ? `<div class="alert danger">❌ ${escapeHtml(error)}</div>` : ""}
+
+    <div class="focus-note">
+      Untuk edit lengkap, tetap gunakan Feature Settings. Quick Edit ini khusus perubahan yang paling sering dipakai.
+    </div>
+
+    <form class="panel" method="post" action="/quick-edit">
+      <h3>⚙️ Basic</h3>
+      <div class="formgrid">
+        ${configInput("prefix", "Prefix", cfg.prefix || "rw")}
+        ${configInput("activityText", "Activity Text", cfg.activityText || "DESA TULUS 🤍")}
+        ${configInput("embedColor", "Warna Embed Default", cfg.embedColor || "#FFFFFF")}
+        ${configInput("openRouterModel", "AI Model", cfg.ai?.openRouterModel || "openai/gpt-4o-mini")}
+      </div>
+
+      <h3>📌 Channel Penting</h3>
+      <div class="formgrid">
+        ${configInput("aiChannelId", "AI Channel ID", cfg.aiChannelId || "")}
+        ${configInput("chatWargaChannelId", "Chat Warga Channel ID", cfg.chatWargaChannelId || "")}
+        ${configInput("levelChannelId", "Level Channel ID", cfg.levelChannelId || "")}
+        ${configInput("boostChannelId", "Boost/Juragan Channel ID", cfg.juragan?.boostChannelId || "")}
+      </div>
+
+      <h3>💎 Role Penting</h3>
+      <div class="formgrid">
+        ${configInput("juraganRoleId", "Role Juragan ID", cfg.juragan?.roleId || "")}
+        ${configInput("donaturRoleId", "Role Donatur ID", cfg.donaturRoleId || "")}
+        ${configInput("level100RoleId", "Role Level 100 ID", cfg.level100RoleId || "")}
+        ${configInput("donaturRpPerDay", "Donatur Rp Per Hari", cfg.donaturRpPerDay || 10000, "number")}
+      </div>
+
+      <div class="actions">
+        <button class="btn" type="submit">💾 Simpan Quick Edit</button>
+        <a class="btn secondary" href="/discord">Pilih dari Discord</a>
+        <a class="btn secondary" href="/modules">Edit Lengkap</a>
+      </div>
+    </form>
+  `, "quick");
+}
+
+
+function renderEditorHub(req) {
+  const cfg = readConfigFile();
+  const prefix = cfg.prefix || "rw";
+
+  return dashboardLayout(`
+    <div class="comfort-hero">
+      <span class="comfort-badge">✍️ Luxe Galaxy • Pak RW</span>
+      <h2>Pusat edit yang lebih gampang, rapi, dan nyaman.</h2>
+      <p>Semua halaman edit dikumpulkan di sini. Pilih bagian yang mau diubah, simpan, lalu test dari Test Center. Dibuat supaya tidak bingung cari menu dan tidak perlu edit file manual.</p>
+      <div class="clean-actions">
+        <a class="btn" href="/embeds">🎨 Edit Embed</a>
+        <a class="btn secondary" href="/modules">🧩 Edit Fitur</a>
+        <a class="btn secondary" href="/discord">🔗 Role/Channel</a>
+        <a class="btn secondary" href="/test-center">🧪 Test</a>
+      </div>
+    </div>
+
+    <div class="comfort-grid">
+      <section class="clean-section">
+        <h3>🧭 Mau edit apa?</h3>
+
+        <div class="clean-group-title">Paling sering dipakai</div>
+        <div class="comfort-card-grid">
+          <a class="comfort-card" href="/embeds"><b>🎨 Embed & Text</b><span>Ubah teks Juragan, Donatur, Level, Cek Poin, panel anonim, dan dashboard.</span></a>
+          <a class="comfort-card" href="/modules"><b>🧩 Fitur Bot</b><span>Ubah prefix, AI, welcome, Juragan, Donatur, Level, Saran, dan channel ID.</span></a>
+          <a class="comfort-card" href="/discord"><b>🔗 Role & Channel</b><span>Pilih role/channel langsung dari Discord tanpa copy ID manual.</span></a>
+          <a class="comfort-card" href="/media"><b>🖼️ Foto Web</b><span>Pasang logo, banner, background, dan favicon pakai link gambar.</span></a>
+        </div>
+
+        <div class="clean-group-title">Cek & perawatan</div>
+        <div class="comfort-card-grid">
+          <a class="comfort-card" href="/smart"><b>🧠 Smart Center</b><span>Cek otomatis role, channel, permission, password, dan setup penting.</span></a>
+          <a class="comfort-card" href="/preview"><b>👀 Preview Studio</b><span>Lihat preview embed sebelum test command.</span></a>
+          <a class="comfort-card" href="/backup"><b>💾 Backup Config</b><span>Copy/export config sebelum update besar.</span></a>
+          <a class="comfort-card" href="/source"><b>🧾 Source Studio</b><span>Lihat config, index.js, package, dan README langsung dari dashboard.</span></a>
+        </div>
+      </section>
+
+      <section class="clean-section">
+        <h3>✅ Alur edit paling aman</h3>
+        <div class="comfort-step"><b>1. Edit dari menu yang sesuai</b><br>Embed di Embeds & Texts, fitur di Feature Settings, role/channel di Discord Manager.</div>
+        <div class="comfort-step"><b>2. Klik Save</b><br>Config langsung disimpan dan di-reload ke bot.</div>
+        <div class="comfort-step"><b>3. Cek Smart Center</b><br>Lihat apakah ada role/channel/permission yang masih merah.</div>
+        <div class="comfort-step"><b>4. Test di Discord</b><br>Gunakan <code>${escapeHtml(prefix)}testboost</code>, <code>rwcekpoin</code>, dan command lain dari Test Center.</div>
+
+        <h3 style="margin-top:20px">📌 Placeholder cepat</h3>
+        <div class="comfort-copy">
+          <div class="comfort-pill">{user}</div>
+          <div class="comfort-pill">{server}</div>
+          <div class="comfort-pill">{level}</div>
+          <div class="comfort-pill">{rank}</div>
+          <div class="comfort-pill">{total}</div>
+          <div class="comfort-pill">{expiredText}</div>
+          <div class="comfort-pill">@ role</div>
+          <div class="comfort-pill"># channel</div>
+          <div class="comfort-pill">{ date }</div>
+        </div>
+      </section>
+    </div>
+  `, "editor");
+}
+
+
+function renderStudioHome(req) {
+  const cfg = readConfigFile();
+  const guild = typeof getDashboardGuild === "function" ? getDashboardGuild() : client.guilds.cache.first();
+  const guildName = guild?.name || cfg.serverName || "DESA TULUS";
+  const botTag = client?.user?.tag || "Pak RW";
+  const memberCount = guild?.memberCount || 0;
+  const roles = guild?.roles?.cache?.filter((r) => r.name !== "@everyone").size || 0;
+  const channels = guild?.channels?.cache?.size || 0;
+  const emojis = guild?.emojis?.cache?.size || 0;
+
+  return dashboardLayout(`
+    <div class="luxe-shell">
+      <section class="luxe-hero">
+        <div class="luxe-hero-content">
+          <span class="luxe-badge">💫 Luxe Galaxy • Pak RW</span>
+          <h2>Dashboard premium yang lebih hidup, rapi, dan nyambung ke Discord.</h2>
+          <p>Role, channel, emoji, command, editor, preview, backup, dan smart check dibuat lebih enak dilihat dalam satu control center. Klik ID/mention di board untuk copy otomatis.</p>
+          <div class="luxe-actions">
+            <a class="btn" href="/luxe-map">🗺️ Dashboard Map</a>
+            <a class="btn secondary" href="/discord-hub">🛰️ Discord Hub</a>
+            <a class="btn secondary" href="/orbit-roles">🎭 Roles</a>
+            <a class="btn secondary" href="/orbit-channels"># Channels</a>
+            <a class="btn secondary" href="/emoji-studio">😀 Emojis</a>
+          </div>
+        </div>
+      </section>
+
+      <div class="luxe-strip">
+        <div class="luxe-stat"><b>${escapeHtml(botTag)}</b><span>Bot aktif</span></div>
+        <div class="luxe-stat"><b>${escapeHtml(guildName)}</b><span>Server</span></div>
+        <div class="luxe-stat"><b>${memberCount}</b><span>Member</span></div>
+        <div class="luxe-stat"><b>${roles}</b><span>Role</span></div>
+        <div class="luxe-stat"><b>${channels}</b><span>Channel • ${emojis} Emoji</span></div>
+      </div>
+
+      <div class="luxe-bento">
+        <section class="luxe-panel">
+          <h3>🚀 Favorite Actions</h3>
+          <div class="luxe-card-grid">
+            <a class="luxe-card" href="/luxe-map"><div class="ico">🗺️</div><b>Dashboard Map</b><span>Semua halaman dashboard dirapikan dalam satu peta menu.</span></a>
+            <a class="luxe-card" href="/quick-edit"><div class="ico">⚡</div><b>Quick Edit</b><span>Edit cepat prefix, AI, role, channel, dan Donatur.</span></a>
+            <a class="luxe-card" href="/embeds"><div class="ico">🎨</div><b>Embeds & Texts</b><span>Edit semua teks embed dan panel Pak RW.</span></a>
+            <a class="luxe-card" href="/discord-hub"><div class="ico">🛰️</div><b>Discord Hub</b><span>Ringkasan server Discord langsung dari dashboard.</span></a>
+            <a class="luxe-card" href="/orbit-roles"><div class="ico">🎭</div><b>Role Board</b><span>Lihat role, ID, mention, dan posisi role.</span></a>
+            <a class="luxe-card" href="/orbit-channels"><div class="ico">#</div><b>Channel Board</b><span>Lihat channel, mention, ID, dan kategori.</span></a>
+            <a class="luxe-card" href="/smart"><div class="ico">🧠</div><b>Smart Center</b><span>Cek setup, permission, role, channel, dan security.</span></a>
+            <a class="luxe-card" href="/preview"><div class="ico">👀</div><b>Preview Studio</b><span>Preview embed sebelum test command.</span></a>
+            <a class="luxe-card" href="/backup"><div class="ico">💾</div><b>Backup Center</b><span>Export config sebelum update besar.</span></a>
+          </div>
+        </section>
+
+        <section class="luxe-panel">
+          <h3>✅ Best Workflow</h3>
+          <div class="luxe-timeline">
+            <div class="luxe-step"><b>1. Cek Discord Hub</b>Lihat apakah role, channel, dan emoji sudah terbaca.</div>
+            <div class="luxe-step"><b>2. Edit cepat</b>Pakai Quick Edit atau Embeds & Texts supaya tidak pusing.</div>
+            <div class="luxe-step"><b>3. Smart Check</b>Buka Smart Center untuk cek permission dan ID penting.</div>
+            <div class="luxe-step"><b>4. Test fitur</b>Jalankan <code>${escapeHtml(cfg.prefix || "rw")}testboost</code> dan <code>rwcekpoin</code>.</div>
+            <div class="luxe-step"><b>Status penting</b>Prefix: <code>${escapeHtml(cfg.prefix || "rw")}</code> • Auto channel Juragan: <b>${cfg.juragan?.autoSetupChannels ? "Aktif" : "Nonaktif"}</b>.</div>
+          </div>
+        </section>
+      </div>
+    </div>
+  `, "studio");
+}
+
+function renderSourceStudio(req, fileName = "config.json", saved = false, error = "") {
+  const allowed = ["config.json", "index.js", "package.json", "README.md"];
+  const selected = allowed.includes(fileName) ? fileName : "config.json";
+  const content = safeFileReadForDashboard(selected);
+
+  return dashboardLayout(`
+    <div class="topbar">
+      <div class="title">
+        <h2>🧾 Source Studio</h2>
+        <p>Lihat coding dan file penting langsung dari dashboard. Untuk keamanan, file code ditampilkan sebagai view/copy. Edit fitur tetap lewat Feature Settings dan Embeds & Texts.</p>
+      </div>
+      <div class="pill">File: ${escapeHtml(selected)}</div>
+    </div>
+
+    ${saved ? `<div class="alert">✅ File berhasil disimpan.</div>` : ""}
+    ${error ? `<div class="alert danger">❌ ${escapeHtml(error)}</div>` : ""}
+
+    <section class="panel">
+      <div class="file-tabs">
+        ${allowed.map((f) => `<a class="file-tab ${f === selected ? "active" : ""}" href="/source?file=${encodeURIComponent(f)}">${escapeHtml(f)}</a>`).join("")}
+      </div>
+
+      <textarea class="codebox" readonly>${escapeHtml(content)}</textarea>
+
+      <div class="actions">
+        <a class="btn" href="/modules">Edit Feature Settings</a>
+        <a class="btn secondary" href="/embeds">Edit Embeds</a>
+        <a class="btn secondary" href="/config">Edit Config Form</a>
+      </div>
+    </section>
+  `, "source");
+}
+
+
+
+
+
+function renderManualMotmDashboard(req, saved = false, error = "", result = "") {
+  const cfg = readConfigFile();
+  cfg.topActive = cfg.topActive || {};
+  cfg.embeds = cfg.embeds || {};
+  cfg.embeds.dashboard = cfg.embeds.dashboard || {};
+  cfg.embeds.dashboard.media = cfg.embeds.dashboard.media || {};
+  const guild = typeof getDashboardGuild === "function" ? getDashboardGuild() : null;
+  const topCfg = { ...getTopActiveConfig(), ...(cfg.topActive || {}) };
+  const media = cfg.embeds.dashboard.media || {};
+  const bannerUrl = topCfg.manualBannerUrl || topCfg.bannerImageUrl || media.motmBackgroundImageUrl || "";
+
+  return dashboardLayout(`
+    <div class="topbar">
+      <div class="title">
+        <h2>👑 Manual Member Of The Month</h2>
+        <p>MOTM tidak otomatis. Pilih member, pakai banner manual, lalu kirim manual dari dashboard. Gambar manual tidak ditambah teks/avatar kalau overlay mati.</p>
+      </div>
+      <div class="pill">Manual Only</div>
+    </div>
+
+    ${saved ? `<div class="alert">✅ Manual MOTM berhasil diproses.</div>` : ""}
+    ${result ? `<div class="alert">${escapeHtml(result)}</div>` : ""}
+    ${error ? `<div class="alert danger">❌ ${escapeHtml(error)}</div>` : ""}
+
+    <section class="premium-section">
+      <div class="premium-section-head">
+        <div>
+          <h3>⚙️ Mode Aman</h3>
+          <div class="premium-muted">Auto MOTM dimatikan. Top Poin harian tetap aman dan tidak ikut berubah.</div>
+        </div>
+        <span class="premium-chip">Auto MOTM OFF</span>
+      </div>
+      <div class="premium-protect-note">
+        Alur: upload/desain banner di Canva atau Discord → copy URL gambar → tempel di sini → pilih member → kirim manual. Bot tidak mengubah data poin/level member.
+      </div>
+    </section>
+
+    <form class="premium-section" method="post" action="/manual-motm">
+      <div class="premium-section-head">
+        <div>
+          <h3>🏆 Kirim MOTM Manual</h3>
+          <div class="premium-muted">Gunakan User ID atau mention member. Role MOTM opsional bisa diberikan saat kirim.</div>
+        </div>
+        <a class="btn secondary" href="/media">🖼️ Banner Manual</a>
+      </div>
+      <div class="formgrid">
+        ${configInput("motmUserId", "User ID / Mention Member", req?.body?.motmUserId || "")}
+        ${guild ? selectField("motmChannelId", "Channel Kirim MOTM", channelOptions(guild, topCfg.channelId || cfg.topActive?.channelId || "", "text"), "Pilih channel") : configInput("motmChannelId", "Channel Kirim MOTM ID", topCfg.channelId || "")}
+        ${configInput("motmManualBannerUrl", "URL Banner Manual MOTM", req?.body?.motmManualBannerUrl || bannerUrl)}
+        <div><label>Mode Kirim</label><select name="motmSendMode"><option value="image_only" ${topCfg.motmSendMode === "image_only" ? "selected" : ""}>Image saja tanpa teks</option><option value="separate_text_image" ${topCfg.motmSendMode !== "image_only" ? "selected" : ""}>Teks selamat + image manual</option></select></div>
+        <div><label>Beri Role MOTM</label><select name="giveRole"><option value="off" selected>Tidak - kirim gambar saja</option><option value="on">Ya - beri role Member Of The Month</option></select></div>
+        <div><label>Overlay ke Gambar</label><select name="motmOverlay"><option value="off" selected>Mati - gambar tidak diutak-atik</option><option value="on">Aktif - pakai sistem overlay lama</option></select></div>
+      </div>
+      <div class="premium-protect-note">Kalau mode <b>Image saja</b>, bot cuma mengirim banner manual. Kalau mode <b>Teks + image</b>, teks ucapan diambil dari Template Pesan MOTM.</div>
+      <div class="actions">
+        <button class="btn" type="submit">🚀 Kirim Manual MOTM</button>
+        <a class="btn secondary" href="/top-active">⚙️ Setting Top Aktif</a>
+        <a class="btn secondary" href="/media">🖼️ Edit Banner</a>
+      </div>
+    </form>
+
+    <section class="premium-section">
+      <h3>👀 Preview Banner Manual</h3>
+      ${bannerUrl ? `<img class="ot-preview-img" src="${escapeHtml(bannerUrl)}" />` : `<div class="ot-preview-blank"><div><b>Belum ada banner manual</b><br>Tempel URL banner manual di kolom atas.</div></div>`}
+    </section>
+  `, "manualmotm");
+}
+
+function renderCariMabarDashboard(req, saved = false, error = "") {
+  const cfg = readConfigFile();
+  cfg.mabar = cfg.mabar || {};
+  cfg.embeds = cfg.embeds || {};
+  cfg.embeds.cariMabar = cfg.embeds.cariMabar || {};
+  const guild = typeof getDashboardGuild === "function" ? getDashboardGuild() : null;
+  const mabar = cfg.mabar || {};
+  const embed = cfg.embeds.cariMabar || {};
+
+  return dashboardLayout(`
+    <div class="topbar">
+      <div class="title">
+        <h2>🎮 Cari Mabar</h2>
+        <p>Panel khusus Cari Mabar supaya gampang ditemukan. Edit status, channel, tombol, dan embed tanpa buka code. Fitur Discord lama tetap aman.</p>
+      </div>
+      <div class="pill">${mabar.enabled !== false ? "● Aktif" : "○ Nonaktif"}</div>
+    </div>
+
+    ${saved ? `<div class="alert">✅ Setting Cari Mabar berhasil disimpan.</div>` : ""}
+    ${error ? `<div class="alert danger">❌ ${escapeHtml(error)}</div>` : ""}
+
+    <form class="premium-section" method="post" action="/cari-mabar">
+      <div class="premium-section-head">
+        <div>
+          <h3>⚙️ Setting Utama Cari Mabar</h3>
+          <div class="premium-muted">Pilih channel tujuan, aktif/nonaktifkan fitur, dan atur default data mabar.</div>
+        </div>
+        <a class="btn secondary" href="/embeds#embed-cariMabar">Buka Embed Builder</a>
+      </div>
+      <div class="formgrid">
+        <div><label>Status Cari Mabar</label><select name="enabled"><option value="on" ${mabar.enabled !== false ? "selected" : ""}>Aktif</option><option value="off" ${mabar.enabled === false ? "selected" : ""}>Nonaktif</option></select></div>
+        ${guild ? selectField("channelId", "Channel Cari Mabar", channelOptions(guild, mabar.channelId || cfg.chatWargaChannelId || "", "text"), "Pilih channel") : configInput("channelId", "Channel Cari Mabar ID", mabar.channelId || cfg.chatWargaChannelId || "")}
+        ${configInput("defaultGame", "Default Game", mabar.defaultGame || "Belum diisi")}
+        ${configInput("defaultMode", "Default Mode", mabar.defaultMode || "Santai / Rank / Custom")}
+        ${configInput("defaultSlot", "Default Slot", mabar.defaultSlot || "Belum diisi")}
+        ${configInput("defaultTime", "Default Waktu", mabar.defaultTime || "Belum diisi")}
+        <div><label>Nama Pengirim Custom</label><select name="allowCustomSenderText"><option value="on" ${mabar.allowCustomSenderText !== false ? "selected" : ""}>Aktif</option><option value="off" ${mabar.allowCustomSenderText === false ? "selected" : ""}>Nonaktif</option></select></div>
+        ${configInput("buttonText", "Teks Tombol", mabar.buttonText || "🎮 Cari Mabar")}
+      </div>
+      ${textareaInput("defaultNote", "Catatan Default", mabar.defaultNote || "Ayo mabar bareng warga DESA TULUS 🤍", 3)}
+
+      <div class="premium-section" style="margin-top:18px">
+        <div class="premium-section-head">
+          <div>
+            <h3>🎨 Embed Cari Mabar</h3>
+            <div class="premium-muted">Ini hanya mengubah config embed Cari Mabar, bukan logic command bot.</div>
+          </div>
+          <span class="premium-chip">Preview Live</span>
+        </div>
+        <div class="formgrid">
+          ${configInput("embedColor", "Color HEX", embed.color || "#5865F2")}
+          ${configInput("embedTitle", "Title", embed.title || "🎮 CARI MABAR DESA TULUS")}
+          ${configInput("embedFooter", "Footer", embed.footer || "DESA TULUS • Cari Mabar")}
+          ${configInput("embedImage", "Image URL", embed.image || "")}
+          ${configInput("embedThumbnail", "Thumbnail URL", embed.thumbnail || "")}
+          ${configInput("embedContent", "Normal Content", embed.content || "")}
+        </div>
+        ${textareaInput("embedDescription", "Description", embed.description || "Ada yang mau mabar? Isi data mabar dengan jelas biar warga gampang ikut.", 6)}
+        <div class="premium-discord-preview" style="margin-top:14px">
+          <div class="premium-discord-msg">${escapeHtml(embed.content || "Normal text Cari Mabar")}</div>
+          <div class="premium-embed-demo" style="border-left-color:${escapeHtml(embed.color || "#5865F2")}">
+            <div class="title">${escapeHtml(embed.title || "🎮 CARI MABAR DESA TULUS")}</div>
+            <p>${escapeHtml(embed.description || "Ada yang mau mabar? Isi data mabar dengan jelas biar warga gampang ikut.")}</p>
+            <small>${escapeHtml(embed.footer || "DESA TULUS • Cari Mabar")}</small>
+          </div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn" type="submit">💾 Simpan Cari Mabar</button>
+        <a class="btn secondary" href="/embeds#embed-cariMabar">Edit Lengkap di Embed Editor</a>
+        <a class="btn secondary" href="/backup">Backup</a>
+      </div>
+    </form>
+  `, "mabar");
+}
+
+function renderMediaStudio(req, saved = false, error = "") {
+  const cfg = readConfigFile();
+  cfg.embeds = cfg.embeds || {};
+  cfg.embeds.dashboard = cfg.embeds.dashboard || {};
+  cfg.embeds.dashboard.media = cfg.embeds.dashboard.media || {};
+  cfg.topActive = cfg.topActive || {};
+  const media = cfg.embeds.dashboard.media || {};
+  const topCfg = cfg.topActive || {};
+  const motmUrl = topCfg.manualBannerUrl || topCfg.bannerImageUrl || media.motmBackgroundImageUrl || "";
+
+  return dashboardLayout(`
+    <div class="topbar">
+      <div class="title">
+        <h2>🖼️ Banner Manual Center</h2>
+        <p>Halaman paling simpel buat pasang gambar. Cukup upload gambar ke Discord/Canva, copy link, tempel di kolom, lalu simpan. Tidak perlu buka code.</p>
+      </div>
+      <div class="pill">Easy Media</div>
+    </div>
+
+    ${saved ? `<div class="alert">✅ Banner dan media berhasil disimpan. Setting langsung reload ke bot.</div>` : ""}
+    ${error ? `<div class="alert danger">❌ ${escapeHtml(error)}</div>` : ""}
+
+    <div class="ot-mini-tabs">
+      <a href="#motm">🏆 Banner MOTM</a>
+      <a href="#dashboard">🖥️ Dashboard</a>
+      <a href="#preview">👀 Preview</a>
+      <a href="/top-active">⚙️ Detail Top Aktif</a>
+    </div>
+
+    <form class="panel ot-compact-form" method="post" action="/media">
+      <h3 id="motm">🏆 Banner Member Of The Month</h3>
+      <div class="ot-helper">
+        Mode paling gampang: pilih <b>Manual Image Saja</b>, tempel URL banner jadi, lalu bot akan kirim gambar apa adanya tanpa nambah avatar/nama otomatis. Cocok kalau desainnya sudah dibuat rapi dari Canva.
+      </div>
+      <div class="formgrid">
+        ${configInput("motmManualBannerUrl", "URL Banner MOTM Manual", motmUrl)}
+        <div><label>Mode Banner MOTM</label><select name="motmBannerMode"><option value="manual_image" ${topCfg.bannerMode === "manual_image" || !topCfg.bannerMode ? "selected" : ""}>Manual Image Saja - paling aman</option><option value="manual_background" ${topCfg.bannerMode === "manual_background" ? "selected" : ""}>Manual Background + teks otomatis</option><option value="desa_tulus_template" ${topCfg.bannerMode === "desa_tulus_template" ? "selected" : ""}>Template DESA TULUS otomatis</option><option value="auto" ${topCfg.bannerMode === "auto" ? "selected" : ""}>Auto Premium</option></select></div>
+        <div><label>Caption Saat Kirim Banner</label><select name="motmSendMode"><option value="separate_text_image" ${topCfg.motmSendMode === "separate_text_image" || !topCfg.motmSendMode ? "selected" : ""}>Text selamat di atas + image di bawah</option><option value="image_only" ${topCfg.motmSendMode === "image_only" ? "selected" : ""}>Image saja tanpa teks</option></select></div>
+        <div><label>Overlay Nama/Avatar</label><select name="motmOverlay"><option value="off" ${topCfg.manualBannerOverlayEnabled === false ? "selected" : ""}>Mati - gambar tidak diutak-atik</option><option value="on" ${topCfg.manualBannerOverlayEnabled !== false ? "selected" : ""}>Aktif - tambah nama/avatar otomatis</option></select></div>
+      </div>
+
+      <h3 id="dashboard">🖥️ Gambar Dashboard</h3>
+      <div class="formgrid">
+        ${configInput("logoUrl", "Logo URL Dashboard", media.logoUrl || "")}
+        ${configInput("bannerUrl", "Banner Home Dashboard", media.bannerUrl || "")}
+        ${configInput("backgroundUrl", "Background Dashboard", media.backgroundUrl || "")}
+        ${configInput("faviconUrl", "Favicon URL", media.faviconUrl || "")}
+        ${configInput("defaultEmbedImageUrl", "Default Embed Image URL", media.defaultEmbedImageUrl || "")}
+        ${configInput("defaultThumbnailUrl", "Default Thumbnail URL", media.defaultThumbnailUrl || "")}
+      </div>
+
+      <h3 id="preview">👀 Preview Gambar</h3>
+      <div class="formgrid">
+        <div>
+          <label>Preview Banner MOTM</label>
+          ${motmUrl ? `<img class="ot-preview-img" src="${escapeHtml(motmUrl)}" />` : `<div class="ot-preview-blank"><div><b>Belum ada banner MOTM</b><br>Tempel URL banner manual di atas.</div></div>`}
+        </div>
+        <div>
+          <label>Preview Banner Dashboard</label>
+          ${media.bannerUrl ? `<img class="ot-preview-img" src="${escapeHtml(media.bannerUrl)}" />` : `<div class="ot-preview-blank"><div><b>Belum ada banner dashboard</b><br>Isi Banner Home Dashboard kalau mau home lebih keren.</div></div>`}
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn" type="submit">💾 Simpan Semua Banner</button>
+        <a class="btn secondary" href="/">Lihat Home</a>
+        <a class="btn secondary" href="/motm-banner.svg?name=Preview&total=10000&chat=5600&voice=4400&server=ORANG%20TULUS&month=BULAN%20INI" target="_blank">Preview MOTM</a>
+        <a class="btn secondary" href="/top-active">Detail Top Aktif</a>
+      </div>
+    </form>
+  `, "media");
+}
+
+function renderThemeStudio(req, saved = false, error = "") {
+  const cfg = readConfigFile();
+  const dash = cfg.embeds?.dashboard || {};
+
+  return dashboardLayout(`
+    <div class="topbar">
+      <div class="title">
+        <h2>✨ Theme Studio</h2>
+        <p>Atur identitas tampilan dashboard Pak RW supaya lebih rapi, clean, dan cocok untuk DESA TULUS.</p>
+      </div>
+      <div class="pill">MAXTON Theme</div>
+    </div>
+
+    ${saved ? `<div class="alert">✅ Theme dashboard berhasil disimpan.</div>` : ""}
+    ${error ? `<div class="alert danger">❌ ${escapeHtml(error)}</div>` : ""}
+
+    <form class="panel" method="post" action="/theme">
+      <h3>✨ Dashboard Identity</h3>
+      <div class="formgrid">
+        ${configInput("brandTitle", "Brand Title", dash.brandTitle || "Pak RW")}
+        ${configInput("brandSubtitle", "Brand Subtitle", dash.brandSubtitle || "Luxe Galaxy")}
+        ${configInput("homeTitle", "Home Title", dash.homeTitle || "Pak RW Luxe Galaxy")}
+        ${configInput("accentText", "Accent Text", dash.accentText || "DESA TULUS 🤍")}
+      </div>
+      ${textareaInput("homeSubtitle", "Home Subtitle", dash.homeSubtitle || "Dashboard modern, clean, menarik, dan nyaman buat edit semua fitur bot DESA TULUS.", 4)}
+
+      <h3 style="margin-top:28px">🎨 Visual Notes</h3>
+      <div class="commands">
+        <div class="cmd"><b>MAXTON Style</b><span>Gradient glass, clean sidebar, smart cards, dan editor yang rapi.</span></div>
+        <div class="cmd"><b>Media Studio</b><span>Gunakan logo/banner/background supaya link web dashboard terlihat lebih profesional.</span></div>
+        <div class="cmd"><b>Smart Center</b><span>Cek setting bot otomatis sebelum test fitur.</span></div>
+      </div>
+
+      <div class="actions">
+        <button class="btn" type="submit">💾 Simpan Theme</button>
+        <a class="btn secondary" href="/media">Media Studio</a>
+        <a class="btn secondary" href="/studio">Kembali Studio</a>
+      </div>
+    </form>
+  `, "theme");
+}
+
+
+
+function renderToolsCenter(req) {
+  const cfg = readConfigFile();
+  const configPath = typeof getDashboardConfigPath === "function" ? getDashboardConfigPath() : path.join(__dirname, "config.json");
+  const checks = [
+    ["DISCORD_TOKEN", Boolean(process.env.DISCORD_TOKEN), "Token bot Discord"],
+    ["DASHBOARD_PASSWORD", Boolean(process.env.DASHBOARD_PASSWORD), "Password custom dashboard"],
+    ["PAK_RW_DATA_DIR", Boolean(process.env.PAK_RW_DATA_DIR), "Folder data persistent DisCloud"],
+    ["DATA_DIR", Boolean(process.env.DATA_DIR), "Alternatif folder data persistent"],
+    ["AI_KEY / OPENROUTER_API_KEY", Boolean(process.env.AI_KEY || process.env.OPENROUTER_API_KEY), "API key AI/OpenRouter"]
+  ];
+
+  return dashboardLayout(`
+    <div class="topbar">
+      <div class="title">
+        <h2>🛠️ Tools Center</h2>
+        <p>Pusat alat bantu buat cek environment, live config, data folder, dan link penting dashboard.</p>
+      </div>
+      <div class="pill">Aurora Tools</div>
+    </div>
+
+    <section class="panel">
+      <h3>🔐 Environment Check</h3>
+      ${checks.map(([name, ok, desc]) => `<div class="tool-row"><div><b>${ok ? "✅" : "⚠️"} ${escapeHtml(name)}</b><span>${escapeHtml(desc)} • ${ok ? "terdeteksi" : "belum terdeteksi / opsional"}</span></div><span class="mega-badge">${ok ? "OK" : "CHECK"}</span></div>`).join("")}
+    </section>
+
+    <section class="panel">
+      <h3>📌 Config Info</h3>
+      <div class="commands">
+        <div class="cmd"><b>Config Path</b><span>${escapeHtml(configPath)}</span></div>
+        <div class="cmd"><b>Prefix</b><span>${escapeHtml(cfg.prefix || "rw")}</span></div>
+        <div class="cmd"><b>Level Channel</b><span>${escapeHtml(cfg.levelChannelId || "-")}</span></div>
+        <div class="cmd"><b>Donatur Role</b><span>${escapeHtml(dashboardRoleLabel(cfg.donaturRoleId))}</span></div>
+      </div>
+      <div class="actions">
+        <a class="btn" href="/api/live-config">Live Config API</a>
+        <a class="btn secondary" href="/api/mega-diagnose">Mega Diagnose API</a>
+        <a class="btn secondary" href="/api/export-config">Export Config</a>
+      </div>
+    </section>
+  `, "tools");
+}
+
+function renderBackupCenter(req) {
+  const cfg = readConfigFile();
+  const jsonText = JSON.stringify(cfg, null, 2);
+
+  return dashboardLayout(`
+    <div class="topbar">
+      <div class="title">
+        <h2>💾 Backup Center</h2>
+        <p>Backup config sebelum update besar. Kamu bisa copy isi config atau download lewat API export.</p>
+      </div>
+      <div class="pill">Config Backup</div>
+    </div>
+
+    <section class="panel">
+      <h3>📦 Backup Config</h3>
+      <div class="actions" style="position:static;margin-bottom:14px">
+        <a class="btn" href="/api/export-config">⬇️ Download config.json</a>
+        <a class="btn secondary" href="/source?file=config.json">Lihat Source Config</a>
+        <a class="btn secondary" href="/modules">Edit Feature Settings</a>
+      </div>
+      <textarea class="codebox" readonly>${escapeHtml(jsonText)}</textarea>
+    </section>
+  `, "backup");
+}
+
+function renderPreviewStudio(req) {
+  const cfg = readConfigFile();
+  const e = cfg.embeds || {};
+  const cards = [
+    ["Juragan", e.juragan],
+    ["Donatur", e.donatur],
+    ["Level Up", e.levelUp],
+    ["Cek Poin", e.levelProfile],
+    ["Curhat Anonim", e.anonimPanel]
+  ];
+
+  return dashboardLayout(`
+    <div class="topbar">
+      <div class="title">
+        <h2>👀 Preview Studio</h2>
+        <p>Lihat preview teks embed yang tersimpan di config tanpa harus test command dulu.</p>
+      </div>
+      <div class="pill">Embed Preview</div>
+    </div>
+
+    <section class="panel">
+      <h3>🎨 Embed Preview</h3>
+      <div class="formgrid">
+        ${cards.map(([name, item]) => `<div class="preview-card" style="border-left:5px solid ${escapeHtml(item?.color || "#7C5CFF")}"><b>${escapeHtml(name)}</b>\n\n${escapeHtml(item?.title || "-")}\n\n${escapeHtml(item?.description || "-")}\n\nFooter: ${escapeHtml(item?.footer || "-")}</div>`).join("")}
+      </div>
+      <div class="actions">
+        <a class="btn" href="/embeds">Edit Embeds</a>
+        <a class="btn secondary" href="/control">Kirim Test Embed</a>
+      </div>
+    </section>
+  `, "preview");
+}
+
+
+
+function renderTestCenter(req) {
+  const cfg = readConfigFile();
+  const prefix = cfg.prefix || "rw";
+
+  const tests = [
+    ["Ping/Status", `${prefix}ping`, "Cek bot merespon normal."],
+    ["Help", `${prefix}help`, "Cek daftar command umum."],
+    ["Test Juragan", `${prefix}testboost`, "Cek role Juragan dan embed boost/Juragan."],
+    ["Cek Poin", `rwcekpoin`, "Cek embed level/profile warga."],
+    ["Top Level", `rwtoplevel`, "Cek leaderboard level."],
+    ["AI Donatur", `rwtanya halo pak rw`, "Cek command tanya Pak RW."],
+    ["Donaturku", `${prefix}donaturku`, "Cek akses/status Donatur."],
+    ["Saran", `${prefix}saran`, "Cek panel saran jika fitur aktif."],
+    ["Anonim", `${prefix}anonim`, "Cek panel curhat anonim jika fitur aktif."],
+    ["Server Info", `${prefix}serverinfo`, "Cek command utility server info."],
+    ["ID Helper", `${prefix}id`, "Cek bantuan ambil ID channel/role/user."]
+  ];
+
+  return dashboardLayout(`
+    <div class="topbar">
+      <div class="title">
+        <h2>🧪 Test Center</h2>
+        <p>Pusat panduan test fitur Pak RW. Tinggal copy command, test di Discord, lalu cek hasilnya.</p>
+      </div>
+      <div class="pill">Prefix: ${escapeHtml(prefix)}</div>
+    </div>
+
+    <section class="panel">
+      <h3>✅ Command Test Cepat</h3>
+      <div class="commands">
+        ${tests.map(([name, command, desc]) => `<div class="cmd"><b>${escapeHtml(name)}</b><span><code>${escapeHtml(command)}</code><br>${escapeHtml(desc)}</span></div>`).join("")}
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3>📌 Urutan Test yang Disarankan</h3>
+      <div class="smart-mini">
+        <div class="smart-mini-item"><b>1. Cek bot online</b>Jalankan <code>${escapeHtml(prefix)}ping</code> atau lihat DisCloud logs.</div>
+        <div class="smart-mini-item"><b>2. Cek dashboard config</b>Buka <code>/api/live-config</code> untuk lihat config yang aktif.</div>
+        <div class="smart-mini-item"><b>3. Test Juragan</b>Jalankan <code>${escapeHtml(prefix)}testboost</code>, cek embed dan role Juragan.</div>
+        <div class="smart-mini-item"><b>4. Test Level</b>Jalankan <code>rwcekpoin</code>, pastikan masuk channel level yang benar.</div>
+        <div class="smart-mini-item"><b>5. Cek Smart Center</b>Buka Smart Center kalau ada role/channel/permission yang belum valid.</div>
+      </div>
+    </section>
+  `, "test");
+}
+
+
+
+function dashboardFeatureSummary() {
+  const cfg = readConfigFile();
+  const guild = typeof getDashboardGuild === "function" ? getDashboardGuild() : client.guilds.cache.first();
+
+  return {
+    prefix: cfg.prefix || "rw",
+    serverName: cfg.serverName || "DESA TULUS",
+    bot: client?.user?.tag || "Pak RW",
+    guildName: guild?.name || cfg.serverName || "DESA TULUS",
+    memberCount: guild?.memberCount || 0,
+    roleCount: guild?.roles?.cache?.size || 0,
+    channelCount: guild?.channels?.cache?.size || 0,
+    aiModel: cfg.ai?.openRouterModel || "-",
+    juraganAutoSetup: cfg.juragan?.autoSetupChannels === true,
+    juraganRoleId: cfg.juragan?.roleId || "",
+    donaturRoleId: cfg.donaturRoleId || "",
+    levelChannelId: cfg.levelChannelId || "",
+    welcomeEnabled: cfg.welcome?.enabled !== false,
+    suggestionEnabled: cfg.suggestion?.enabled !== false,
+    juraganEnabled: cfg.juragan?.enabled !== false
+  };
+}
+
+function renderDashboardFeatureCenter(req) {
+  const s = dashboardFeatureSummary();
+
+  return dashboardLayout(`
+    <div class="feature-center-hero">
+      <h2>🧩 Dashboard Feature Center</h2>
+      <p>Pusat fitur dashboard Pak RW. Dari sini kamu bisa lihat command, toggle fitur penting, cek summary bot, dan lompat ke editor yang kamu butuhkan.</p>
+      <div class="clean-actions">
+        <a class="btn" href="/dashboard-commands">⌨️ Command Studio</a>
+        <a class="btn secondary" href="/feature-toggles">🔘 Feature Toggle</a>
+        <a class="btn secondary" href="/editor">✍️ Editor Hub</a>
+        <a class="btn secondary" href="/smart">🧠 Smart Center</a>
+      </div>
+    </div>
+
+    <section class="panel">
+      <h3>📊 Summary Cepat</h3>
+      <div class="summary-grid">
+        <div class="summary-box"><b>${escapeHtml(s.prefix)}</b><span>Prefix</span></div>
+        <div class="summary-box"><b>${escapeHtml(s.guildName)}</b><span>Server</span></div>
+        <div class="summary-box"><b>${s.memberCount}</b><span>Member</span></div>
+        <div class="summary-box"><b>${escapeHtml(s.aiModel)}</b><span>AI Model</span></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3>🚀 Menu Fitur Dashboard</h3>
+      <div class="feature-tab-grid">
+        <a class="feature-tab" href="/dashboard-commands"><b>⌨️ Command Studio</b><span>Lihat command bot yang rapi, lengkap, dan gampang dicopy.</span></a>
+        <a class="feature-tab" href="/feature-toggles"><b>🔘 Feature Toggle</b><span>Aktif/nonaktif fitur penting tanpa edit file manual.</span></a>
+        <a class="feature-tab" href="/quick-edit"><b>⚡ Quick Edit</b><span>Edit cepat prefix, AI, role, channel, dan donatur.</span></a>
+        <a class="feature-tab" href="/preview"><b>👀 Preview Studio</b><span>Preview embed sebelum test command di Discord.</span></a>
+        <a class="feature-tab" href="/backup"><b>💾 Backup Center</b><span>Export/copy config sebelum update besar.</span></a>
+        <a class="feature-tab" href="/api/dashboard-summary"><b>🛰️ Summary API</b><span>Cek ringkasan dashboard dalam bentuk JSON.</span></a>
+      </div>
+    </section>
+  `, "features");
+}
+
+
+function commandCatalogForDashboard(prefix = "rw") {
+  return {
+    owner: [
+      [`${prefix}status`, "Status lengkap bot, database, AI, dashboard", "Owner"],
+      [`${prefix}reload`, "Reload config tanpa restart dan tanpa reset data", "Owner"],
+      [`${prefix}backup`, "Backup config aman tanpa token/env", "Owner"],
+      [`${prefix}panel saran|anonim|mabar|juragan|donatur`, "Kirim panel yang sudah disediakan", "Owner/Staff terbatas"],
+      [`${prefix}setchannel ai #channel`, "Atur channel fitur non-level", "Owner"],
+      [`${prefix}setrole juragan @role`, "Atur role fitur non-level", "Owner"],
+      [`${prefix}fitur ai on/off`, "Aktif/nonaktif fitur non-level", "Owner"],
+      [`${prefix}embed juragan`, "Cek pintasan embed aman, edit penuh via dashboard", "Owner"],
+      [`${prefix}ai status|model|cooldown|max|channel|style`, "Atur AI Pak RW", "Owner"],
+      [`${prefix}maintenance on/off`, "Mode maintenance aman", "Owner"],
+      [`${prefix}test ai|curhat|saran|juragan|donatur|mabar|welcome`, "Test fitur aman", "Owner/Staff"]
+    ],
+    staff: [
+      [`${prefix}staff`, "Menu staff operasional", "Staff/Admin"],
+      [`${prefix}cekfitur`, "Lihat status fitur non-level", "Staff/Admin"],
+      [`${prefix}kirimpanel saran|anonim|mabar`, "Kirim ulang panel jika diizinkan", "Staff/Admin"],
+      [`${prefix}ping`, "Cek ping bot", "Semua"],
+      [`${prefix}info`, "Info ringan bot dan server", "Semua"]
+    ],
+    member: [
+      [`${prefix}help`, "Bantuan sesuai permission user", "Semua"],
+      [`${prefix}ping`, "Cek bot aktif", "Semua"],
+      [`${prefix}info`, "Info ringan Pak RW", "Semua"],
+      [`${prefix}tanya <pesan>`, "Tanya AI Pak RW", "Semua"],
+      [`${prefix}curhat <cerita>`, "Curhat biasa ke Pak RW", "Semua"],
+      [`${prefix}saran`, "Buka panel saran", "Semua"],
+      [`${prefix}mabar <game/mode/jam>`, "Buat ajakan cari mabar", "Semua"]
+    ],
+    protected: [
+      ["Level & Poin", "Tidak diubah dari Command Center", "Dikunci"],
+      ["Top Aktif / MOTM", "Tidak diubah dari Command Center", "Dikunci"],
+      ["Cek Poin", "Tidak diubah dari Command Center", "Dikunci"]
+    ]
+  };
+}
+
+function renderCommandCards(items = []) {
+  return items.map(([cmd, desc, perm]) => `
+    <div class="command-card premium-command-card">
+      <div class="command-card-top"><code>${escapeHtml(cmd)}</code><span>${escapeHtml(perm)}</span></div>
+      <p>${escapeHtml(desc)}</p>
+    </div>
+  `).join("");
+}
+
+function renderDashboardCommands(req) {
+  const cfg = readConfigFile();
+  const p = cfg.prefix || "rw";
+  const catalog = commandCatalogForDashboard(p);
+
+  return dashboardLayout(`
+    <div class="premium-section-head">
+      <div>
+        <h2>⌨️ Command Center</h2>
+        <p>Command Pak RW dibuat rapi berdasarkan permission: owner untuk setting penting, staff untuk operasional, member untuk fitur umum yang aman.</p>
+      </div>
+      <div class="pill">Prefix: ${escapeHtml(p)}</div>
+    </div>
+
+    <section class="premium-section command-hero-panel">
+      <div class="premium-flow">
+        <div><b>👑 Owner Only</b><span>Ubah channel, role, AI, dashboard, panel, backup, dan maintenance.</span></div>
+        <div><b>🛡️ Staff/Admin</b><span>Operasional aman: cek fitur dan kirim panel yang diizinkan.</span></div>
+        <div><b>🤍 Member</b><span>Command umum: tanya, curhat, saran, mabar, help, ping, info.</span></div>
+        <div><b>🔒 Protected</b><span>Level, Top Aktif/MOTM, dan Cek Poin dikunci, tidak disentuh.</span></div>
+      </div>
+    </section>
+
+    <section class="panel"><h3>👑 Owner Command</h3><div class="command-grid">${renderCommandCards(catalog.owner)}</div></section>
+    <section class="panel"><h3>🛡️ Staff / Admin Command</h3><div class="command-grid">${renderCommandCards(catalog.staff)}</div></section>
+    <section class="panel"><h3>🤍 Member Command</h3><div class="command-grid">${renderCommandCards(catalog.member)}</div></section>
+    <section class="panel"><h3>🔒 Sistem Dikunci Aman</h3><div class="command-grid">${renderCommandCards(catalog.protected)}</div></section>
+
+    <section class="panel">
+      <h3>👀 Preview Help Menu</h3>
+      <div class="formgrid">
+        <div class="preview-card"><b>Member Help</b><br><code>${escapeHtml(p)}help</code><br>Menampilkan command umum saja.</div>
+        <div class="preview-card"><b>Staff Help</b><br><code>${escapeHtml(p)}help</code><br>Menampilkan command umum + staff.</div>
+        <div class="preview-card"><b>Owner Help</b><br><code>${escapeHtml(p)}help</code><br>Menampilkan command owner lengkap.</div>
+        <div class="preview-card"><b>Dashboard Permission</b><br><a class="btn secondary" href="/permission-center">Buka Permission Center</a></div>
+      </div>
+    </section>
+  `, "commandcenter");
+}
+
+function renderPermissionCenter(req, saved = false, error = "") {
+  const cfg = readConfigFile();
+  cfg.commandPermissions = cfg.commandPermissions || {};
+  const cp = cfg.commandPermissions;
+  const listText = (arr) => Array.isArray(arr) ? arr.join("\n") : "";
+  const enabled = (v) => v !== false;
+  return dashboardLayout(`
+    <div class="premium-section-head">
+      <div>
+        <h2>🛡️ Permission Center</h2>
+        <p>Atur akses command Pak RW. Owner tetap server owner/env owner. Staff hanya operasional, member hanya command aman.</p>
+      </div>
+      <div class="pill">Command Security</div>
+    </div>
+    ${saved ? `<div class="alert">✅ Permission command berhasil disimpan.</div>` : ""}
+    ${error ? `<div class="alert danger">❌ ${escapeHtml(error)}</div>` : ""}
+    <form class="panel" method="post" action="/permission-center">
+      <h3>🔐 Role & Akses</h3>
+      <div class="formgrid">
+        <div><label>Staff Role IDs</label><textarea name="staffRoleIds" rows="5" placeholder="1 role ID per baris">${escapeHtml(listText(cp.staffRoleIds))}</textarea><small>Role yang boleh pakai command staff seperti cekfitur/kirimpanel.</small></div>
+        <div><label>Admin Role IDs</label><textarea name="adminRoleIds" rows="5" placeholder="1 role ID per baris">${escapeHtml(listText(cp.adminRoleIds))}</textarea><small>Opsional. Administrator Discord tetap dianggap staff/admin.</small></div>
+        <div><label>Panel Sender Role IDs</label><textarea name="panelRoleIds" rows="5" placeholder="1 role ID per baris">${escapeHtml(listText(cp.panelRoleIds))}</textarea><small>Role tambahan yang boleh kirim panel tertentu jika owner mengizinkan.</small></div>
+        <div><label>Owner User IDs tambahan</label><textarea name="ownerUserIds" rows="5" placeholder="1 user ID per baris">${escapeHtml(listText(cp.ownerUserIds))}</textarea><small>Server owner selalu owner. Ini tambahan jika dibutuhkan.</small></div>
+      </div>
+      <h3>⚙️ Toggle Permission</h3>
+      <div class="toggle-grid">
+        <div class="toggle-card"><label><input type="checkbox" name="enabled" ${enabled(cp.enabled) ? "checked" : ""}> Command Center Aktif</label><span>Jika mati, handler command center tambahan tidak aktif.</span></div>
+        <div class="toggle-card"><label><input type="checkbox" name="allowStaffSendPanel" ${enabled(cp.allowStaffSendPanel) ? "checked" : ""}> Staff boleh kirim panel</label><span>Staff bisa kirim panel saran/anonim/mabar jika diizinkan.</span></div>
+        <div class="toggle-card"><label><input type="checkbox" name="hideOwnerCommandsFromMembers" ${enabled(cp.hideOwnerCommandsFromMembers) ? "checked" : ""}> Sembunyikan owner command dari member</label><span>Help member hanya menampilkan command umum.</span></div>
+        <div class="toggle-card"><label><input type="checkbox" name="safeMode" ${enabled(cp.safeMode) ? "checked" : ""}> Safe Mode</label><span>Level, Top Aktif/MOTM, dan Cek Poin dikunci dari Command Center.</span></div>
+      </div>
+      <div class="actions">
+        <button class="btn" type="submit">💾 Simpan Permission</button>
+        <a class="btn secondary" href="/command-center">⌨️ Command Center</a>
+        <a class="btn secondary" href="/">🏠 Dashboard</a>
+      </div>
+    </form>
+  `, "permissioncenter");
+}
+
+function renderFeatureToggles(req, saved = false, error = "") {
+  const cfg = readConfigFile();
+
+  return dashboardLayout(`
+    <div class="topbar">
+      <div class="title">
+        <h2>🔘 Feature Toggle Center</h2>
+        <p>Aktif/nonaktifkan fitur penting dari dashboard. Bagian auto channel Juragan tetap dipaksa nonaktif sesuai request.</p>
+      </div>
+      <div class="pill">Toggle</div>
+    </div>
+
+    ${saved ? `<div class="alert">✅ Feature Toggle berhasil disimpan dan live reload.</div>` : ""}
+    ${error ? `<div class="alert danger">❌ ${escapeHtml(error)}</div>` : ""}
+
+    <form class="panel" method="post" action="/feature-toggles">
+      <h3>🧩 Toggle Fitur</h3>
+      <div class="toggle-grid">
+        <div class="toggle-card">
+          <label><input type="checkbox" name="welcomeEnabled" ${cfg.welcome?.enabled !== false ? "checked" : ""}> Welcome Aktif</label>
+          <span>Bot menyambut member baru sesuai config welcome.</span>
+        </div>
+        <div class="toggle-card">
+          <label><input type="checkbox" name="welcomeSendToChatWarga" ${cfg.welcome?.sendToChatWarga !== false ? "checked" : ""}> Welcome ke Chat Warga</label>
+          <span>Kirim welcome ke channel chat warga.</span>
+        </div>
+        <div class="toggle-card">
+          <label><input type="checkbox" name="juraganEnabled" ${cfg.juragan?.enabled !== false ? "checked" : ""}> Juragan Aktif</label>
+          <span>Role dan embed Juragan tetap berjalan.</span>
+        </div>
+        <div class="toggle-card">
+          <label><input type="checkbox" disabled> Auto Channel Juragan Nonaktif</label>
+          <span>Dipaksa nonaktif supaya bot tidak bikin category/channel Juragan otomatis.</span>
+        </div>
+        <div class="toggle-card">
+          <label><input type="checkbox" name="suggestionEnabled" ${cfg.suggestion?.enabled !== false ? "checked" : ""}> Suggestion Aktif</label>
+          <span>Panel dan fitur saran aktif.</span>
+        </div>
+        <div class="toggle-card">
+          <label><input type="checkbox" name="sendSuggestionPanelOnReady" ${cfg.panels?.sendSuggestionPanelOnReady === true ? "checked" : ""}> Kirim Panel Saran saat Online</label>
+          <span>Opsional. Kalau aktif, bot kirim panel saran saat ready.</span>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn" type="submit">💾 Simpan Toggle</button>
+        <a class="btn secondary" href="/modules">Edit Lengkap</a>
+        <a class="btn secondary" href="/smart">Cek Smart Center</a>
+      </div>
+    </form>
+  `, "toggles");
+}
+
+
+
+function discordChannelTypeLabel(type) {
+  if (type === ChannelType.GuildText) return "Text";
+  if (type === ChannelType.GuildVoice) return "Voice";
+  if (type === ChannelType.GuildCategory) return "Category";
+  if (type === ChannelType.GuildAnnouncement) return "Announcement";
+  if (type === ChannelType.GuildForum) return "Forum";
+  if (type === ChannelType.GuildStageVoice) return "Stage";
+  return String(type);
+}
+
+function renderDiscordHub(req) {
+  const cfg = readConfigFile();
+  const guild = typeof getDashboardGuild === "function" ? getDashboardGuild() : client.guilds.cache.first();
+
+  if (!guild) {
+    return dashboardLayout(`<div class="panel"><h3>Discord Hub</h3><p>Server belum terbaca. Pastikan bot online dan ada di server.</p></div>`, "discordhub");
+  }
+
+  const textCount = guild.channels.cache.filter((c) => c.type === ChannelType.GuildText).size;
+  const voiceCount = guild.channels.cache.filter((c) => c.type === ChannelType.GuildVoice).size;
+  const categoryCount = guild.channels.cache.filter((c) => c.type === ChannelType.GuildCategory).size;
+  const emojiCount = guild.emojis.cache.size;
+  const roleCount = guild.roles.cache.filter((r) => r.name !== "@everyone").size;
+
+  const botMember = guild.members.me;
+  const perms = botMember?.permissions;
+  const permissionRows = [
+    ["Manage Roles", perms?.has(PermissionsBitField.Flags.ManageRoles)],
+    ["Manage Channels", perms?.has(PermissionsBitField.Flags.ManageChannels)],
+    ["Send Messages", perms?.has(PermissionsBitField.Flags.SendMessages)],
+    ["Embed Links", perms?.has(PermissionsBitField.Flags.EmbedLinks)],
+    ["View Channels", perms?.has(PermissionsBitField.Flags.ViewChannel)]
+  ];
+
+  return dashboardLayout(`
+    <div class="orbit-hero">
+      <span class="orbit-badge">🛰️ Discord Hub</span>
+      <h2>${escapeHtml(guild.name)}</h2>
+      <p>Data Discord server yang terbaca oleh bot. Dari sini kamu bisa lanjut ke role board, channel board, emoji studio, dan smart center.</p>
+      <div class="orbit-actions">
+        <a class="btn" href="/orbit-roles">🎭 Lihat Roles</a>
+        <a class="btn secondary" href="/orbit-channels"># Lihat Channels</a>
+        <a class="btn secondary" href="/emoji-studio">😀 Lihat Emojis</a>
+        <a class="btn secondary" href="/smart">🧠 Smart Check</a>
+      </div>
+      <div class="orbit-kpis">
+        <div class="orbit-kpi"><b>${guild.memberCount || 0}</b><span>Member</span></div>
+        <div class="orbit-kpi"><b>${roleCount}</b><span>Role</span></div>
+        <div class="orbit-kpi"><b>${textCount}</b><span>Text Channel</span></div>
+        <div class="orbit-kpi"><b>${voiceCount}</b><span>Voice Channel</span></div>
+        <div class="orbit-kpi"><b>${emojiCount}</b><span>Emoji</span></div>
+      </div>
+    </div>
+
+    <div class="orbit-bento">
+      <section class="orbit-panel">
+        <h3>📊 Channel Summary</h3>
+        <div class="orbit-grid">
+          <div class="orbit-card"><b>Text</b><span>${textCount} channel text terbaca.</span></div>
+          <div class="orbit-card"><b>Voice</b><span>${voiceCount} channel voice terbaca.</span></div>
+          <div class="orbit-card"><b>Category</b><span>${categoryCount} category terbaca.</span></div>
+          <div class="orbit-card"><b>Suggestion</b><span>${cfg.suggestionChannelId ? `<#${cfg.suggestionChannelId}>` : "belum diisi"}</span></div>
+          <div class="orbit-card"><b>Level</b><span>${cfg.levelChannelId ? `<#${cfg.levelChannelId}>` : "belum diisi"}</span></div>
+          <div class="orbit-card"><b>Boost/Juragan</b><span>${cfg.juragan?.boostChannelId ? `<#${cfg.juragan.boostChannelId}>` : "belum diisi"}</span></div>
+        </div>
+      </section>
+
+      <section class="orbit-panel">
+        <h3>🛡️ Bot Permission</h3>
+        <div class="orbit-list">
+          ${permissionRows.map(([name, ok]) => `<div class="orbit-row"><b>${ok ? "✅" : "❌"} ${escapeHtml(name)}</b>${ok ? "Aktif" : "Belum aktif / cek role bot."}</div>`).join("")}
+        </div>
+      </section>
+    </div>
+  `, "discordhub");
+}
+
+function renderOrbitRoles(req) {
+  const guild = typeof getDashboardGuild === "function" ? getDashboardGuild() : client.guilds.cache.first();
+
+  if (!guild) {
+    return dashboardLayout(`<div class="panel"><h3>Role Board</h3><p>Server belum terbaca.</p></div>`, "rolesboard");
+  }
+
+  const roles = guild.roles.cache
+    .filter((role) => role.name !== "@everyone")
+    .sort((a, b) => b.position - a.position)
+    .first(80);
+
+  return dashboardLayout(`
+    <div class="topbar">
+      <div class="title">
+        <h2>🎭 Role Board</h2>
+        <p>Role Discord yang terbaca oleh Pak RW. Cocok buat copy ID role, mention role, dan cek urutan role.</p>
+      </div>
+      <div class="pill">${roles.length} roles</div>
+    </div>
+
+    <section class="orbit-panel">
+      <table class="discord-table">
+        <thead><tr><th>Role</th><th>Mention</th><th>ID</th><th>Position</th></tr></thead>
+        <tbody>
+          ${roles.map((role) => `<tr>
+            <td><span style="color:${role.hexColor || "#fff"}">●</span> ${escapeHtml(role.name)}</td>
+            <td><span class="copy-chip">&lt;@&${role.id}&gt;</span></td>
+            <td><span class="copy-chip">${role.id}</span></td>
+            <td>${role.position}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table>
+      <div class="actions">
+        <a class="btn" href="/discord">Discord Manager</a>
+        <a class="btn secondary" href="/quick-edit">Quick Edit</a>
+      </div>
+    </section>
+  `, "rolesboard");
+}
+
+function renderOrbitChannels(req) {
+  const guild = typeof getDashboardGuild === "function" ? getDashboardGuild() : client.guilds.cache.first();
+
+  if (!guild) {
+    return dashboardLayout(`<div class="panel"><h3>Channel Board</h3><p>Server belum terbaca.</p></div>`, "channelsboard");
+  }
+
+  const channels = guild.channels.cache
+    .filter((ch) => ch.type === ChannelType.GuildText || ch.type === ChannelType.GuildVoice || ch.type === ChannelType.GuildCategory || ch.type === ChannelType.GuildAnnouncement || ch.type === ChannelType.GuildForum || ch.type === ChannelType.GuildStageVoice)
+    .sort((a, b) => (a.rawPosition || 0) - (b.rawPosition || 0))
+    .first(120);
+
+  return dashboardLayout(`
+    <div class="topbar">
+      <div class="title">
+        <h2># Channel Board</h2>
+        <p>Channel Discord yang terbaca oleh Pak RW. Cocok buat copy ID channel dan mention channel.</p>
+      </div>
+      <div class="pill">${channels.length} channels</div>
+    </div>
+
+    <section class="orbit-panel">
+      <table class="discord-table">
+        <thead><tr><th>Channel</th><th>Type</th><th>Mention</th><th>ID</th><th>Category</th></tr></thead>
+        <tbody>
+          ${channels.map((ch) => `<tr>
+            <td>${ch.type === ChannelType.GuildCategory ? "📁" : ch.type === ChannelType.GuildVoice ? "🔊" : "#"} ${escapeHtml(ch.name)}</td>
+            <td>${escapeHtml(discordChannelTypeLabel(ch.type))}</td>
+            <td><span class="copy-chip">${ch.type === ChannelType.GuildCategory ? "-" : `&lt;#${ch.id}&gt;`}</span></td>
+            <td><span class="copy-chip">${ch.id}</span></td>
+            <td>${escapeHtml(ch.parent?.name || "-")}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table>
+      <div class="actions">
+        <a class="btn" href="/discord">Discord Manager</a>
+        <a class="btn secondary" href="/quick-edit">Quick Edit</a>
+      </div>
+    </section>
+  `, "channelsboard");
+}
+
+function renderEmojiStudio(req) {
+  const guild = typeof getDashboardGuild === "function" ? getDashboardGuild() : client.guilds.cache.first();
+
+  if (!guild) {
+    return dashboardLayout(`<div class="panel"><h3>Emoji Studio</h3><p>Server belum terbaca.</p></div>`, "emojistudio");
+  }
+
+  const emojis = guild.emojis.cache.first(100);
+
+  return dashboardLayout(`
+    <div class="topbar">
+      <div class="title">
+        <h2>😀 Emoji Studio</h2>
+        <p>Lihat emoji server dan format yang bisa ditempel ke embed/dashboard.</p>
+      </div>
+      <div class="pill">${emojis.length} emojis</div>
+    </div>
+
+    <section class="orbit-panel">
+      ${emojis.length ? `<div class="emoji-grid">
+        ${emojis.map((emoji) => `<div class="emoji-card">
+          <img src="${emoji.imageURL()}" alt="${escapeHtml(emoji.name)}" />
+          <b>${escapeHtml(emoji.name)}</b>
+          <span>${escapeHtml(emoji.animated ? `<a:${emoji.name}:${emoji.id}>` : `<:${emoji.name}:${emoji.id}>`)}</span>
+        </div>`).join("")}
+      </div>` : `<div class="orbit-row"><b>Belum ada emoji custom</b>Tambahkan emoji di Discord server dulu.</div>`}
+
+      <div class="actions">
+        <a class="btn" href="/embeds">Edit Embeds</a>
+        <a class="btn secondary" href="/preview">Preview Studio</a>
+      </div>
+    </section>
+  `, "emojistudio");
+}
+
+
+
+function renderLuxeMap(req) {
+  return dashboardLayout(`
+    <div class="topbar">
+      <div class="title">
+        <h2>🗺️ Dashboard Map</h2>
+        <p>Semua halaman dashboard Pak RW digrup supaya tidak bingung cari fitur. Mulai dari sini kalau mau edit atau cek sesuatu.</p>
+      </div>
+      <div class="pill">Luxe Galaxy</div>
+    </div>
+
+    <section class="luxe-panel">
+      <div class="luxe-map-grid">
+        <div class="luxe-map-section">
+          <h4>✍️ Edit Bot</h4>
+          <a href="/quick-edit">⚡ Quick Edit</a>
+          <a href="/editor">✍️ Editor Hub</a>
+          <a href="/embeds">🎨 Embeds & Texts</a>
+          <a href="/modules">🧩 Feature Settings</a>
+          <a href="/feature-toggles">🔘 Feature Toggle</a>
+        </div>
+        <div class="luxe-map-section">
+          <h4>🛰️ Discord Data</h4>
+          <a href="/discord-hub">🛰️ Discord Hub</a>
+          <a href="/orbit-roles">🎭 Role Board</a>
+          <a href="/orbit-channels"># Channel Board</a>
+          <a href="/emoji-studio">😀 Emoji Studio</a>
+          <a href="/discord">🔗 Discord Manager</a>
+        </div>
+        <div class="luxe-map-section">
+          <h4>🧠 Check & Test</h4>
+          <a href="/smart">🧠 Smart Center</a>
+          <a href="/test-center">🧪 Test Center</a>
+          <a href="/preview">👀 Preview Studio</a>
+          <a href="/dashboard-commands">⌨️ Command Studio</a>
+          <a href="/commands">⌨️ Commands</a>
+        </div>
+        <div class="luxe-map-section">
+          <h4>📣 Control</h4>
+          <a href="/control">📣 Control Center</a>
+          <a href="/media">🖼️ Media Studio</a>
+          <a href="/theme">✨ Theme Studio</a>
+          <a href="/dashboard-features">🧩 Feature Center</a>
+        </div>
+        <div class="luxe-map-section">
+          <h4>💾 Data & Backup</h4>
+          <a href="/backup">💾 Backup Center</a>
+          <a href="/data-center">🗄️ Data Center</a>
+          <a href="/analytics">📊 Analytics</a>
+          <a href="/source">🧾 Source Studio</a>
+        </div>
+        <div class="luxe-map-section">
+          <h4>🛰️ API</h4>
+          <a href="/api/luxe-overview">/api/luxe-overview</a>
+          <a href="/api/discord-overview">/api/discord-overview</a>
+          <a href="/api/dashboard-summary">/api/dashboard-summary</a>
+          <a href="/api/live-config">/api/live-config</a>
+          <a href="/api/export-config">/api/export-config</a>
+        </div>
+      </div>
+    </section>
+  `, "luxemap");
+}
+
+
+function renderCommands() {
+  const cfg = readConfigFile();
+  const p = cfg.prefix || "!";
+  const list = [
+    [`${p}ping`, "Cek ping bot"],
+    [`${p}status`, "Status Pak RW"],
+    [`${p}help`, "Daftar bantuan"],
+    [`${p}saran`, "Panel saran"],
+    [`${p}anonim`, "Panel curhat anonim"],
+    [`${p}level`, "Cek level warga"],
+    [`${p}toplevel`, "Leaderboard level"],
+    [`/donatur user:@user nominal:100k`, "Kasih role Donatur sesuai nominal"],
+    [`/donaturku`, "Menu khusus Donatur"],
+    [`rwtanya pertanyaan`, "AI khusus Donatur"],
+    [`rwtarik @user`, "Tarik member ke voice"],
+    [`rwusir @user`, "Usir member dari voice"]
+  ];
+
+  return dashboardLayout(`
+    <div class="topbar">
+      <div class="title">
+        <h2>Commands</h2>
+        <p>Daftar command aktif Pak RW.</p>
+      </div>
+      <div class="pill">⌨️ ${list.length} command</div>
+    </div>
+
+    <section class="panel">
+      <div class="commands">
+        ${list.map(([cmd, desc]) => `<div class="cmd"><b>${escapeHtml(cmd)}</b><span>${escapeHtml(desc)}</span></div>`).join("")}
+      </div>
+    </section>
+  `, "commands");
+}
+
+app.get("/motm-banner.svg", (req, res) => {
+  res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store, max-age=0");
+  res.send(renderMotmSvg(req.query || {}));
+});
+
+app.get("/login", (req, res) => {
+  if (isDashboardAuth(req)) return res.redirect("/");
+  res.send(dashboardShell(`
+    <div class="login">
+      <form class="panel loginbox" method="post" action="/login">
+        <div class="brand">
+          <div class="logo">${dashboardLogoHtml()}</div>
+          <div>
+            <h1>Pak RW Dashboard</h1>
+            <p>Masuk untuk mengelola DESA TULUS</p>
+          </div>
+        </div>
+        <label>Password Dashboard</label>
+        <input type="password" name="password" placeholder="Masukkan password dashboard" />
+        <div class="actions">
+          <button class="btn" type="submit">Masuk Dashboard</button>
+        </div>
+        <div class="footer">Atur password di ENV hostings: DASHBOARD_PASSWORD</div>
+      </form>
+    </div>
+  `, "Login Pak RW"));
+});
+
+app.post("/login", (req, res) => {
+  const password = String(req.body?.password || "");
+  if (password !== dashboardPassword) {
+    return res.status(401).send(dashboardShell(`
+      <div class="login">
+        <div class="panel loginbox">
+          <div class="alert danger">❌ Password salah.</div>
+          <a class="btn" href="/login">Coba Lagi</a>
+        </div>
+      </div>
+    `, "Login Gagal"));
+  }
+
+  const token = makeSessionToken();
+  dashboardSessions.add(token);
+  res.setHeader("Set-Cookie", `bekiw_dashboard=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=Lax; Max-Age=86400`);
+  return res.redirect("/");
+});
+
+app.get("/logout", (req, res) => {
+  const token = getCookie(req, "bekiw_dashboard");
+  if (token) dashboardSessions.delete(token);
+  res.setHeader("Set-Cookie", "bekiw_dashboard=; HttpOnly; Path=/; Max-Age=0");
+  res.redirect("/login");
+});
+
+app.get("/", requireDashboardAuth, (req, res) => {
+  res.send(renderDashboard(req));
+});
+
+app.get("/feature-flow", requireDashboardAuth, (req, res) => {
+  res.send(renderFeatureFlowDashboard(req));
+});
+
+app.get("/config", requireDashboardAuth, (req, res) => {
+  res.send(renderConfig(req));
+});
+
+app.post("/config", requireDashboardAuth, (req, res) => {
+  try {
+    const cfg = readConfigFile();
+
+    cfg.serverName = req.body.serverName || cfg.serverName;
+    cfg.ownerName = req.body.ownerName || cfg.ownerName;
+    cfg.prefix = req.body.prefix || cfg.prefix;
+    cfg.embedColor = req.body.embedColor || cfg.embedColor;
+    cfg.activityText = req.body.activityText || cfg.activityText;
+
+    cfg.ai = cfg.ai || {};
+    cfg.ai.openRouterModel = req.body.openRouterModel || cfg.ai.openRouterModel;
+
+    cfg.aiChannelId = req.body.aiChannelId || "";
+    cfg.curhatChannelId = req.body.curhatChannelId || "";
+    cfg.anonymousCurhatChannelId = req.body.anonymousCurhatChannelId || "";
+    cfg.suggestionChannelId = req.body.suggestionChannelId || "";
+    cfg.chatWargaChannelId = req.body.chatWargaChannelId || "";
+    cfg.levelChannelId = req.body.levelChannelId || "";
+
+    cfg.juragan = cfg.juragan || {};
+    cfg.juragan.roleId = req.body.juraganRoleId || "";
+    cfg.juragan.boostChannelId = req.body.boostChannelId || "";
+
+    cfg.donaturRoleId = req.body.donaturRoleId || "";
+    cfg.donaturRpPerDay = Number(req.body.donaturRpPerDay || 10000);
+    cfg.donaturMinimumAmount = Number(req.body.donaturMinimumAmount || 100000);
+    cfg.level100RoleId = req.body.level100RoleId || "";
+
+    cfg.welcome = cfg.welcome || {};
+    cfg.welcome.message = req.body.welcomeMessage || cfg.welcome.message || "";
+
+  writeConfigFile(cfg);
+    res.send(renderConfig(req, true));
+  } catch (err) {
+    res.status(500).send(renderConfig(req, false, err.message));
+  }
+});
+
+
+
+function normalizeEmbedFormFromRequest(req, originalKey, current = {}) {
+  const key = safeEmbedKey(originalKey);
+  const clean = (v = "") => String(v ?? "").trim();
+  const fields = [];
+
+  for (let i = 0; i < 25; i++) {
+    const name = clean(req.body[embedFieldName(key, i, "name")]);
+    const value = clean(req.body[embedFieldName(key, i, "value")]);
+    const inline = req.body[embedFieldName(key, i, "inline")] === "on";
+    if (name || value) fields.push({ name: name || "\u200b", value: value || "\u200b", inline });
+  }
+
+  const get = (field) => req.body[embedFormName(key, field)];
+
+  return {
+    ...current,
+    color: clean(get("color")) || current.color || config.embedColor || "#2B2D31",
+    content: String(get("content") ?? ""),
+    authorIcon: clean(get("authorIcon")),
+    authorName: clean(get("authorName")),
+    authorUrl: clean(get("authorUrl")),
+    title: String(get("title") ?? ""),
+    titleUrl: clean(get("titleUrl")),
+    description: String(get("description") ?? ""),
+    fields,
+    image: clean(get("image")),
+    thumbnail: clean(get("thumbnail")),
+    footer: String(get("footer") ?? ""),
+    footerIcon: clean(get("footerIcon")),
+    timestamp: req.body[embedFormName(key, "timestamp")] === "on",
+    destinationChannelId: clean(get("destinationChannelId"))
+  };
+}
+
+function findEmbedKeyBySafeKey(embeds = {}, safeKey = "") {
+  return Object.keys(embeds).find((key) => safeEmbedKey(key) === String(safeKey || ""));
+}
+
+function isHttpUrl(value = "") {
+  return /^https?:\/\//i.test(String(value || "").trim());
+}
+
+function buildDashboardEmbedPayload(embedCfg = {}, data = {}) {
+  const content = smartDiscordMentions(applyTemplate(embedCfg.content || "", data), client?.guilds?.cache?.first?.() || null).text.slice(0, 2000);
+  const embed = new EmbedBuilder()
+    .setColor(hexColor(embedCfg.color || config.embedColor || "#2B2D31", 0x2b2d31));
+
+  const authorName = applyTemplate(embedCfg.authorName || "", data).slice(0, 256);
+  const authorIcon = applyTemplate(embedCfg.authorIcon || "", data);
+  const authorUrl = applyTemplate(embedCfg.authorUrl || "", data);
+  if (authorName) {
+    const author = { name: authorName };
+    if (isHttpUrl(authorIcon)) author.iconURL = authorIcon;
+    if (isHttpUrl(authorUrl)) author.url = authorUrl;
+    embed.setAuthor(author);
+  }
+
+  const title = applyTemplate(embedCfg.title || "", data).slice(0, 256);
+  const titleUrl = applyTemplate(embedCfg.titleUrl || "", data);
+  if (title) embed.setTitle(title);
+  if (isHttpUrl(titleUrl)) embed.setURL(titleUrl);
+
+  const description = smartDiscordMentions(applyTemplate(embedCfg.description || "", data), client?.guilds?.cache?.first?.() || null).text.slice(0, 4096);
+  if (description) embed.setDescription(description);
+
+  const fields = Array.isArray(embedCfg.fields) ? embedCfg.fields : [];
+  for (const field of fields.slice(0, 25)) {
+    const name = applyTemplate(field.name || "\u200b", data).slice(0, 256) || "\u200b";
+    const value = smartDiscordMentions(applyTemplate(field.value || "\u200b", data), client?.guilds?.cache?.first?.() || null).text.slice(0, 1024) || "\u200b";
+    embed.addFields({ name, value, inline: Boolean(field.inline) });
+  }
+
+  const image = applyTemplate(embedCfg.image || "", data);
+  if (isHttpUrl(image)) embed.setImage(image);
+
+  const thumbnail = applyTemplate(embedCfg.thumbnail || "", data);
+  if (isHttpUrl(thumbnail)) embed.setThumbnail(thumbnail);
+
+  const footerText = applyTemplate(embedCfg.footer || "", data).slice(0, 2048);
+  const footerIcon = applyTemplate(embedCfg.footerIcon || "", data);
+  if (footerText) {
+    const footer = makeOTFooterData(footerText, footerIcon);
+    embed.setFooter(footer);
+  }
+
+  if (embedCfg.timestamp) embed.setTimestamp();
+
+  const hasEmbedContent = Boolean(title || description || fields.length || isHttpUrl(image) || isHttpUrl(thumbnail) || footerText || authorName);
+  const payload = {};
+  if (content) payload.content = content;
+  if (hasEmbedContent) payload.embeds = [embed];
+  return payload;
+}
+
+
+app.get("/embed-sync", requireDashboardAuth, (req, res) => {
+  res.send(renderEmbedSyncPage(req));
+});
+
+app.post("/embed-sync/import", requireDashboardAuth, async (req, res) => {
+  try {
+    const guild = getDashboardGuild();
+    if (!guild) return res.status(400).send(renderEmbedSyncPage(req, { error: "Bot belum membaca server Discord." }));
+    const link = String(req.body.messageLink || "");
+    let channelId = parseDiscordId(req.body.channelId || req.body.manualChannelId || "");
+    let messageId = parseDiscordId(req.body.messageId || "");
+    const linkMatch = link.match(/channels\/(\d+)\/(\d+)\/(\d+)/);
+    if (linkMatch) {
+      channelId = linkMatch[2];
+      messageId = linkMatch[3];
+    }
+    if (!channelId || !messageId) return res.status(400).send(renderEmbedSyncPage(req, { error: "Isi Channel ID dan Message ID, atau paste link pesan Discord." }));
+    const channel = await guild.channels.fetch(channelId).catch(() => null);
+    if (!channel || !channel.messages) return res.status(404).send(renderEmbedSyncPage(req, { error: "Bot tidak punya izin membaca pesan/channel ini atau channel tidak ditemukan." }));
+    const message = await channel.messages.fetch(messageId).catch((err) => {
+      console.log("EMBED IMPORT MESSAGE ERROR:", err?.message || err);
+      return null;
+    });
+    if (!message) return res.status(404).send(renderEmbedSyncPage(req, { error: "Message ID tidak ditemukan atau bot tidak punya izin membaca pesan/channel ini." }));
+    if (!message.embeds || !message.embeds.length) return res.status(400).send(renderEmbedSyncPage(req, { error: "Pesan ini tidak memiliki embed." }));
+    const embedJson = typeof message.embeds[0].toJSON === "function" ? message.embeds[0].toJSON() : JSON.parse(JSON.stringify(message.embeds[0]));
+    const templateName = normalizeEmbedTemplateName(req.body.templateName || `import-${messageId}`);
+    const importedTemplate = embedDataToTemplate(templateName, "Imported", message.content || "", embedJson, {
+      channelId,
+      messageId,
+      sourceChannelId: channelId,
+      sourceMessageId: messageId,
+      components: message.components?.map((row) => typeof row.toJSON === "function" ? row.toJSON() : row) || [],
+      lastSyncedFromDiscordAt: new Date().toISOString()
+    });
+    appendDashboardActivity("import", "Embed diimport dari Discord", `${templateName} • ${channelId}/${messageId}`);
+    res.send(renderEmbedSyncPage(req, { importedTemplate, selectedName: templateName, notice: "✅ Embed berhasil diambil dari Discord. Cek preview dulu, lalu klik Simpan Template kalau sudah cocok." }));
+  } catch (err) {
+    console.log("EMBED IMPORT ERROR:", err?.message || err);
+    res.status(500).send(renderEmbedSyncPage(req, { error: "Gagal import embed dari Discord: " + (err?.message || err) }));
+  }
+});
+
+app.post("/embed-sync/save", requireDashboardAuth, (req, res) => {
+  try {
+    const template = formToEmbedTemplate(req.body);
+    const data = readEmbedTemplatesFile();
+    data.templates[template.name] = {
+      ...(data.templates[template.name] || {}),
+      ...template,
+      lastEditedAt: new Date().toISOString()
+    };
+    writeEmbedTemplatesFile(data);
+    appendDashboardActivity("save", "Template embed disimpan", template.name);
+    res.send(renderEmbedSyncPage(req, { selectedName: template.name, notice: `✅ Template ${template.name} berhasil disimpan.` }));
+  } catch (err) {
+    res.status(500).send(renderEmbedSyncPage(req, { error: "Gagal simpan template: " + (err?.message || err) }));
+  }
+});
+
+app.post("/embed-sync/send", requireDashboardAuth, async (req, res) => {
+  try {
+    const guild = getDashboardGuild();
+    if (!guild) return res.status(400).send(renderEmbedSyncPage(req, { error: "Bot belum membaca server Discord." }));
+    const template = formToEmbedTemplate(req.body);
+    const channelId = parseDiscordId(template.defaultChannelId || req.body.defaultChannelId || "");
+    if (!channelId) return res.status(400).send(renderEmbedSyncPage(req, { importedTemplate: template, selectedName: template.name, error: "Pilih target channel dulu sebelum kirim ke Discord." }));
+    const channel = await guild.channels.fetch(channelId).catch(() => null);
+    if (!channel || !channel.send) return res.status(404).send(renderEmbedSyncPage(req, { importedTemplate: template, selectedName: template.name, error: "Channel tidak ditemukan atau bot tidak punya izin mengirim pesan." }));
+    const payload = { content: template.content || undefined, embeds: [templateToEmbedBuilder(template)] };
+    if (Array.isArray(template.components) && template.components.length) payload.components = template.components;
+    const sent = await channel.send(payload);
+    template.defaultChannelId = channel.id;
+    template.lastMessageId = sent.id;
+    template.lastSentAt = new Date().toISOString();
+    const data = readEmbedTemplatesFile();
+    data.templates[template.name] = template;
+    writeEmbedTemplatesFile(data);
+    appendDashboardActivity("send", "Embed dikirim ke Discord", `${template.name} → #${channel.name}`);
+    res.send(renderEmbedSyncPage(req, { selectedName: template.name, notice: `✅ Embed ${template.name} berhasil dikirim ke #${channel.name}. Message ID: ${sent.id}` }));
+  } catch (err) {
+    console.log("EMBED SEND ERROR:", err?.message || err);
+    res.status(500).send(renderEmbedSyncPage(req, { error: "Gagal kirim embed ke Discord: " + (err?.message || err) }));
+  }
+});
+
+app.post("/embed-sync/update", requireDashboardAuth, async (req, res) => {
+  try {
+    const guild = getDashboardGuild();
+    if (!guild) return res.status(400).send(renderEmbedSyncPage(req, { error: "Bot belum membaca server Discord." }));
+    const template = formToEmbedTemplate(req.body);
+    const channelId = parseDiscordId(template.defaultChannelId || template.sourceChannelId || req.body.defaultChannelId || "");
+    const messageId = parseDiscordId(template.lastMessageId || template.sourceMessageId || req.body.lastMessageId || "");
+    if (!channelId || !messageId) return res.status(400).send(renderEmbedSyncPage(req, { importedTemplate: template, selectedName: template.name, error: "Isi Channel ID dan Message ID untuk update pesan Discord lama." }));
+    const channel = await guild.channels.fetch(channelId).catch(() => null);
+    if (!channel || !channel.messages) return res.status(404).send(renderEmbedSyncPage(req, { importedTemplate: template, selectedName: template.name, error: "Channel tidak ditemukan atau bot tidak punya izin membaca/edit pesan." }));
+    const message = await channel.messages.fetch(messageId).catch(() => null);
+    if (!message) return res.status(404).send(renderEmbedSyncPage(req, { importedTemplate: template, selectedName: template.name, error: "Message ID tidak ditemukan. Tidak ada pesan baru yang dikirim." }));
+    if (message.author?.id !== client.user?.id) return res.status(403).send(renderEmbedSyncPage(req, { importedTemplate: template, selectedName: template.name, error: "Bot hanya bisa update pesan yang dikirim oleh Pak RW sendiri." }));
+    const payload = { content: template.content || null, embeds: [templateToEmbedBuilder(template)] };
+    if (Array.isArray(template.components) && template.components.length) payload.components = template.components;
+    await message.edit(payload);
+    template.defaultChannelId = channel.id;
+    template.lastMessageId = message.id;
+    template.lastEditedAt = new Date().toISOString();
+    const data = readEmbedTemplatesFile();
+    data.templates[template.name] = template;
+    writeEmbedTemplatesFile(data);
+    appendDashboardActivity("update", "Pesan embed lama diupdate", `${template.name} • ${message.id}`);
+    res.send(renderEmbedSyncPage(req, { selectedName: template.name, notice: `✅ Pesan Discord lama berhasil di-update tanpa kirim pesan baru.` }));
+  } catch (err) {
+    console.log("EMBED UPDATE ERROR:", err?.message || err);
+    res.status(500).send(renderEmbedSyncPage(req, { error: "Gagal update pesan Discord: " + (err?.message || err) }));
+  }
+});
+
+app.post("/embed-sync/duplicate", requireDashboardAuth, (req, res) => {
+  try {
+    const name = normalizeEmbedTemplateName(req.body.templateName || "");
+    const data = readEmbedTemplatesFile();
+    const original = data.templates[name];
+    if (!original) return res.status(404).send(renderEmbedSyncPage(req, { error: "Template tidak ditemukan." }));
+    const newName = normalizeEmbedTemplateName(`${name}-copy-${Date.now().toString().slice(-4)}`);
+    data.templates[newName] = { ...JSON.parse(JSON.stringify(original)), name: newName, status: "Draft", lastEditedAt: new Date().toISOString(), lastMessageId: "" };
+    writeEmbedTemplatesFile(data);
+    appendDashboardActivity("duplicate", "Template embed diduplicate", `${name} → ${newName}`);
+    res.send(renderEmbedSyncPage(req, { selectedName: newName, notice: `✅ Template berhasil diduplicate menjadi ${newName}.` }));
+  } catch (err) {
+    res.status(500).send(renderEmbedSyncPage(req, { error: "Gagal duplicate template: " + (err?.message || err) }));
+  }
+});
+
+app.get("/embed-templates", requireDashboardAuth, (req, res) => {
+  res.redirect("/embed-sync");
+});
+
+app.get("/logs", requireDashboardAuth, (req, res) => {
+  const activities = readDashboardActivity(40);
+  res.send(dashboardLayout(`
+    <section class="premium-hero"><div class="premium-hero-badge">📜 DESA TULUS • Recent Activity</div><h2>Logs & Activity Pak RW</h2><p>Catatan ringan untuk aksi dashboard: simpan template, import embed, kirim embed, update pesan, duplicate, dan aktivitas penting lain. Tidak menampilkan token/env.</p></section>
+    <section class="premium-section"><div class="premium-section-head"><div><h3>Recent Activity</h3><div class="premium-muted">Aktivitas terbaru dashboard Pak RW Control Center.</div></div><a class="btn secondary" href="/embed-sync">Embed Sync</a></div><div class="control-activity">
+      ${activities.length ? activities.map((a)=>`<div class="activity-row"><span>${escapeHtml(formatActivityTime(a.at))}</span><div><b>${escapeHtml(a.title || "Activity")}</b><span>${escapeHtml(a.detail || "")}</span></div><em class="activity-tag">${escapeHtml(a.type || "info")}</em></div>`).join("") : `<div class="premium-muted">Belum ada aktivitas tersimpan.</div>`}
+    </div></section>
+  `, "logs"));
+});
+
+app.get("/embeds", requireDashboardAuth, (req, res) => {
+  res.send(renderEmbedsPage(req));
+});
+
+app.post("/embeds", requireDashboardAuth, (req, res) => {
+  try {
+    const cfg = readConfigFile();
+    cfg.embeds = cfg.embeds || {};
+
+    const clean = (v = "") => String(v ?? "").trim();
+    const bool = (name) => req.body[name] === "on";
+    const embedKeys = Object.keys(cfg.embeds)
+      .filter((key) => key !== "dashboard" && !isProtectedEmbedKey(key) && cfg.embeds[key] && typeof cfg.embeds[key] === "object" && !Array.isArray(cfg.embeds[key]));
+
+    for (const originalKey of embedKeys) {
+      if (isProtectedEmbedKey(originalKey)) continue;
+      const key = safeEmbedKey(originalKey);
+      const current = cfg.embeds[originalKey] || {};
+      const get = (field) => req.body[embedFormName(key, field)];
+      const fields = [];
+      for (let i = 0; i < 25; i++) {
+        const name = clean(req.body[embedFieldName(key, i, "name")]);
+        const value = clean(req.body[embedFieldName(key, i, "value")]);
+        const inline = req.body[embedFieldName(key, i, "inline")] === "on";
+        if (name || value) fields.push({ name: name || "\u200b", value: value || "\u200b", inline });
+      }
+
+      cfg.embeds[originalKey] = {
+        ...current,
+        color: clean(get("color")) || current.color || cfg.embedColor || "#2B2D31",
+        content: String(get("content") ?? ""),
+        authorIcon: clean(get("authorIcon")),
+        authorName: clean(get("authorName")),
+        authorUrl: clean(get("authorUrl")),
+        title: String(get("title") ?? ""),
+        titleUrl: clean(get("titleUrl")),
+        description: String(get("description") ?? ""),
+        fields,
+        image: clean(get("image")),
+        thumbnail: clean(get("thumbnail")),
+        footer: String(get("footer") ?? ""),
+        footerIcon: clean(get("footerIcon")),
+        timestamp: bool(embedFormName(key, "timestamp")),
+        destinationChannelId: clean(get("destinationChannelId"))
+      };
+    }
+
+    if (req.body.newEmbedKey) {
+      const key = safeEmbedKey(req.body.newEmbedKey);
+      if (key) {
+        cfg.embeds[key] = cfg.embeds[key] || {};
+        cfg.embeds[key].color = cfg.embeds[key].color || cfg.embedColor || "#2B2D31";
+        cfg.embeds[key].title = clean(req.body.newEmbedTitle) || cfg.embeds[key].title || key;
+        cfg.embeds[key].authorName = clean(req.body.newEmbedAuthorName) || cfg.embeds[key].authorName || "";
+        cfg.embeds[key].description = cfg.embeds[key].description || "";
+        cfg.embeds[key].footer = cfg.embeds[key].footer || "";
+        cfg.embeds[key].content = cfg.embeds[key].content || "";
+        cfg.embeds[key].fields = Array.isArray(cfg.embeds[key].fields) ? cfg.embeds[key].fields : [];
+      }
+    }
+
+    cfg.embeds.dashboard = cfg.embeds.dashboard || {};
+    cfg.embeds.dashboard.brandTitle = "Pak RW v10.10.54";
+    cfg.embeds.dashboard.brandSubtitle = "Ultra Premium + Cari Mabar Embed";
+    cfg.dashboard = cfg.dashboard || {};
+    cfg.dashboard.releaseVersion = "10.10.32";
+    cfg.dashboard.releaseName = "Cari Mabar Embed Dashboard";
+
+    writeConfigFile(cfg);
+    res.send(renderEmbedsPage(req, true));
+  } catch (err) {
+    res.status(500).send(renderEmbedsPage(req, false, err.message));
+  }
+});
+
+
+
+
+app.post("/embeds/send/:key", requireDashboardAuth, async (req, res) => {
+  try {
+    const cfg = readConfigFile();
+    cfg.embeds = cfg.embeds || {};
+    const originalKey = findEmbedKeyBySafeKey(cfg.embeds, req.params.key);
+    if (!originalKey) return res.status(404).send(renderEmbedsPage(req, false, "Embed tidak ditemukan."));
+    if (isProtectedEmbedKey(originalKey)) return res.status(403).send(renderEmbedsPage(req, false, "Embed Level, Top Aktif/MOTM, dan Cek Poin dikunci aman dan tidak bisa diedit/dikirim dari editor ini."));
+
+    const guild = getDashboardGuild ? getDashboardGuild() : client.guilds.cache.first();
+    if (!guild) return res.status(400).send(renderEmbedsPage(req, false, "Bot belum membaca server Discord."));
+
+    const updatedEmbed = normalizeEmbedFormFromRequest(req, originalKey, cfg.embeds[originalKey] || {});
+    const channelId = updatedEmbed.destinationChannelId;
+    const channel = getTextChannel(guild, channelId);
+    if (!channel) return res.status(400).send(renderEmbedsPage(req, false, "Pilih channel tujuan yang benar dulu."));
+
+    cfg.embeds[originalKey] = updatedEmbed;
+    cfg.embeds.dashboard = cfg.embeds.dashboard || {};
+    cfg.embeds.dashboard.brandTitle = "Pak RW v10.10.54";
+    cfg.embeds.dashboard.brandSubtitle = "Ultra Premium + Cari Mabar Embed";
+    cfg.dashboard = cfg.dashboard || {};
+    cfg.dashboard.releaseVersion = "10.10.32";
+    cfg.dashboard.releaseName = "Cari Mabar Embed Dashboard";
+    cfg.featureSuite = cfg.featureSuite || {};
+    cfg.featureSuite.version = "10.10.32";
+
+    const payload = buildDashboardEmbedPayload(updatedEmbed, {
+      channelId: channel.id,
+      channelName: channel.name,
+      embedKey: originalKey
+    });
+
+    if (!payload.content && (!payload.embeds || !payload.embeds.length)) {
+      return res.status(400).send(renderEmbedsPage(req, false, "Isi normal text, title, description, image, atau field dulu sebelum kirim."));
+    }
+
+    await safeSend(channel, payload);
+    writeConfigFile(cfg);
+    res.send(renderEmbedsPage(req, true, "", `✅ Embed ${originalKey} berhasil dikirim ke #${channel.name}.`));
+  } catch (err) {
+    res.status(500).send(renderEmbedsPage(req, false, err.message));
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+app.get("/luxe-map", requireDashboardAuth, (req, res) => {
+  res.send(renderLuxeMap(req));
+});
+
+app.get("/api/luxe-overview", requireDashboardAuth, (req, res) => {
+  const cfg = readConfigFile();
+  const guild = typeof getDashboardGuild === "function" ? getDashboardGuild() : client.guilds.cache.first();
+
+  res.json({
+    ok: true,
+    dashboard: "Luxe Galaxy",
+    bot: client?.user?.tag || "Pak RW",
+    prefix: cfg.prefix || "rw",
+    guild: guild ? {
+      id: guild.id,
+      name: guild.name,
+      memberCount: guild.memberCount || 0,
+      roles: guild.roles.cache.filter((r) => r.name !== "@everyone").size,
+      channels: guild.channels.cache.size,
+      emojis: guild.emojis.cache.size
+    } : null,
+    config: {
+      levelChannelId: cfg.levelChannelId || "",
+      donaturRoleId: cfg.donaturRoleId || "",
+      juraganRoleId: cfg.juragan?.roleId || "",
+      autoSetupChannels: cfg.juragan?.autoSetupChannels === true
+    }
+  });
+});
+
+
+app.get("/discord-hub", requireDashboardAuth, (req, res) => {
+  res.send(renderDiscordHub(req));
+});
+
+app.get("/orbit-roles", requireDashboardAuth, (req, res) => {
+  res.send(renderOrbitRoles(req));
+});
+
+app.get("/orbit-channels", requireDashboardAuth, (req, res) => {
+  res.send(renderOrbitChannels(req));
+});
+
+app.get("/emoji-studio", requireDashboardAuth, (req, res) => {
+  res.send(renderEmojiStudio(req));
+});
+
+app.get("/api/discord-overview", requireDashboardAuth, (req, res) => {
+  const guild = typeof getDashboardGuild === "function" ? getDashboardGuild() : client.guilds.cache.first();
+
+  if (!guild) return res.json({ ok: false, message: "Guild belum terbaca" });
+
+  res.json({
+    ok: true,
+    guild: {
+      id: guild.id,
+      name: guild.name,
+      memberCount: guild.memberCount,
+      roles: guild.roles.cache.filter((r) => r.name !== "@everyone").size,
+      channels: guild.channels.cache.size,
+      emojis: guild.emojis.cache.size
+    },
+    config: {
+      prefix: config.prefix || "rw",
+      levelChannelId: config.levelChannelId || "",
+      donaturRoleId: config.donaturRoleId || "",
+      juraganRoleId: config.juragan?.roleId || "",
+      boostChannelId: config.juragan?.boostChannelId || "",
+      autoSetupChannels: config.juragan?.autoSetupChannels === true
+    }
+  });
+});
+
+
+app.get("/dashboard-features", requireDashboardAuth, (req, res) => {
+  res.send(renderDashboardFeatureCenter(req));
+});
+
+app.get("/dashboard-commands", requireDashboardAuth, (req, res) => {
+  res.send(renderDashboardCommands(req));
+});
+
+app.get("/command-center", requireDashboardAuth, (req, res) => {
+  res.send(renderDashboardCommands(req));
+});
+
+app.get("/permission-center", requireDashboardAuth, (req, res) => {
+  res.send(renderPermissionCenter(req));
+});
+
+app.post("/permission-center", requireDashboardAuth, (req, res) => {
+  try {
+    const cfg = readConfigFile();
+    cfg.commandPermissions = cfg.commandPermissions || {};
+    const lines = (value = "") => String(value || "").split(/\r?\n|,/g).map((x) => x.trim()).filter(Boolean);
+    cfg.commandPermissions.staffRoleIds = lines(req.body.staffRoleIds);
+    cfg.commandPermissions.adminRoleIds = lines(req.body.adminRoleIds);
+    cfg.commandPermissions.panelRoleIds = lines(req.body.panelRoleIds);
+    cfg.commandPermissions.ownerUserIds = lines(req.body.ownerUserIds);
+    cfg.commandPermissions.enabled = req.body.enabled === "on";
+    cfg.commandPermissions.allowStaffSendPanel = req.body.allowStaffSendPanel === "on";
+    cfg.commandPermissions.hideOwnerCommandsFromMembers = req.body.hideOwnerCommandsFromMembers === "on";
+    cfg.commandPermissions.safeMode = req.body.safeMode === "on";
+    cfg.commandPermissions.protectedSystems = ["level", "topActive", "motm", "cekPoin"];
+    writeConfigFile(cfg);
+    res.send(renderPermissionCenter(req, true));
+  } catch (err) {
+    res.status(500).send(renderPermissionCenter(req, false, err.message));
+  }
+});
+
+
+app.get("/maxton-control", requireDashboardAuth, (req, res) => {
+  res.send(renderMaxtonMegaControl(req));
+});
+
+app.post("/maxton-control", requireDashboardAuth, (req, res) => {
+  try {
+    applyMaxtonControlPost(req.body || {});
+    res.send(renderMaxtonMegaControl(req, true));
+  } catch (err) {
+    res.status(500).send(renderMaxtonMegaControl(req, false, err.message));
+  }
+});
+
+app.post("/maxton-control/json", requireDashboardAuth, (req, res) => {
+  try {
+    const raw = String(req.body.advancedJson || "").trim();
+    if (!raw) throw new Error("JSON kosong. Tidak ada yang disimpan.");
+    const parsed = JSON.parse(raw);
+    writeConfigFile(parsed);
+    res.send(renderMaxtonMegaControl(req, true));
+  } catch (err) {
+    res.status(400).send(renderMaxtonMegaControl(req, false, `Advanced JSON gagal disimpan: ${err.message}`));
+  }
+});
+
+app.get("/api/maxton-control/config", requireDashboardAuth, (req, res) => {
+  res.json({ ok: true, config: readConfigFile() });
+});
+
+app.get("/top-active", requireDashboardAuth, (req, res) => {
+  res.send(renderTopActiveDashboard(req));
+});
+
+app.post("/top-active", requireDashboardAuth, (req, res) => {
+  try {
+    const cfg = readConfigFile();
+    cfg.topActive = cfg.topActive || {};
+
+    cfg.topActive.enabled = req.body.enabled !== "off";
+    cfg.topActive.channelId = req.body.channelId || cfg.levelChannelId || "";
+    cfg.topActive.memberOfTheMonthRoleId = req.body.memberOfTheMonthRoleId || "";
+    cfg.topActive.pointsThreshold = Number(req.body.pointsThreshold || 10000);
+    cfg.topActive.useOneChannel = req.body.useOneChannel !== "off";
+    cfg.topActive.topLimit = Math.max(3, Math.min(25, Number(req.body.topLimit || 10)));
+    cfg.topActive.chatPointPerMessage = Math.max(1, Number(req.body.chatPointPerMessage || 5));
+    cfg.topActive.voicePointPerMinute = Math.max(0.1, Number(req.body.voicePointPerMinute || 2));
+    cfg.level = cfg.level || {};
+    cfg.level.mode = "totalPoints";
+    cfg.level.pointsPerLevel = Math.max(1, Number(req.body.levelPointsPerLevel || cfg.level.pointsPerLevel || 500));
+    cfg.level.maxLevel = Math.max(1, Math.min(1000, Number(req.body.levelMaxLevel || cfg.level.maxLevel || 100)));
+    cfg.topActive.bonusEnabled = req.body.bonusEnabled !== "off";
+    cfg.topActive.bonusPercent = Math.max(0, Number(req.body.bonusPercent || 15));
+    cfg.topActive.bannerEnabled = req.body.bannerEnabled !== "off";
+    cfg.topActive.announceLevelUp = req.body.announceLevelUp === "on";
+    cfg.topActive.announceMemberOfTheMonth = req.body.announceMemberOfTheMonth === "on";
+    cfg.topActive.motmAwardMode = cfg.topActive.announceMemberOfTheMonth ? "auto" : "manual_only";
+    cfg.topActive.postBoardAfterMotm = req.body.postBoardAfterMotm === "on" && cfg.topActive.announceMemberOfTheMonth === true;
+    cfg.topActive.motmSendMode = req.body.motmSendMode || cfg.topActive.motmSendMode || "separate_text_image";
+    cfg.topActive.autoImageThreadEnabled = req.body.autoImageThreadEnabled !== "off";
+    cfg.topActive.excludeOwnerFromLevel = req.body.excludeOwnerFromLevel !== "off";
+    cfg.topActive.excludeOwnerFromLeaderboard = req.body.excludeOwnerFromLeaderboard !== "off";
+    cfg.topActive.autoImageThreadArchiveMinutes = Math.max(60, Number(req.body.autoImageThreadArchiveMinutes || 1440));
+    cfg.topActive.autoImageThreadName = req.body.autoImageThreadName || "🖼️ Diskusi Gambar • {username}";
+    cfg.topActive.autoImageThreadMessage = req.body.autoImageThreadMessage || "🖼️ Thread otomatis dibuat buat diskusi gambar ini. Silakan ngobrol di sini ya 🤍";
+    cfg.topActive.title = req.body.title || "🏆 TOP AKTIF WARGA DESA TULUS";
+    cfg.topActive.subtitle = req.body.subtitle || "Update otomatis dari chat dan voice bulan ini. Level/rank di leaderboard dihitung dari poin bulan ini supaya tidak berantakan.";
+    cfg.topActive.footer = req.body.footer || `${cfg.serverName || "DESA TULUS"} • Top Aktif Warga`;
+    cfg.topActive.bannerTitle = req.body.bannerTitle || "MEMBER OF THE MONTH";
+    cfg.topActive.bannerSubtitle = req.body.bannerSubtitle || "TOP CHAT • TOP VOICE • TOP AKTIF";
+    cfg.topActive.bannerNameLabel = req.body.bannerNameLabel || cfg.topActive.bannerNameLabel || "NAMA MEMBER";
+    cfg.topActive.bannerFooterText = req.body.bannerFooterText || cfg.topActive.bannerFooterText || "DESA TULUS • MEMBER PALING AKTIF";
+    cfg.topActive.bannerAvatarRingText = req.body.bannerAvatarRingText || cfg.topActive.bannerAvatarRingText || "TOP AKTIF";
+    cfg.topActive.bannerMode = req.body.bannerMode || cfg.topActive.bannerMode || (req.body.manualBannerUrl ? "manual_background" : "auto");
+    cfg.topActive.manualBannerUrl = req.body.manualBannerUrl || cfg.topActive.manualBannerUrl || "";
+    cfg.topActive.bannerImageUrl = req.body.manualBannerUrl || cfg.topActive.bannerImageUrl || "";
+    cfg.topActive.bannerCategoryTemplate = req.body.bannerCategoryTemplate || cfg.topActive.bannerCategoryTemplate || "TOP CHAT BULAN INI";
+    cfg.topActive.bannerCardWidth = Math.max(720, Math.min(1200, Number(req.body.bannerCardWidth || cfg.topActive.bannerCardWidth || 900)));
+    cfg.topActive.bannerCardHeight = Math.max(405, Math.min(700, Number(req.body.bannerCardHeight || cfg.topActive.bannerCardHeight || 506)));
+    cfg.topActive.bannerAvatarX = Number(req.body.bannerAvatarX || cfg.topActive.bannerAvatarX || 0.5);
+    cfg.topActive.bannerAvatarY = Number(req.body.bannerAvatarY || cfg.topActive.bannerAvatarY || 0.575);
+    cfg.topActive.bannerAvatarRadius = Number(req.body.bannerAvatarRadius || cfg.topActive.bannerAvatarRadius || 0.112);
+    cfg.topActive.bannerNameX = Number(req.body.bannerNameX || cfg.topActive.bannerNameX || 0.5);
+    cfg.topActive.bannerNameY = Number(req.body.bannerNameY || cfg.topActive.bannerNameY || 0.725);
+    cfg.topActive.bannerNameFontSize = Number(req.body.bannerNameFontSize || cfg.topActive.bannerNameFontSize || 0.052);
+    cfg.topActive.bannerCategoryX = Number(req.body.bannerCategoryX || cfg.topActive.bannerCategoryX || 0.5);
+    cfg.topActive.bannerCategoryY = Number(req.body.bannerCategoryY || cfg.topActive.bannerCategoryY || 0.792);
+    cfg.topActive.bannerCategoryFontSize = Number(req.body.bannerCategoryFontSize || cfg.topActive.bannerCategoryFontSize || 0.037);
+    cfg.topActive.bannerTotalX = Number(req.body.bannerTotalX || cfg.topActive.bannerTotalX || 0.5);
+    cfg.topActive.bannerTotalY = Number(req.body.bannerTotalY || cfg.topActive.bannerTotalY || 0.850);
+    cfg.topActive.bannerTotalFontSize = Number(req.body.bannerTotalFontSize || cfg.topActive.bannerTotalFontSize || 0.038);
+    cfg.topActive.bannerTextMaxWidth = Number(req.body.bannerTextMaxWidth || cfg.topActive.bannerTextMaxWidth || 0.56);
+    cfg.topActive.manualBannerOverlayEnabled = req.body.manualBannerOverlayEnabled !== "off";
+    cfg.topActive.manualBannerNameEnabled = req.body.manualBannerOverlayEnabled !== "off";
+    cfg.topActive.manualBannerAvatarEnabled = req.body.manualBannerAvatarEnabled !== "off";
+    cfg.topActive.manualBannerDim = req.body.manualBannerDim !== "off";
+    cfg.topActive.rowArrowEmoji = req.body.rowArrowEmoji || cfg.topActive.rowArrowEmoji || "<a:Animated_Arrow_Bluelite:1512751559140839576>";
+
+  writeConfigFile(cfg);
+    res.send(renderTopActiveDashboard(req, true));
+  } catch (err) {
+    res.status(500).send(renderTopActiveDashboard(req, false, err.message));
+  }
+});
+
+app.get("/api/top-active/preview", requireDashboardAuth, (req, res) => {
+  const guild = typeof getDashboardGuild === "function" ? getDashboardGuild() : client.guilds.cache.first();
+  res.json({
+    ok: true,
+    guild: guild ? { id: guild.id, name: guild.name } : null,
+    month: getMonthLabel(),
+    config: getTopActiveConfig(),
+    topActive: guild ? getTopActiveRows(guild.id, "active", getTopActiveConfig().topLimit, guild.ownerId).map((u) => ({ userId: u.userId, total: u.monthlyTotal, chat: u.monthlyChat, voice: u.monthlyVoice, level: getLevelInfo(u).current.level })) : [],
+    topChat: guild ? getTopActiveRows(guild.id, "chat", getTopActiveConfig().topLimit, guild.ownerId).map((u) => ({ userId: u.userId, chat: u.monthlyChat })) : [],
+    topVoice: guild ? getTopActiveRows(guild.id, "voice", getTopActiveConfig().topLimit, guild.ownerId).map((u) => ({ userId: u.userId, voice: u.monthlyVoice })) : []
+  });
+});
+
+app.get("/feature-toggles", requireDashboardAuth, (req, res) => {
+  res.send(renderFeatureToggles(req));
+});
+
+app.post("/feature-toggles", requireDashboardAuth, (req, res) => {
+  try {
+    const cfg = readConfigFile();
+
+    cfg.welcome = cfg.welcome || {};
+    cfg.welcome.enabled = req.body.welcomeEnabled === "on";
+    cfg.welcome.sendToChatWarga = req.body.welcomeSendToChatWarga === "on";
+
+    cfg.juragan = cfg.juragan || {};
+    cfg.juragan.enabled = req.body.juraganEnabled === "on";
+    cfg.juragan.autoSetupChannels = false;
+
+    cfg.suggestion = cfg.suggestion || {};
+    cfg.suggestion.enabled = req.body.suggestionEnabled === "on";
+
+    cfg.panels = cfg.panels || {};
+    cfg.panels.sendSuggestionPanelOnReady = req.body.sendSuggestionPanelOnReady === "on";
+
+  writeConfigFile(cfg);
+    res.send(renderFeatureToggles(req, true));
+  } catch (err) {
+    res.status(500).send(renderFeatureToggles(req, false, err.message));
+  }
+});
+
+app.get("/api/dashboard-summary", requireDashboardAuth, (req, res) => {
+  res.json({ ok: true, ...dashboardFeatureSummary() });
+});
+
+
+app.get("/quick-edit", requireDashboardAuth, (req, res) => {
+  res.send(renderQuickEdit(req));
+});
+
+app.post("/quick-edit", requireDashboardAuth, (req, res) => {
+  try {
+    const cfg = readConfigFile();
+
+    cfg.prefix = req.body.prefix || "rw";
+    cfg.activityText = req.body.activityText || cfg.activityText || "DESA TULUS 🤍";
+    cfg.embedColor = req.body.embedColor || cfg.embedColor || "#FFFFFF";
+
+    cfg.ai = cfg.ai || {};
+    cfg.ai.openRouterModel = req.body.openRouterModel || cfg.ai.openRouterModel || "openai/gpt-4o-mini";
+
+    cfg.aiChannelId = req.body.aiChannelId || cfg.aiChannelId || "";
+    cfg.chatWargaChannelId = req.body.chatWargaChannelId || cfg.chatWargaChannelId || "";
+    cfg.levelChannelId = req.body.levelChannelId || cfg.levelChannelId || "";
+    cfg.juragan = cfg.juragan || {};
+    cfg.juragan.boostChannelId = req.body.boostChannelId || cfg.juragan.boostChannelId || "";
+    cfg.juragan.roleId = req.body.juraganRoleId || cfg.juragan.roleId || "";
+    cfg.juragan.autoSetupChannels = false;
+
+    cfg.donaturRoleId = req.body.donaturRoleId || cfg.donaturRoleId || "";
+    cfg.level100RoleId = req.body.level100RoleId || cfg.level100RoleId || "";
+    cfg.donaturRpPerDay = Number(req.body.donaturRpPerDay || cfg.donaturRpPerDay || 10000);
+
+  writeConfigFile(cfg);
+    res.send(renderQuickEdit(req, true));
+  } catch (err) {
+    res.status(500).send(renderQuickEdit(req, false, err.message));
+  }
+});
+
+
+app.get("/easy", requireDashboardAuth, (req, res) => {
+  res.send(renderEasyStart(req));
+});
+
+
+app.get("/editor", requireDashboardAuth, (req, res) => {
+  res.send(renderEditorHub(req));
+});
+
+
+app.get("/test-center", requireDashboardAuth, (req, res) => {
+  res.send(renderTestCenter(req));
+});
+
+
+app.get("/tools", requireDashboardAuth, (req, res) => {
+  res.send(renderToolsCenter(req));
+});
+
+app.get("/backup", requireDashboardAuth, (req, res) => {
+  res.send(renderBackupCenter(req));
+});
+
+app.get("/preview", requireDashboardAuth, (req, res) => {
+  res.send(renderPreviewStudio(req));
+});
+
+
+
+
+function csvIds(value) {
+  return String(value || "")
+    .split(/[\n,;\s]+/g)
+    .map((x) => parseDiscordId(x).trim())
+    .filter((x) => x && !x.includes("ISI_ID"));
+}
+
+function idListText(value) {
+  return Array.isArray(value) ? value.join("\n") : "";
+}
+
+function renderOwoAutoRoleDashboard(req, saved = false, error = "") {
+  const cfg = readConfigFile();
+  const guild = typeof getDashboardGuild === "function" ? getDashboardGuild() : null;
+  const owo = cfg.owoAutoRole || {};
+  const playerRoleLabel = dashboardRoleLabel(owo.playerRoleId || "");
+  const squadRoleLabel = dashboardRoleLabel(owo.squadRoleId || "");
+  const playerChannels = (owo.playerChannelIds || []).map(dashboardChannelLabel).join(", ") || "Belum diatur";
+  const squadChannels = (owo.squadChannelIds || []).map(dashboardChannelLabel).join(", ") || "Belum diatur";
+
+  return dashboardLayout(`
+    <section class="premium-hero">
+      <div class="premium-hero-badge">🎮 DESA TULUS • OwO Auto Role</div>
+      <h2>OwO Auto Role Prefix W</h2>
+      <p>Deteksi command OwO prefix <b>w</b> di channel yang kamu tentukan, lalu kasih role otomatis tanpa notice supaya channel tetap bersih. Fitur lain Pak RW tidak diubah.</p>
+      <div class="premium-actions">
+        <a class="btn secondary" href="/modules">← Modules</a>
+        <a class="btn secondary" href="/command-center">⌨️ Command Center</a>
+      </div>
+    </section>
+    ${saved ? `<div class="alert">✅ Setting OwO Auto Role berhasil disimpan dan live reload.</div>` : ""}
+    ${error ? `<div class="alert danger">❌ ${escapeHtml(error)}</div>` : ""}
+
+    <section class="premium-grid">
+      <div class="premium-card"><h3>Status Fitur</h3><p class="big">${owo.enabled !== false ? "Aktif" : "Nonaktif"}</p><div class="sub">Auto role hanya aktif di channel ID yang diatur.</div></div>
+      <div class="premium-card"><h3>Prefix OwO</h3><p class="big">${escapeHtml(owo.prefix || "w")}</p><div class="sub">Deteksi: w, w h, wh, wb, w battle, dan command w lain.</div></div>
+      <div class="premium-card"><h3>Role Player</h3><p class="big">${escapeHtml(playerRoleLabel)}</p><div class="sub">Diberikan di channel OwO biasa.</div></div>
+      <div class="premium-card"><h3>Role Squad</h3><p class="big">${escapeHtml(squadRoleLabel)}</p><div class="sub">Diberikan di channel Squad OwO.</div></div>
+    </section>
+
+    <form class="premium-section" method="post" action="/owo-auto-role">
+      <div class="premium-section-head">
+        <div><h3>🎮 Setting OwO Auto Role</h3><div class="premium-muted">Isi role dan channel dari Discord. Dashboard menampilkan nama; config tetap menyimpan ID.</div></div>
+        <button class="btn" type="submit">💾 Simpan OwO Auto Role</button>
+      </div>
+      <div class="formgrid">
+        <div><label>Status Fitur</label><select name="enabled"><option value="on" ${owo.enabled !== false ? "selected" : ""}>Aktif</option><option value="off" ${owo.enabled === false ? "selected" : ""}>Nonaktif</option></select><small class="setting-helper">Jika nonaktif, Pak RW tidak akan memberi role OwO otomatis.</small></div>
+        ${configInput("prefix", "Prefix OwO", owo.prefix || "w")}
+        ${guild ? selectField("playerRoleId", "Role OwO Player", roleOptions(guild, owo.playerRoleId || ""), "Pilih role OwO Player") : configInput("playerRoleId", "Role OwO Player ID", owo.playerRoleId || "")}
+        ${guild ? selectField("squadRoleId", "Role OwO Squad", roleOptions(guild, owo.squadRoleId || ""), "Pilih role OwO Squad") : configInput("squadRoleId", "Role OwO Squad ID", owo.squadRoleId || "")}
+        ${guild ? selectField("playerChannelPrimary", "Tambah/Pilih Channel OwO Player", channelOptions(guild, (owo.playerChannelIds || [])[0] || "", "text"), "Pilih channel OwO") : ""}
+        ${guild ? selectField("squadChannelPrimary", "Tambah/Pilih Channel Squad OwO", channelOptions(guild, (owo.squadChannelIds || [])[0] || "", "text"), "Pilih channel Squad OwO") : ""}
+        <div><label>Send Notice</label><select name="sendNotice"><option value="off" ${owo.sendNotice === false ? "selected" : ""}>Nonaktif — tidak spam</option><option value="on" ${owo.sendNotice === true ? "selected" : ""}>Aktif</option></select><small class="setting-helper">Saran: tetap Nonaktif agar channel OwO bersih.</small></div>
+        <div><label>Log Console</label><select name="logToConsole"><option value="on" ${owo.logToConsole !== false ? "selected" : ""}>Aktif</option><option value="off" ${owo.logToConsole === false ? "selected" : ""}>Nonaktif</option></select><small class="setting-helper">Jika aktif, DisCloud logs menampilkan role yang berhasil diberikan.</small></div>
+      </div>
+      ${textareaInput("playerChannelIds", "Channel OwO Player ID (boleh banyak, pisahkan enter/koma)", idListText(owo.playerChannelIds || []), 4)}
+      ${textareaInput("squadChannelIds", "Channel Squad OwO ID (boleh banyak, pisahkan enter/koma)", idListText(owo.squadChannelIds || []), 4)}
+      <div class="premium-protect-note">
+        <b>Alur:</b> member ketik <code>w h</code> / <code>wh</code> di channel OwO → dapat OwO Player. Member ketik <code>w battle</code> / <code>wb</code> di channel Squad OwO → dapat OwO Squad. Jika role sudah ada, Pak RW diam saja.
+      </div>
+    </form>
+
+    <section class="premium-section">
+      <h3>Preview Deteksi</h3>
+      <div class="feature-safe-grid">
+        <div class="feature-safe-card"><b>w h</b><span>Di channel OwO Player → role ${escapeHtml(playerRoleLabel)}</span><span class="badge">Valid</span></div>
+        <div class="feature-safe-card"><b>wh</b><span>Command singkat hunt tetap terdeteksi.</span><span class="badge">Valid</span></div>
+        <div class="feature-safe-card"><b>wb</b><span>Di channel Squad OwO → role ${escapeHtml(squadRoleLabel)}</span><span class="badge">Valid</span></div>
+      </div>
+      <p class="premium-muted" style="margin-top:14px">Channel Player: ${escapeHtml(playerChannels)}<br>Channel Squad: ${escapeHtml(squadChannels)}</p>
+    </section>
+  `, "owo");
+}
+
+
+
+function renderActiveVoiceRoleDashboard(req, saved = false, error = "") {
+  const cfg = readConfigFile();
+  const guild = typeof getDashboardGuild === "function" ? getDashboardGuild() : null;
+  const voice = cfg.activeVoiceRole || {};
+  const roleLabel = voice.roleId ? dashboardRoleLabel(voice.roleId) : (voice.roleName ? `@${voice.roleName}` : "@Member Aktif");
+  const voiceCount = guild ? guild.channels.cache.filter((c) => c.type === ChannelType.GuildVoice || c.type === ChannelType.GuildStageVoice).size : 0;
+
+  return dashboardLayout(`
+    <section class="premium-hero">
+      <div class="premium-hero-badge">🎙️ DESA TULUS • Voice Role</div>
+      <h2>Voice Role Otomatis</h2>
+      <p>Member yang sedang berada di voice server otomatis mendapat role <b>Member Aktif</b>. Saat keluar dari semua voice, role dicabut lagi supaya statusnya selalu rapi dan real-time.</p>
+      <div class="premium-actions">
+        <a class="btn secondary" href="/modules">← Modules</a>
+        <a class="btn secondary" href="/discord">🔗 Cek Role & Channel</a>
+      </div>
+    </section>
+    ${saved ? `<div class="alert">✅ Setting Voice Role berhasil disimpan dan live reload.</div>` : ""}
+    ${error ? `<div class="alert danger">❌ ${escapeHtml(error)}</div>` : ""}
+
+    <section class="premium-grid">
+      <div class="premium-card"><h3>Status Fitur</h3><p class="big">${voice.enabled !== false ? "Aktif" : "Nonaktif"}</p><div class="sub">Auto role aktif untuk semua voice channel.</div></div>
+      <div class="premium-card"><h3>Role Aktif</h3><p class="big">${escapeHtml(roleLabel)}</p><div class="sub">Disarankan isi Role ID agar lebih akurat.</div></div>
+      <div class="premium-card"><h3>Voice Terbaca</h3><p class="big">${escapeHtml(String(voiceCount))}</p><div class="sub">Guild Voice + Stage Voice.</div></div>
+      <div class="premium-card"><h3>Notice</h3><p class="big">${voice.sendNotice ? "Aktif" : "Diam"}</p><div class="sub">Default diam supaya tidak spam.</div></div>
+    </section>
+
+    <form class="premium-section" method="post" action="/active-voice-role">
+      <div class="premium-section-head">
+        <div><h3>🎙️ Setting Voice Role</h3><div class="premium-muted">Fitur ini tidak mengubah sistem level/voice poin. Ini hanya role status untuk member yang sedang ada di voice.</div></div>
+        <button class="btn" type="submit">💾 Simpan Voice Role</button>
+      </div>
+      <div class="formgrid">
+        <div><label>Status Fitur</label><select name="enabled"><option value="on" ${voice.enabled !== false ? "selected" : ""}>Aktif</option><option value="off" ${voice.enabled === false ? "selected" : ""}>Nonaktif</option></select><small class="setting-helper">Kalau aktif, Pak RW akan memberi/mencabut role otomatis saat member join/leave voice.</small></div>
+        ${guild ? selectField("roleId", "Role Member Aktif", roleOptions(guild, voice.roleId || ""), "Pilih role @Member Aktif") : configInput("roleId", "Role Member Aktif ID", voice.roleId || "")}
+        ${configInput("roleName", "Fallback Nama Role", voice.roleName || "Member Aktif")}
+        <div><label>Remove On Leave</label><select name="removeOnLeave"><option value="on" ${voice.removeOnLeave !== false ? "selected" : ""}>Aktif — cabut saat keluar voice</option><option value="off" ${voice.removeOnLeave === false ? "selected" : ""}>Nonaktif — role tidak dicabut otomatis</option></select><small class="setting-helper">Saran: Aktif, supaya role benar-benar menunjukkan member yang sedang aktif di voice.</small></div>
+        <div><label>Stage Voice</label><select name="includeStage"><option value="on" ${voice.includeStage !== false ? "selected" : ""}>Ikut dihitung</option><option value="off" ${voice.includeStage === false ? "selected" : ""}>Tidak dihitung</option></select><small class="setting-helper">Jika aktif, Stage Channel juga memberi role Member Aktif.</small></div>
+        <div><label>Send Notice</label><select name="sendNotice"><option value="off" ${voice.sendNotice !== true ? "selected" : ""}>Nonaktif — tidak spam</option><option value="on" ${voice.sendNotice === true ? "selected" : ""}>Aktif</option></select><small class="setting-helper">Default nonaktif supaya voice role berjalan diam-diam.</small></div>
+        <div><label>Log Console</label><select name="logToConsole"><option value="on" ${voice.logToConsole !== false ? "selected" : ""}>Aktif</option><option value="off" ${voice.logToConsole === false ? "selected" : ""}>Nonaktif</option></select><small class="setting-helper">Jika aktif, DisCloud logs mencatat role yang diberikan/dicabut.</small></div>
+      </div>
+      <div class="premium-protect-note">
+        <b>Alur:</b> member masuk voice mana pun → Pak RW kasih role <b>Member Aktif</b>. Member keluar dari semua voice → role dicabut. Bot diam saja kalau role sudah ada atau role belum diatur.
+      </div>
+    </form>
+
+    <section class="premium-section">
+      <h3>Checklist Aman</h3>
+      <div class="feature-safe-grid">
+        <div class="feature-safe-card"><b>Permission</b><span>Role bot harus lebih tinggi dari @Member Aktif dan punya Manage Roles.</span><span class="badge">Wajib</span></div>
+        <div class="feature-safe-card"><b>Tidak Spam</b><span>Send notice default mati, jadi channel tetap bersih.</span><span class="badge">Aman</span></div>
+        <div class="feature-safe-card"><b>Level Aman</b><span>Fitur ini tidak menyentuh Level, Top Aktif, MOTM, Cek Poin, atau database poin.</span><span class="badge">Protected</span></div>
+      </div>
+    </section>
+  `, "activevoice");
+}
+
+
+function renderBoostPoinDashboard(req, saved = false, error = "", notice = "") {
+  const cfg = readConfigFile();
+  const guild = typeof getDashboardGuild === "function" ? getDashboardGuild() : null;
+  const boost = cfg.boostPoin || {};
+  const state = readBoostPoinState();
+  const eventId = String(boost.eventId || getJakartaMonthKey(new Date()).replace("-", "") + "-boost");
+  const ev = state.events?.[eventId] || null;
+  const participants = Object.values(ev?.participants || {}).sort((a, b) => (b.totalAwarded || 0) - (a.totalAwarded || 0));
+  const chatIds = Array.isArray(boost.chatChannelIds) ? boost.chatChannelIds : [];
+  const voiceIds = Array.isArray(boost.voiceChannelIds) ? boost.voiceChannelIds : [];
+  const boostPercent = Number(boost.boostPercent ?? 5);
+  const multiplierText = getBoostPoinMultiplierText(boostPercent);
+  const titlePreview = applyBoostPoinTemplate(boost.announcementTitle || `BOOST POIN ${multiplierText} LEBIH CEPAT! 🚀`, guild);
+  const descPreview = applyBoostPoinTemplate(boost.announcementDescription || "Boost poin {multiplier} khusus event **{eventName}**.\n\nLets go yang mau ngejar poin keaktifan buat jadi **Member Of The Month** 🏆\n\nChannel event:\n{channels}", guild);
+
+  return dashboardLayout(`
+    <style>
+      .easy-boost-wrap{display:grid;gap:22px}.easy-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.easy-step{background:rgba(255,255,255,.065);border:1px solid rgba(255,255,255,.12);border-radius:22px;padding:20px}.easy-step b{display:block;font-size:16px;margin-bottom:8px}.easy-step span{display:block;color:rgba(255,255,255,.68);line-height:1.55;font-size:14px}.easy-form{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(360px,.92fr);gap:22px;align-items:start}.easy-panel{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:26px;padding:24px;box-shadow:0 22px 70px rgba(0,0,0,.22)}.easy-panel h3{margin:0 0 8px;font-size:21px}.easy-panel-desc{color:rgba(255,255,255,.65);line-height:1.55;margin:0 0 18px}.easy-field{margin-bottom:18px}.easy-field label{font-size:15px;font-weight:900;margin-bottom:8px;color:#fff}.easy-field small{display:block;margin-top:7px;color:rgba(255,255,255,.55);line-height:1.45}.easy-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:20px;padding-top:18px;border-top:1px solid rgba(255,255,255,.10)}.easy-actions .btn{min-height:48px}.easy-preview{position:sticky;top:20px}.easy-preview .discord-embed{background:#1f222b;border-left:4px solid #f5c542;border-radius:10px;padding:16px;margin-top:14px}.easy-preview .discord-title{font-size:17px;font-weight:900;margin-bottom:8px}.easy-preview .discord-description{white-space:pre-wrap;color:rgba(255,255,255,.78);line-height:1.55}.easy-mini-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.easy-stat{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:16px}.easy-stat .big{font-size:24px;font-weight:1000;margin:5px 0}.easy-advanced{border:1px solid rgba(255,255,255,.10);border-radius:18px;padding:14px;margin-top:16px;background:rgba(0,0,0,.16)}.easy-advanced summary{cursor:pointer;font-weight:900}.boost-checklist{display:grid;gap:10px;margin-top:14px}.boost-checklist div{background:rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.09);padding:12px;border-radius:14px;color:rgba(255,255,255,.75)}@media(max-width:1050px){.easy-form,.easy-steps{grid-template-columns:1fr}.easy-preview{position:static}.easy-mini-grid{grid-template-columns:1fr 1fr}}@media(max-width:650px){.easy-mini-grid{grid-template-columns:1fr}}
+    </style>
+
+    <section class="premium-hero">
+      <div class="premium-hero-badge">⚡ DESA TULUS • Boost Poin Simple Mode</div>
+      <h2>Boost Poin Dibikin Gampang</h2>
+      <p>Dashboard ini sekarang cuma fokus ke hal penting: <b>aktifkan event</b>, <b>pilih channel</b>, <b>tulis teks panel manual</b>, lalu <b>kirim embed ke Discord</b>. Tidak banyak setting kecil yang bikin pusing.</p>
+      <div class="premium-actions">
+        <a class="btn secondary" href="/modules">← Modules</a>
+        <a class="btn secondary" href="/dashboard">🏠 Dashboard</a>
+      </div>
+    </section>
+
+    ${saved ? `<div class="alert">✅ ${escapeHtml(notice || "Setting Boost Poin berhasil disimpan.")}</div>` : ""}
+    ${error ? `<div class="alert danger">❌ ${escapeHtml(error)}</div>` : ""}
+
+    <div class="easy-boost-wrap">
+      <section class="easy-steps">
+        <div class="easy-step"><b>1. Aktifkan event</b><span>Pilih Event Aktif dan boost +5%. Kalau belum event, matikan saja.</span></div>
+        <div class="easy-step"><b>2. Pilih channel</b><span>Channel Boost Poin buat panel. Channel Event buat tempat poin dihitung.</span></div>
+        <div class="easy-step"><b>3. Kirim panel</b><span>Klik Simpan + Kirim Panel. Peserta baru muncul setelah member chat/voice.</span></div>
+      </section>
+
+      <section class="easy-mini-grid">
+        <div class="easy-stat"><span>Status Fitur</span><div class="big">${boost.enabled !== false ? "Aktif" : "Nonaktif"}</div><small>Fitur utama</small></div>
+        <div class="easy-stat"><span>Status Event</span><div class="big">${boost.eventActive ? "ON" : "OFF"}</div><small>Bonus sedang berjalan</small></div>
+        <div class="easy-stat"><span>Boost</span><div class="big">+${escapeHtml(String(boostPercent))}%</div><small>Bonus poin</small></div>
+        <div class="easy-stat"><span>Peserta</span><div class="big">${participants.length}</div><small>Terbaca otomatis</small></div>
+      </section>
+
+      <form class="easy-form" method="post" action="/boost-poin">
+        <div class="easy-panel">
+          <h3>⚡ Setting Penting Saja</h3>
+          <p class="easy-panel-desc">Isi dari atas ke bawah. Bagian ini sengaja dibuat simpel supaya tidak bingung.</p>
+
+          <div class="formgrid">
+            <div class="easy-field"><label>Status Fitur</label><select name="enabled"><option value="on" ${boost.enabled !== false ? "selected" : ""}>Aktif</option><option value="off" ${boost.enabled === false ? "selected" : ""}>Nonaktif</option></select><small>Kalau nonaktif, boost poin tidak jalan.</small></div>
+            <div class="easy-field"><label>Status Event</label><select name="eventActive"><option value="on" ${boost.eventActive === true ? "selected" : ""}>Event Aktif</option><option value="off" ${boost.eventActive !== true ? "selected" : ""}>Event Mati</option></select><small>Aktifkan hanya saat event berlangsung.</small></div>
+            <div class="easy-field"><label>Boost Poin</label><input name="boostPercent" type="number" min="0" value="${escapeHtml(String(boostPercent))}"><small>Default +5%. Poin normal tetap masuk, bonus ditambahkan.</small></div>
+            <div class="easy-field"><label>Durasi Event (menit)</label><input name="durationMinutes" type="number" min="1" value="${escapeHtml(String(boost.durationMinutes || 60))}"><small>Contoh 60 menit. Dipakai untuk teks Berakhir.</small></div>
+            <div class="easy-field"><label>Mode Event</label><select name="eventMode"><option value="chat" ${boost.eventMode === "chat" ? "selected" : ""}>Chat saja</option><option value="voice" ${boost.eventMode === "voice" ? "selected" : ""}>Voice saja</option><option value="chat_voice" ${boost.eventMode !== "chat" && boost.eventMode !== "voice" ? "selected" : ""}>Chat + Voice</option></select><small>Pilih jenis aktivitas yang dapat boost.</small></div>
+            <div class="easy-field"><label>Oleh / Pengaktif Event</label><input name="eventByText" placeholder="@User atau User ID" value="${escapeHtml(boost.eventByText || boost.eventBy || config.ownerName || "PAK RW")}"><small>Contoh: @Nevix atau ID user. Nanti tampil di embed: 👤 Oleh.</small></div>
+          </div>
+
+          <div class="formgrid">
+            ${guild ? `<div class="easy-field">${selectField("channelId", "Channel Boost Poin / Tempat Panel", channelOptions(guild, boost.channelId || "", "text"), "Pilih channel boost poin")}<small>Panel/announcement dikirim ke channel ini.</small></div>` : `<div class="easy-field">${configInput("channelId", "Channel Boost Poin ID", boost.channelId || "")}<small>Panel/announcement dikirim ke channel ini.</small></div>`}
+            ${guild ? `<div class="easy-field">${selectField("chatChannelPrimary", "Channel Chat Event", channelOptions(guild, chatIds[0] || boost.channelId || "", "text"), "Pilih channel chat event")}<small>Member harus chat di channel ini supaya dapat bonus.</small></div>` : ""}
+            ${guild ? `<div class="easy-field">${selectField("voiceChannelPrimary", "Voice Channel Event", channelOptions(guild, voiceIds[0] || "", "voice"), "Pilih voice event")}<small>Member harus voice di channel ini supaya dapat bonus.</small></div>` : ""}
+          </div>
+
+          <div class="easy-field"><label>Judul Panel Manual</label><input name="announcementTitle" value="${escapeHtml(applyBoostPoinTemplate(boost.announcementTitle || "⚡ BOOST POIN DIAKTIFKAN", guild))}"><small>Bisa kamu tulis bebas. Contoh: ⚡ BOOST POIN DIAKTIFKAN</small></div>
+          <div class="easy-field"><label>Teks Panel Manual</label><textarea name="announcementDescription" style="min-height:210px">${escapeHtml(boost.announcementDescription || "Boost poin {multiplier} khusus event **{eventName}**.\n\nLets go yang mau ngejar poin keaktifan buat jadi **Member Of The Month** 🏆\n\nChannel event:\n{channels}")}</textarea><small>Boleh pakai {multiplier}, {eventName}, {channels}, {server}. Ini teks yang muncul di embed.</small></div>
+          <div class="easy-field"><label>Mention / Teks atas embed (opsional)</label><textarea name="mentionText" style="min-height:82px">${escapeHtml(boost.mentionText || "")}</textarea><small>Boleh kosong supaya tidak spam. Isi role mention kalau mau, contoh: &lt;@&ROLE_ID&gt;</small></div>
+
+          <details class="easy-advanced">
+            <summary>Advanced opsional</summary>
+            <div class="formgrid" style="margin-top:14px">
+              <div class="easy-field"><label>Nama Event</label><input name="eventName" value="${escapeHtml(boost.eventName || "Boost Poin DESA TULUS")}"></div>
+              <div class="easy-field"><label>Event ID</label><input name="eventId" value="${escapeHtml(boost.eventId || eventId)}"></div>
+              <div class="easy-field"><label>Button Join Event</label><select name="showJoinButton"><option value="on" ${boost.showJoinButton !== false ? "selected" : ""}>Aktif</option><option value="off" ${boost.showJoinButton === false ? "selected" : ""}>Nonaktif</option></select></div>
+              <div class="easy-field"><label>Label Button</label><input name="joinButtonLabel" value="${escapeHtml(boost.joinButtonLabel || "Join Event")}"></div>
+              <div class="easy-field"><label>Send Notice</label><select name="sendNotice"><option value="off" ${boost.sendNotice !== true ? "selected" : ""}>Nonaktif</option><option value="on" ${boost.sendNotice === true ? "selected" : ""}>Aktif</option></select></div>
+              <div class="easy-field"><label>Log Console</label><select name="logToConsole"><option value="on" ${boost.logToConsole !== false ? "selected" : ""}>Aktif</option><option value="off" ${boost.logToConsole === false ? "selected" : ""}>Nonaktif</option></select></div>
+            </div>
+            <div class="easy-field"><label>Channel Chat Event ID tambahan</label><textarea name="chatChannelIds" style="min-height:90px">${escapeHtml(idListText(chatIds))}</textarea><small>Satu ID per baris. Biasanya tidak perlu diisi kalau sudah pilih dropdown di atas.</small></div>
+            <div class="easy-field"><label>Voice Channel Event ID tambahan</label><textarea name="voiceChannelIds" style="min-height:90px">${escapeHtml(idListText(voiceIds))}</textarea><small>Satu ID per baris. Biasanya tidak perlu diisi kalau sudah pilih dropdown di atas.</small></div>
+            <div class="formgrid">
+              <div class="easy-field"><label>All Chat Channel</label><select name="includeAllChatChannels"><option value="off" ${boost.includeAllChatChannels !== true ? "selected" : ""}>Tidak</option><option value="on" ${boost.includeAllChatChannels === true ? "selected" : ""}>Ya</option></select></div>
+              <div class="easy-field"><label>All Voice Channel</label><select name="includeAllVoiceChannels"><option value="off" ${boost.includeAllVoiceChannels !== true ? "selected" : ""}>Tidak</option><option value="on" ${boost.includeAllVoiceChannels === true ? "selected" : ""}>Ya</option></select></div>
+            </div>
+            <div class="easy-field"><label>Panel Berakhir</label><input name="endTitle" value="${escapeHtml(boost.endTitle || "⚠️ BOOST POIN BERAKHIR")}"><textarea name="endDescription" style="min-height:100px;margin-top:10px">${escapeHtml(boost.endDescription || "Boost poin telah selesai.\n\n🔄 Status: Kembali ke normal (x1)")}</textarea></div>
+            <input type="hidden" name="channelName" value="${escapeHtml(boost.channelName || "⚡・boost-poin")}">
+            <textarea name="roleMentionIds" style="display:none">${escapeHtml(idListText(Array.isArray(boost.roleMentionIds) ? boost.roleMentionIds : []))}</textarea>
+          </details>
+
+          <div class="easy-actions">
+            <button class="btn secondary" name="boostAction" value="save" type="submit">💾 Simpan Saja</button>
+            <button class="btn" name="boostAction" value="send_active" type="submit" formaction="/boost-poin/send-active" formmethod="post">🚀 SIMPAN + KIRIM EMBED AKTIF</button>
+            <button class="btn secondary" name="boostAction" value="send_end" type="submit" formaction="/boost-poin/send-end" formmethod="post">⚠️ KIRIM EMBED BERAKHIR</button>
+          </div>
+          <div class="boost-checklist">
+            <div><b>Catatan penting:</b> kalau log Railway cuma menampilkan <code>Dashboard config saved</code>, berarti tombol kirim belum masuk ke route pengiriman. Tombol baru ini memakai route langsung <code>/boost-poin/send-active</code> supaya embed pasti dikirim setelah simpan.</div>
+          </div>
+        </div>
+
+        <aside class="easy-panel easy-preview">
+          <h3>👀 Preview Panel</h3>
+          <p class="easy-panel-desc">Ini contoh yang akan dikirim ke channel Boost Poin. Kalau mau post ke Discord, klik tombol <b>Simpan + Kirim Panel</b>.</p>
+          <div class="premium-discord-preview">
+            <div class="premium-muted">Content: ${escapeHtml((boost.mentionText || "") || "Kosong / tidak ada mention")}</div>
+            <div class="discord-embed" style="border-left-color:${escapeHtml(boost.announcementColor || "#F5C542")}">
+              <div class="discord-title">${escapeHtml(titlePreview)}</div>
+              <div class="discord-description">${escapeHtml(descPreview)}</div>
+              <div class="discord-field"><b>🎯 Mode Event</b><br>${escapeHtml(getBoostPoinModeText(boost.eventMode || "chat_voice"))}</div>
+              <div class="discord-field"><b>📍 Channel Event</b><br>${escapeHtml(getBoostPoinTargetChannelsText(getBoostPoinConfig()))}</div>
+              <small>DESA TULUS • Boost Poin</small>
+            </div>
+          </div>
+          <div class="boost-checklist">
+            <div>✅ <b>Simpan Saja</b> hanya menyimpan setting.</div>
+            <div>🚀 <b>Simpan + Kirim Panel</b> baru mengirim embed ke Discord.</div>
+            <div>👥 Peserta muncul setelah member benar-benar chat/voice di channel event.</div>
+          </div>
+        </aside>
+      </form>
+
+      <section class="easy-panel">
+        <div class="premium-section-head"><div><h3>👥 Peserta Event Terbaca</h3><div class="premium-muted">Event: ${escapeHtml(ev?.eventName || boost.eventName || "Belum ada event berjalan")}</div></div><span class="premium-chip">${participants.length} peserta</span></div>
+        <div class="table-wrap"><table><thead><tr><th>#</th><th>Member</th><th>Chat</th><th>Voice</th><th>Base</th><th>Boost</th><th>Total</th></tr></thead><tbody>
+          ${participants.length ? participants.slice(0, 30).map((p, i) => `<tr><td>${i + 1}</td><td><b>${escapeHtml(p.displayName || p.username || p.userId)}</b><br><span class="premium-muted">${escapeHtml(p.userId)}</span></td><td>${escapeHtml(String(p.chatCount || 0))}</td><td>${escapeHtml(String(p.voiceMinutes || 0))} menit</td><td>${escapeHtml(formatNumber(p.basePoints || 0))}</td><td>${escapeHtml(formatNumber(p.boostPoints || 0))}</td><td><b>${escapeHtml(formatNumber(p.totalAwarded || 0))}</b></td></tr>`).join("") : `<tr><td colspan="7">Belum ada peserta. Aktifkan event, lalu minta member chat/voice di channel event.</td></tr>`}
+        </tbody></table></div>
+      </section>
+    </div>
+  `, "boostpoin");
+}
+
+
+function saveBoostPoinDashboardConfigFromBody(body = {}) {
+  const cfg = readConfigFile();
+  cfg.boostPoin = cfg.boostPoin || {};
+  const chatIds = csvIds(body.chatChannelIds);
+  const voiceIds = csvIds(body.voiceChannelIds);
+  if (body.chatChannelPrimary) chatIds.unshift(parseDiscordId(body.chatChannelPrimary));
+  if (body.voiceChannelPrimary) voiceIds.unshift(parseDiscordId(body.voiceChannelPrimary));
+  cfg.boostPoin.enabled = body.enabled !== "off";
+  cfg.boostPoin.eventActive = body.eventActive === "on";
+  cfg.boostPoin.eventName = String(body.eventName || cfg.boostPoin.eventName || "Boost Poin DESA TULUS").trim();
+  cfg.boostPoin.eventId = String(body.eventId || cfg.boostPoin.eventId || getJakartaMonthKey(new Date()).replace("-", "") + "-boost").trim();
+  cfg.boostPoin.eventMode = ["chat", "voice", "chat_voice"].includes(body.eventMode) ? body.eventMode : "chat_voice";
+  cfg.boostPoin.boostPercent = Math.max(0, Number(body.boostPercent || 5));
+  cfg.boostPoin.durationMinutes = Math.max(1, Number(body.durationMinutes || cfg.boostPoin.durationMinutes || 60));
+  cfg.boostPoin.eventByText = String(body.eventByText || cfg.boostPoin.eventByText || cfg.boostPoin.eventBy || config.ownerName || "PAK RW").trim();
+  cfg.boostPoin.eventByUserId = parseDiscordId(body.eventByText || cfg.boostPoin.eventByUserId || "");
+  cfg.boostPoin.channelId = parseDiscordId(body.channelId || cfg.boostPoin.channelId || "");
+  cfg.boostPoin.channelName = String(body.channelName || cfg.boostPoin.channelName || "⚡・boost-poin").trim();
+  cfg.boostPoin.chatChannelIds = [...new Set(chatIds.filter(Boolean))];
+  cfg.boostPoin.voiceChannelIds = [...new Set(voiceIds.filter(Boolean))];
+  cfg.boostPoin.includeAllChatChannels = body.includeAllChatChannels === "on";
+  cfg.boostPoin.includeAllVoiceChannels = body.includeAllVoiceChannels === "on";
+  cfg.boostPoin.autoRegisterParticipants = true;
+  cfg.boostPoin.sendNotice = body.sendNotice === "on";
+  cfg.boostPoin.logToConsole = body.logToConsole !== "off";
+  cfg.boostPoin.announcementTitle = String(body.announcementTitle || cfg.boostPoin.announcementTitle || `⚡ BOOST POIN DIAKTIFKAN`).trim();
+  cfg.boostPoin.announcementDescription = String(body.announcementDescription || cfg.boostPoin.announcementDescription || "Boost poin {multiplier} khusus event **{eventName}**.\n\nChannel event:\n{channels}").trim();
+  cfg.boostPoin.mentionText = String(body.mentionText || cfg.boostPoin.mentionText || "").trim();
+  cfg.boostPoin.roleMentionIds = csvIds(body.roleMentionIds);
+  cfg.boostPoin.endTitle = String(body.endTitle || cfg.boostPoin.endTitle || "⚠️ BOOST POIN BERAKHIR").trim();
+  cfg.boostPoin.endDescription = String(body.endDescription || cfg.boostPoin.endDescription || "Boost poin telah selesai.\n\n🔄 Status: Kembali ke normal (x1)").trim();
+  cfg.boostPoin.showJoinButton = body.showJoinButton !== "off";
+  cfg.boostPoin.joinButtonLabel = String(body.joinButtonLabel || cfg.boostPoin.joinButtonLabel || "Join Event").trim();
+  cfg.boostPoin.announcementColor = cfg.boostPoin.announcementColor || "#F5C542";
+  cfg.boostPoin.endColor = cfg.boostPoin.endColor || "#FF5C7A";
+  writeConfigFile(cfg);
+  return cfg.boostPoin;
+}
+
+async function handleBoostPoinDirectSend(req, res, state = "active") {
+  try {
+    saveBoostPoinDashboardConfigFromBody(req.body || {});
+    const guild = typeof getDashboardGuild === "function" ? getDashboardGuild() : client.guilds.cache.first();
+    const result = await sendBoostPoinPublicPost(guild, state);
+    if (!result.ok) {
+      console.log(`❌ BOOST POIN ${state.toUpperCase()} SEND FAILED: ${result.message}`);
+      return res.status(400).send(renderBoostPoinDashboard(req, true, result.message));
+    }
+    console.log(`✅ BOOST POIN ${state.toUpperCase()} EMBED SENT: ${result.message}`);
+    return res.send(renderBoostPoinDashboard(req, true, "", result.message + " Cek channel Boost Poin."));
+  } catch (err) {
+    console.log("BOOST POIN DIRECT SEND ERROR:", err?.message || err);
+    return res.status(500).send(renderBoostPoinDashboard(req, false, err?.message || String(err)));
+  }
+}
+
+app.get("/boost-poin", requireDashboardAuth, (req, res) => {
+  res.send(renderBoostPoinDashboard(req));
+});
+
+app.post("/boost-poin/send-active", requireDashboardAuth, (req, res) => handleBoostPoinDirectSend(req, res, "active"));
+app.post("/boost-poin/send-end", requireDashboardAuth, (req, res) => handleBoostPoinDirectSend(req, res, "end"));
+
+
+app.post("/boost-poin", requireDashboardAuth, async (req, res) => {
+  try {
+    const cfg = readConfigFile();
+    cfg.boostPoin = cfg.boostPoin || {};
+    const chatIds = csvIds(req.body.chatChannelIds);
+    const voiceIds = csvIds(req.body.voiceChannelIds);
+    if (req.body.chatChannelPrimary) chatIds.unshift(parseDiscordId(req.body.chatChannelPrimary));
+    if (req.body.voiceChannelPrimary) voiceIds.unshift(parseDiscordId(req.body.voiceChannelPrimary));
+    cfg.boostPoin.enabled = req.body.enabled !== "off";
+    cfg.boostPoin.eventActive = req.body.eventActive === "on";
+    cfg.boostPoin.eventName = String(req.body.eventName || cfg.boostPoin.eventName || "Boost Poin DESA TULUS").trim();
+    cfg.boostPoin.eventId = String(req.body.eventId || cfg.boostPoin.eventId || getJakartaMonthKey(new Date()).replace("-", "") + "-boost").trim();
+    cfg.boostPoin.eventMode = ["chat", "voice", "chat_voice"].includes(req.body.eventMode) ? req.body.eventMode : "chat_voice";
+    cfg.boostPoin.boostPercent = Math.max(0, Number(req.body.boostPercent || 5));
+    cfg.boostPoin.durationMinutes = Math.max(1, Number(req.body.durationMinutes || cfg.boostPoin.durationMinutes || 60));
+    cfg.boostPoin.eventByText = String(req.body.eventByText || cfg.boostPoin.eventByText || cfg.boostPoin.eventBy || config.ownerName || "PAK RW").trim();
+    cfg.boostPoin.eventByUserId = parseDiscordId(req.body.eventByText || cfg.boostPoin.eventByUserId || "");
+    cfg.boostPoin.channelId = parseDiscordId(req.body.channelId || cfg.boostPoin.channelId || "");
+    cfg.boostPoin.channelName = String(req.body.channelName || cfg.boostPoin.channelName || "⚡・boost-poin").trim();
+    cfg.boostPoin.chatChannelIds = [...new Set(chatIds.filter(Boolean))];
+    cfg.boostPoin.voiceChannelIds = [...new Set(voiceIds.filter(Boolean))];
+    cfg.boostPoin.includeAllChatChannels = req.body.includeAllChatChannels === "on";
+    cfg.boostPoin.includeAllVoiceChannels = req.body.includeAllVoiceChannels === "on";
+    cfg.boostPoin.autoRegisterParticipants = true;
+    cfg.boostPoin.sendNotice = req.body.sendNotice === "on";
+    cfg.boostPoin.logToConsole = req.body.logToConsole !== "off";
+    cfg.boostPoin.announcementTitle = String(req.body.announcementTitle || cfg.boostPoin.announcementTitle || `BOOST POIN ${getBoostPoinMultiplierText(cfg.boostPoin.boostPercent)} LEBIH CEPAT! 🚀`).trim();
+    cfg.boostPoin.announcementDescription = String(req.body.announcementDescription || cfg.boostPoin.announcementDescription || "Boost poin {multiplier} khusus event **{eventName}**.\n\nLets go yang mau ngejar poin keaktifan buat jadi **Member Of The Month** 🏆").trim();
+    cfg.boostPoin.mentionText = String(req.body.mentionText || cfg.boostPoin.mentionText || "").trim();
+    cfg.boostPoin.roleMentionIds = csvIds(req.body.roleMentionIds);
+    cfg.boostPoin.endTitle = String(req.body.endTitle || cfg.boostPoin.endTitle || "⚠️ BOOST POIN BERAKHIR").trim();
+    cfg.boostPoin.endDescription = String(req.body.endDescription || cfg.boostPoin.endDescription || "Boost poin telah selesai.\n\n🔄 Status: Kembali ke normal (x1)").trim();
+    cfg.boostPoin.showJoinButton = req.body.showJoinButton !== "off";
+    cfg.boostPoin.joinButtonLabel = String(req.body.joinButtonLabel || cfg.boostPoin.joinButtonLabel || "Join Event").trim();
+    cfg.boostPoin.announcementColor = cfg.boostPoin.announcementColor || "#F5C542";
+    cfg.boostPoin.endColor = cfg.boostPoin.endColor || "#FF5C7A";
+    writeConfigFile(cfg);
+
+    const action = String(req.body.boostAction || "save");
+    let successNotice = "Setting Boost Poin berhasil disimpan.";
+    if (action === "send_active" || action === "send_end") {
+      const guild = typeof getDashboardGuild === "function" ? getDashboardGuild() : client.guilds.cache.first();
+      const result = await sendBoostPoinPublicPost(guild, action === "send_end" ? "end" : "active");
+      if (!result.ok) return res.status(400).send(renderBoostPoinDashboard(req, true, result.message));
+      successNotice = result.message;
+    }
+
+    res.send(renderBoostPoinDashboard(req, true, "", successNotice));
+  } catch (err) {
+    res.status(500).send(renderBoostPoinDashboard(req, false, err.message));
+  }
+});
+
+app.get("/active-voice-role", requireDashboardAuth, (req, res) => {
+  res.send(renderActiveVoiceRoleDashboard(req));
+});
+
+app.post("/active-voice-role", requireDashboardAuth, (req, res) => {
+  try {
+    const cfg = readConfigFile();
+    cfg.activeVoiceRole = cfg.activeVoiceRole || {};
+    cfg.activeVoiceRole.enabled = req.body.enabled !== "off";
+    cfg.activeVoiceRole.roleId = parseDiscordId(req.body.roleId || cfg.activeVoiceRole.roleId || "");
+    cfg.activeVoiceRole.roleName = String(req.body.roleName || cfg.activeVoiceRole.roleName || "Member Aktif").trim() || "Member Aktif";
+    cfg.activeVoiceRole.removeOnLeave = req.body.removeOnLeave !== "off";
+    cfg.activeVoiceRole.includeStage = req.body.includeStage !== "off";
+    cfg.activeVoiceRole.sendNotice = req.body.sendNotice === "on";
+    cfg.activeVoiceRole.logToConsole = req.body.logToConsole !== "off";
+    writeConfigFile(cfg);
+    res.send(renderActiveVoiceRoleDashboard(req, true));
+  } catch (err) {
+    res.status(500).send(renderActiveVoiceRoleDashboard(req, false, err.message));
+  }
+});
+
+app.get("/owo-auto-role", requireDashboardAuth, (req, res) => {
+  res.send(renderOwoAutoRoleDashboard(req));
+});
+
+app.post("/owo-auto-role", requireDashboardAuth, (req, res) => {
+  try {
+    const cfg = readConfigFile();
+    cfg.owoAutoRole = cfg.owoAutoRole || {};
+    const playerIds = csvIds(req.body.playerChannelIds);
+    const squadIds = csvIds(req.body.squadChannelIds);
+    if (req.body.playerChannelPrimary) playerIds.unshift(parseDiscordId(req.body.playerChannelPrimary));
+    if (req.body.squadChannelPrimary) squadIds.unshift(parseDiscordId(req.body.squadChannelPrimary));
+
+    cfg.owoAutoRole.enabled = req.body.enabled !== "off";
+    cfg.owoAutoRole.prefix = String(req.body.prefix || "w").trim().toLowerCase() || "w";
+    cfg.owoAutoRole.playerRoleId = parseDiscordId(req.body.playerRoleId || cfg.owoAutoRole.playerRoleId || "");
+    cfg.owoAutoRole.squadRoleId = parseDiscordId(req.body.squadRoleId || cfg.owoAutoRole.squadRoleId || "");
+    cfg.owoAutoRole.playerChannelIds = [...new Set(playerIds.filter(Boolean))];
+    cfg.owoAutoRole.squadChannelIds = [...new Set(squadIds.filter(Boolean))];
+    cfg.owoAutoRole.sendNotice = req.body.sendNotice === "on";
+    cfg.owoAutoRole.logToConsole = req.body.logToConsole !== "off";
+
+    writeConfigFile(cfg);
+    res.send(renderOwoAutoRoleDashboard(req, true));
+  } catch (err) {
+    res.status(500).send(renderOwoAutoRoleDashboard(req, false, err.message));
+  }
+});
+
+
+app.get("/manual-motm", requireDashboardAuth, (req, res) => {
+  res.send(renderManualMotmDashboard(req));
+});
+
+app.post("/manual-motm", requireDashboardAuth, async (req, res) => {
+  try {
+    const cfg = readConfigFile();
+    cfg.topActive = cfg.topActive || {};
+    cfg.embeds = cfg.embeds || {};
+    cfg.embeds.dashboard = cfg.embeds.dashboard || {};
+    cfg.embeds.dashboard.media = cfg.embeds.dashboard.media || {};
+
+    const guild = typeof getDashboardGuild === "function" ? getDashboardGuild() : client.guilds.cache.first();
+    if (!guild) throw new Error("Guild/server belum terbaca oleh bot.");
+
+    const userId = parseDiscordId(req.body.motmUserId || "");
+    if (!isFilledId(userId)) throw new Error("User ID / mention member belum benar.");
+
+    const member = await guild.members.fetch(userId).catch(() => null);
+    if (!member) throw new Error("Member tidak ditemukan di server.");
+
+    const channelId = req.body.motmChannelId || cfg.topActive.channelId || "";
+    const channel = getTextChannel(guild, channelId);
+    if (!channel?.isTextBased?.()) throw new Error("Channel MOTM tidak ditemukan atau bukan text channel.");
+
+    const bannerUrl = String(req.body.motmManualBannerUrl || "").trim();
+    cfg.topActive.manualBannerUrl = bannerUrl;
+    cfg.topActive.bannerImageUrl = bannerUrl;
+    cfg.embeds.dashboard.media.motmBackgroundImageUrl = bannerUrl;
+    cfg.topActive.bannerMode = "manual_image";
+    cfg.topActive.motmAwardMode = "manual_only";
+    cfg.topActive.autoMotmRole = false;
+    cfg.topActive.announceMemberOfTheMonth = false;
+    cfg.topActive.postBoardAfterMotm = false;
+    cfg.topActive.motmSendMode = req.body.motmSendMode || "image_only";
+    const overlayOn = req.body.motmOverlay === "on";
+    cfg.topActive.manualBannerOverlayEnabled = overlayOn;
+    cfg.topActive.manualBannerNameEnabled = overlayOn;
+    cfg.topActive.manualBannerAvatarEnabled = overlayOn;
+    cfg.topActive.manualBannerDim = overlayOn;
+    writeConfigFile(cfg);
+
+    const data = readLevelData();
+    const userData = getLevelUser(data, guild.id, member.id);
+
+    if (req.body.giveRole === "on" && isFilledId(cfg.topActive.memberOfTheMonthRoleId)) {
+      const role = guild.roles.cache.get(cfg.topActive.memberOfTheMonthRoleId);
+      const botMember = guild.members.me || await guild.members.fetchMe().catch(() => null);
+      if (!role) throw new Error("Role Member Of The Month tidak ditemukan.");
+      if (!botMember?.permissions?.has(PermissionsBitField.Flags.ManageRoles)) throw new Error("Bot belum punya permission Manage Roles.");
+      if (botMember.roles.highest.position <= role.position) throw new Error("Role bot harus lebih tinggi dari role Member Of The Month.");
+      if (!member.roles.cache.has(role.id)) await member.roles.add(role, "Pak RW Manual MOTM dari dashboard");
+    }
+
+    const sent = await sendMotmAnnouncementSeparate(channel, member, userData, { isTest: false });
+    await decorateMotmMessage(sent.imageMessage || sent.textMessage, member);
+
+    res.send(renderManualMotmDashboard(req, true, "", `✅ MOTM manual dikirim untuk ${member.user.tag} ke #${channel.name}. Data poin/level tidak diubah.`));
+  } catch (err) {
+    res.status(500).send(renderManualMotmDashboard(req, false, err.message));
+  }
+});
+
+app.get("/cari-mabar", requireDashboardAuth, (req, res) => {
+  res.send(renderCariMabarDashboard(req));
+});
+
+app.post("/cari-mabar", requireDashboardAuth, (req, res) => {
+  try {
+    const cfg = readConfigFile();
+    cfg.mabar = cfg.mabar || {};
+    cfg.embeds = cfg.embeds || {};
+    cfg.embeds.cariMabar = cfg.embeds.cariMabar || {};
+
+    cfg.mabar.enabled = req.body.enabled !== "off";
+    cfg.mabar.channelId = req.body.channelId || cfg.mabar.channelId || cfg.chatWargaChannelId || "";
+    cfg.mabar.embedKey = "cariMabar";
+    cfg.mabar.allowCustomSenderText = req.body.allowCustomSenderText !== "off";
+    cfg.mabar.defaultGame = req.body.defaultGame || "Belum diisi";
+    cfg.mabar.defaultMode = req.body.defaultMode || "Santai / Rank / Custom";
+    cfg.mabar.defaultSlot = req.body.defaultSlot || "Belum diisi";
+    cfg.mabar.defaultTime = req.body.defaultTime || "Belum diisi";
+    cfg.mabar.defaultNote = req.body.defaultNote || "Ayo mabar bareng warga DESA TULUS 🤍";
+    cfg.mabar.buttonText = req.body.buttonText || "🎮 Cari Mabar";
+
+    cfg.embeds.cariMabar.color = req.body.embedColor || cfg.embeds.cariMabar.color || "#5865F2";
+    cfg.embeds.cariMabar.title = req.body.embedTitle || cfg.embeds.cariMabar.title || "🎮 CARI MABAR DESA TULUS";
+    cfg.embeds.cariMabar.description = req.body.embedDescription || cfg.embeds.cariMabar.description || "Ada yang mau mabar? Isi data mabar dengan jelas biar warga gampang ikut.";
+    cfg.embeds.cariMabar.footer = req.body.embedFooter || cfg.embeds.cariMabar.footer || "DESA TULUS • Cari Mabar";
+    cfg.embeds.cariMabar.image = req.body.embedImage || "";
+    cfg.embeds.cariMabar.thumbnail = req.body.embedThumbnail || "";
+    cfg.embeds.cariMabar.content = req.body.embedContent || "";
+    cfg.embeds.cariMabar.destinationChannelId = cfg.mabar.channelId;
+
+    writeConfigFile(cfg);
+    res.send(renderCariMabarDashboard(req, true));
+  } catch (err) {
+    res.send(renderCariMabarDashboard(req, false, err.message));
+  }
+});
+
+app.get("/media", requireDashboardAuth, (req, res) => {
+  res.send(renderMediaStudio(req));
+});
+
+app.post("/media", requireDashboardAuth, (req, res) => {
+  try {
+    const cfg = readConfigFile();
+    cfg.embeds = cfg.embeds || {};
+    cfg.embeds.dashboard = cfg.embeds.dashboard || {};
+    cfg.embeds.dashboard.media = cfg.embeds.dashboard.media || {};
+    cfg.topActive = cfg.topActive || {};
+
+    cfg.embeds.dashboard.media.logoUrl = req.body.logoUrl || "";
+    cfg.embeds.dashboard.media.bannerUrl = req.body.bannerUrl || "";
+    cfg.embeds.dashboard.media.backgroundUrl = req.body.backgroundUrl || "";
+    cfg.embeds.dashboard.media.faviconUrl = req.body.faviconUrl || "";
+    cfg.embeds.dashboard.media.defaultEmbedImageUrl = req.body.defaultEmbedImageUrl || "";
+    cfg.embeds.dashboard.media.defaultThumbnailUrl = req.body.defaultThumbnailUrl || "";
+    cfg.embeds.dashboard.media.motmBackgroundImageUrl = req.body.motmManualBannerUrl || "";
+
+    cfg.topActive.manualBannerUrl = req.body.motmManualBannerUrl || "";
+    cfg.topActive.bannerImageUrl = req.body.motmManualBannerUrl || "";
+    cfg.topActive.bannerMode = req.body.motmBannerMode || cfg.topActive.bannerMode || "manual_image";
+    cfg.topActive.motmSendMode = req.body.motmSendMode || cfg.topActive.motmSendMode || "separate_text_image";
+    if (cfg.topActive.bannerMode === "manual_image") {
+      cfg.topActive.announceMemberOfTheMonth = false;
+      cfg.topActive.motmAwardMode = "manual_only";
+      cfg.topActive.postBoardAfterMotm = false;
+    }
+    const overlayOn = req.body.motmOverlay === "on";
+    cfg.topActive.manualBannerOverlayEnabled = overlayOn;
+    cfg.topActive.manualBannerNameEnabled = overlayOn;
+    cfg.topActive.manualBannerAvatarEnabled = overlayOn;
+    cfg.topActive.manualBannerDim = overlayOn;
+
+  writeConfigFile(cfg);
+    res.send(renderMediaStudio(req, true));
+  } catch (err) {
+    res.status(500).send(renderMediaStudio(req, false, err.message));
+  }
+});
+
+app.get("/theme", requireDashboardAuth, (req, res) => {
+  res.send(renderThemeStudio(req));
+});
+
+app.post("/theme", requireDashboardAuth, (req, res) => {
+  try {
+    const cfg = readConfigFile();
+    cfg.embeds = cfg.embeds || {};
+    cfg.embeds.dashboard = cfg.embeds.dashboard || {};
+
+    cfg.embeds.dashboard.brandTitle = req.body.brandTitle || "Pak RW";
+    cfg.embeds.dashboard.brandSubtitle = req.body.brandSubtitle || "Luxe Galaxy";
+    cfg.embeds.dashboard.homeTitle = req.body.homeTitle || "Pak RW Luxe Galaxy";
+    cfg.embeds.dashboard.homeSubtitle = req.body.homeSubtitle || "Dashboard modern, clean, menarik, dan nyaman buat edit semua fitur bot DESA TULUS.";
+    cfg.embeds.dashboard.accentText = req.body.accentText || "DESA TULUS 🤍";
+
+  writeConfigFile(cfg);
+    res.send(renderThemeStudio(req, true));
+  } catch (err) {
+    res.status(500).send(renderThemeStudio(req, false, err.message));
+  }
+});
+
+
+app.get("/smart", requireDashboardAuth, (req, res) => {
+  res.send(renderMegaSmartCenter(req));
+});
+
+app.get("/api/mega-diagnose", requireDashboardAuth, (req, res) => {
+  const result = smartDashboardAnalyze();
+  res.json({
+    ok: true,
+    score: result.score,
+    okCount: result.okCount,
+    badCount: result.badCount,
+    warnCount: result.warnCount,
+    checks: result.checks
+  });
+});
+
+app.get("/api/export-config", requireDashboardAuth, (req, res) => {
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("Content-Disposition", "attachment; filename=config.json");
+  res.send(JSON.stringify(readConfigFile(), null, 2));
+});
+
+
+app.get("/studio", requireDashboardAuth, (req, res) => {
+  res.send(renderDashboard(req));
+});
+
+app.get("/source", requireDashboardAuth, (req, res) => {
+  res.send(renderSourceStudio(req, req.query.file || "config.json"));
+});
+
+
+app.get("/modules", requireDashboardAuth, (req, res) => {
+  res.send(renderModulesPage(req));
+});
+
+app.post("/modules", requireDashboardAuth, (req, res) => {
+  try {
+    const cfg = readConfigFile();
+    const protectedLevelSnapshot = {
+      levelChannelId: cfg.levelChannelId,
+      level100RoleId: cfg.level100RoleId,
+      level100RoleDurationDays: cfg.level100RoleDurationDays,
+      cekPoinChannelId: cfg.cekPoinChannelId,
+      level: JSON.parse(JSON.stringify(cfg.level || {}))
+    };
+
+    cfg.serverName = req.body.serverName || cfg.serverName || "";
+    cfg.ownerName = req.body.ownerName || cfg.ownerName || "";
+    cfg.prefix = req.body.prefix || cfg.prefix || "!";
+    cfg.embedColor = req.body.embedColor || cfg.embedColor || "#FFFFFF";
+    cfg.activityText = req.body.activityText || cfg.activityText || "";
+    cfg.ticketChannelId = req.body.ticketChannelId || cfg.ticketChannelId || "";
+
+    cfg.ai = cfg.ai || {};
+    cfg.ai.openRouterModel = req.body.openRouterModel || cfg.ai.openRouterModel || "openai/gpt-4o-mini";
+    cfg.ai.cooldownMs = Number(req.body.aiCooldownMs || cfg.ai.cooldownMs || 4500);
+    cfg.ai.maxMessageLength = Number(req.body.aiMaxMessageLength || cfg.ai.maxMessageLength || 1900);
+    cfg.ai.styleMode = req.body.aiStyleMode || cfg.ai.styleMode || "auto_mirror";
+    cfg.ai.pronounMode = req.body.aiPronounMode || cfg.ai.pronounMode || "auto";
+    cfg.ai.allowMildProfanity = req.body.aiAllowMildProfanity === "on";
+    cfg.ai.safeMirror = req.body.aiSafeMirror === "on";
+    cfg.ai.answerFlow = "big_bot_clear";
+
+    cfg.aiChannelId = req.body.aiChannelId || "";
+    cfg.curhatChannelId = req.body.curhatChannelId || "";
+    cfg.anonymousCurhatChannelId = req.body.anonymousCurhatChannelId || "";
+    cfg.chatWargaChannelId = req.body.chatWargaChannelId || "";
+
+    cfg.welcome = cfg.welcome || {};
+    cfg.welcome.enabled = req.body.welcomeEnabled === "on";
+    cfg.welcome.sendToChatWarga = req.body.welcomeSendToChatWarga === "on";
+    cfg.welcome.title = req.body.welcomeTitle || "";
+    cfg.welcome.message = req.body.welcomeMessage || "";
+
+    cfg.juragan = cfg.juragan || {};
+    cfg.juragan.enabled = req.body.juraganEnabled === "on";
+    cfg.juragan.roleId = req.body.juraganRoleId || "";
+    cfg.juragan.boostChannelId = req.body.boostChannelId || "";
+    cfg.juragan.categoryName = req.body.juraganCategoryName || "";
+    cfg.juragan.aiChannelName = req.body.juraganAiChannelName || "";
+    cfg.juragan.autoSetupChannels = false;
+
+    cfg.donaturRoleId = req.body.donaturRoleId || "";
+    cfg.donaturDefaultDays = Number(req.body.donaturDefaultDays || 30);
+    cfg.donaturRpPerDay = Number(req.body.donaturRpPerDay || 10000);
+    cfg.donaturMinimumAmount = Number(req.body.donaturMinimumAmount || 100000);
+
+    cfg.levelChannelId = req.body.levelChannelId || "";
+    cfg.cekPoinChannelId = req.body.cekPoinChannelId || cfg.cekPoinChannelId || cfg.levelChannelId || "";
+    cfg.level = cfg.level || {};
+    cfg.level.checkPointChannelId = cfg.cekPoinChannelId;
+    cfg.level100RoleId = req.body.level100RoleId || "";
+    cfg.level100RoleDurationDays = Number(req.body.level100RoleDurationDays || 30);
+
+    cfg.panels = cfg.panels || {};
+    cfg.panels.sendSuggestionPanelOnReady = req.body.sendSuggestionPanelOnReady === "on";
+
+    cfg.suggestion = cfg.suggestion || {};
+    cfg.suggestion.enabled = req.body.suggestionEnabled === "on";
+    cfg.suggestion.title = req.body.suggestionTitle || "";
+    cfg.suggestion.description = req.body.suggestionDescription || "";
+
+    cfg.suggestionChannelId = req.body.suggestionChannelId || "";
+    // Level, Top Aktif/MOTM, dan Cek Poin dikunci aman pada update ini.
+    cfg.levelChannelId = protectedLevelSnapshot.levelChannelId;
+    cfg.level100RoleId = protectedLevelSnapshot.level100RoleId;
+    cfg.level100RoleDurationDays = protectedLevelSnapshot.level100RoleDurationDays;
+    cfg.cekPoinChannelId = protectedLevelSnapshot.cekPoinChannelId;
+    cfg.level = protectedLevelSnapshot.level;
+    cfg.logChannelId = req.body.logChannelId || "";
+    cfg.rulesChannelId = req.body.rulesChannelId || "";
+    cfg.infoChannelId = req.body.infoChannelId || "";
+    cfg.eventChannelId = req.body.eventChannelId || "";
+
+  writeConfigFile(cfg);
+    res.send(renderModulesPage(req, true));
+  } catch (err) {
+    res.status(500).send(renderModulesPage(req, false, err.message));
+  }
+});
+
+
+app.get("/control", requireDashboardAuth, (req, res) => {
+  res.send(renderControlCenter(req));
+});
+
+app.post("/control/send-message", requireDashboardAuth, async (req, res) => {
+  try {
+    const guild = getDashboardGuild ? getDashboardGuild() : client.guilds.cache.first();
+    if (!guild) return res.status(400).send(renderControlCenter(req, false, "Bot belum membaca server."));
+
+    const channel = getTextChannel(guild, req.body.channelId);
+    if (!channel) return res.status(400).send(renderControlCenter(req, false, "Channel tidak ditemukan atau bot tidak bisa akses."));
+
+    const title = String(req.body.title || "").trim();
+    const message = String(req.body.message || "").trim();
+    const image = String(req.body.image || "").trim();
+    const colorRaw = String(req.body.color || "#7C5CFF").trim();
+
+    if (!message && !title) {
+      return res.status(400).send(renderControlCenter(req, false, "Isi pesan atau judul embed dulu."));
+    }
+
+    if (title) {
+      const embed = new EmbedBuilder()
+        .setColor(typeof hexColor === "function" ? hexColor(colorRaw, 0x7c5cff) : 0x7c5cff)
+        .setTitle(title)
+        .setDescription(message || " ")
+        .setFooter({ text: makeOTFooter(`${config.serverName} • Dashboard Message`) })
+        .setTimestamp();
+
+      if (image) embed.setImage(image);
+
+      await safeSend(channel, { embeds: [embed] });
+    } else {
+      await safeSend(channel, message);
+    }
+
+    res.send(renderControlCenter(req, true, "", `Pesan berhasil dikirim ke #${channel.name}.`));
+  } catch (err) {
+    res.status(500).send(renderControlCenter(req, false, err.message));
+  }
+});
+
+app.get("/analytics", requireDashboardAuth, (req, res) => {
+  res.send(renderAnalyticsPage(req));
+});
+
+app.get("/data-center", requireDashboardAuth, (req, res) => {
+  res.send(renderDataCenter(req));
+});
+
+
+
+app.get("/api/live-config", requireDashboardAuth, (req, res) => {
+  res.json({
+    ok: true,
+    configPath: getDashboardConfigPath(),
+    livePrefix: config.prefix,
+    liveEmbedColor: config.embedColor,
+    liveJuragan: config.juragan || null,
+    liveEmbeds: config.embeds || null,
+    liveDonaturRoleId: config.donaturRoleId || "",
+    liveLevelChannelId: config.levelChannelId || ""
+  });
+});
+
+
+app.get("/api/autocomplete", requireDashboardAuth, (req, res) => {
+  res.json({
+    ok: true,
+    ...dashboardAutocompleteData()
+  });
+});
+
+
+app.get("/api/godmode", requireDashboardAuth, (req, res) => {
+  const guild = getDashboardGuild ? getDashboardGuild() : client.guilds.cache.first();
+  res.json({
+    ok: true,
+    bot: client?.user?.tag || null,
+    guild: guild ? { id: guild.id, name: guild.name, members: guild.memberCount } : null,
+    levelRows: readGodLevelRows(guild?.id, 10, guild?.ownerId),
+    tempRoles: readGodTempRoles(guild?.id, 10)
+  });
+});
+
+
+app.get("/discord", requireDashboardAuth, (req, res) => {
+  res.send(renderDiscordManager(req));
+});
+
+app.post("/discord/save", requireDashboardAuth, (req, res) => {
+  try {
+    const cfg = readConfigFile();
+    const protectedLevelSnapshot = {
+      levelChannelId: cfg.levelChannelId,
+      level100RoleId: cfg.level100RoleId
+    };
+
+    cfg.aiChannelId = req.body.aiChannelId || cfg.aiChannelId || "";
+    cfg.curhatChannelId = req.body.curhatChannelId || cfg.curhatChannelId || "";
+    cfg.anonymousCurhatChannelId = req.body.anonymousCurhatChannelId || cfg.anonymousCurhatChannelId || "";
+    cfg.suggestionChannelId = req.body.suggestionChannelId || cfg.suggestionChannelId || "";
+    cfg.chatWargaChannelId = req.body.chatWargaChannelId || cfg.chatWargaChannelId || "";
+    cfg.levelChannelId = req.body.levelChannelId || cfg.levelChannelId || "";
+    cfg.ticketChannelId = req.body.ticketChannelId || cfg.ticketChannelId || "";
+
+    cfg.juragan = cfg.juragan || {};
+    cfg.juragan.roleId = req.body.juraganRoleId || cfg.juragan.roleId || "";
+    cfg.juragan.boostChannelId = req.body.boostChannelId || cfg.juragan.boostChannelId || "";
+
+    cfg.donaturRoleId = req.body.donaturRoleId || cfg.donaturRoleId || "";
+    // Jangan ubah Level/Cek Poin dari Discord Manager pada update ini.
+    cfg.levelChannelId = protectedLevelSnapshot.levelChannelId;
+    cfg.level100RoleId = protectedLevelSnapshot.level100RoleId;
+
+  writeConfigFile(cfg);
+    res.send(renderDiscordManager(req, true));
+  } catch (err) {
+    res.status(500).send(renderDiscordManager(req, false, err.message));
+  }
+});
+
+app.post("/discord/grant-donatur", requireDashboardAuth, async (req, res) => {
+  try {
+    const guild = getDashboardGuild();
+
+    if (!guild) {
+      return res.status(400).send(renderDiscordManager(req, false, "Bot belum membaca server."));
+    }
+
+    const memberId = parseDiscordId(req.body.memberInput);
+    const nominalText = req.body.nominal || "100k";
+    const amount = parseDonationAmount(nominalText);
+    const minimum = Number(config.donaturMinimumAmount || 100000);
+
+    if (!memberId) {
+      return res.status(400).send(renderDiscordManager(req, false, "Isi mention atau ID member dulu."));
+    }
+
+    if (!amount || amount < minimum) {
+      return res.status(400).send(renderDiscordManager(req, false, `Minimal donasi adalah ${formatRupiah(minimum)}.`));
+    }
+
+    const member = await guild.members.fetch(memberId).catch(() => null);
+
+    if (!member) {
+      return res.status(404).send(renderDiscordManager(req, false, "Member tidak ditemukan. Pakai ID Discord member yang benar."));
+    }
+
+    const days = donationDays(amount);
+    const channel = getTextChannel(guild, config.juragan?.boostChannelId) ||
+      getTextChannel(guild, config.chatWargaChannelId) ||
+      guild.channels.cache.find((ch) => ch.type === ChannelType.GuildText);
+
+    await grantDonaturRole(member, days, guild.members.me, channel);
+
+    res.send(renderDiscordManager(req, false, "", `${member.user.username} diberi role Donatur selama ${days} hari dari ${formatRupiah(amount)}.`));
+  } catch (err) {
+    res.status(500).send(renderDiscordManager(req, false, err.message));
+  }
+});
+
+app.get("/api/discord", requireDashboardAuth, (req, res) => {
+  const guild = getDashboardGuild();
+
+  if (!guild) {
+    return res.json({ ok: false, error: "No guild" });
+  }
+
+  res.json({
+    ok: true,
+    guild: {
+      id: guild.id,
+      name: guild.name,
+      memberCount: guild.memberCount
+    },
+    channels: guild.channels.cache.map((ch) => ({
+      id: ch.id,
+      name: ch.name,
+      type: ch.type
+    })),
+    roles: guild.roles.cache.map((role) => ({
+      id: role.id,
+      name: role.name,
+      position: role.position
+    }))
+  });
+});
+
+
+app.get("/commands", requireDashboardAuth, (req, res) => {
+  res.send(renderCommands());
+});
+
+app.get("/api/status", requireDashboardAuth, (req, res) => {
+  res.json({
+    ok: true,
+    bot: client?.user?.tag || null,
+    guilds: client?.guilds?.cache?.size || 0,
+    uptime: process.uptime()
+  });
+});
+
+
+if (isDashboardEnabled) {
+  const dashboardPort = process.env.PORT || process.env.OT_PORT || 3000;
+  app.listen(dashboardPort, () => {
+    console.log(`🌐 Dashboard Pak RW aktif di port ${dashboardPort}`);
+  });
+} else {
+  console.log("🌐 Dashboard Pak RW dimatikan sementara untuk mode DisCloud.");
+}
+
+process.on("unhandledRejection", (reason) => {
+  console.log("UNHANDLED REJECTION:", reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.log("UNCAUGHT EXCEPTION:", err);
+});
+
+const suggestionVotes = new Map();
+
+const tempRoleFile = resolvePersistentDataFile("tempRoles.json");
+
+function ensureTempRoleFile() {
+  const dir = path.dirname(tempRoleFile);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  if (!fs.existsSync(tempRoleFile)) {
+    fs.writeFileSync(tempRoleFile, JSON.stringify({ roles: [] }, null, 2));
+  }
+}
+
+function readTempRoles() {
+  const mongoData = readStore("tempRoles", null);
+  if (mongoData) return mongoData;
+
+  try {
+    ensureTempRoleFile();
+    return JSON.parse(fs.readFileSync(tempRoleFile, "utf8"));
+  } catch {
+    return { roles: [] };
+  }
+}
+
+function writeTempRoles(data) {
+  writeStore("tempRoles", data);
+
+  try {
+    ensureTempRoleFile();
+    fs.writeFileSync(tempRoleFile, JSON.stringify(data, null, 2));
+  } catch (err) {
+    console.log("TEMP ROLE WRITE ERROR:", err.message);
+  }
+}
+
+function canManageDonatur(member) {
+  if (!member) return false;
+  if (member.id === member.guild.ownerId) return true;
+
+  return member.permissions.has(PermissionsBitField.Flags.Administrator);
+}
+
+function parseDays(raw, fallback = 30) {
+  if (!raw) return fallback;
+
+  const clean = String(raw).toLowerCase().replace("hari", "").replace("day", "").replace("days", "").replace("d", "").trim();
+  const num = Number.parseInt(clean, 10);
+
+  if (Number.isNaN(num) || num <= 0) return fallback;
+  return Math.min(num, 365);
+}
+
+
+function parseDonationAmount(raw) {
+  if (!raw) return 0;
+
+  let text = String(raw)
+    .toLowerCase()
+    .replaceAll("rp", "")
+    .replaceAll("rupiah", "")
+    .replaceAll(".", "")
+    .replaceAll(",", "")
+    .replace(/\s+/g, "")
+    .trim();
+
+  let multiplier = 1;
+
+  if (text.endsWith("jt") || text.endsWith("juta")) {
+    multiplier = 1000000;
+    text = text.replace("juta", "").replace("jt", "");
+  } else if (text.endsWith("k") || text.endsWith("rb") || text.endsWith("ribu")) {
+    multiplier = 1000;
+    text = text.replace("ribu", "").replace("rb", "").replace("k", "");
+  }
+
+  const num = Number.parseInt(text, 10);
+  if (Number.isNaN(num) || num <= 0) return 0;
+
+  return num * multiplier;
+}
+
+function donationDays(amount) {
+  const rpPerDay = Number(config.donaturRpPerDay || 10000);
+  if (!rpPerDay || rpPerDay <= 0) return 0;
+
+  return Math.max(1, Math.floor(amount / rpPerDay));
+}
+
+function formatRupiah(amount) {
+  return `Rp${Number(amount || 0).toLocaleString("id-ID")}`;
+}
+
+function formatDateTime(ts) {
+  try {
+    return new Date(ts).toLocaleString("id-ID", {
+      timeZone: "Asia/Jakarta",
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  } catch {
+    return new Date(ts).toISOString();
+  }
+}
+
+async function grantDonaturRole(targetMember, days, moderatorMember, channel, amount = 0) {
+  if (!targetMember || !targetMember.guild) return false;
+
+  if (!isFilledId(config.donaturRoleId)) {
+    await safeSend(channel, "❌ `donaturRoleId` belum diisi di config.json.");
+    return false;
+  }
+
+  const role = targetMember.guild.roles.cache.get(config.donaturRoleId);
+  if (!role) {
+    await safeSend(channel, "❌ Role Donatur tidak ditemukan. Cek `donaturRoleId` di config.json.");
+    return false;
+  }
+
+  await targetMember.roles.add(role).catch((err) => {
+    console.log("DONATUR ROLE ADD ERROR:", err.message);
+  });
+
+  const expiresAt = Date.now() + (days * 24 * 60 * 60 * 1000);
+  const data = readTempRoles();
+
+  data.roles = (data.roles || []).filter((item) =>
+    !(item.guildId === targetMember.guild.id &&
+      item.userId === targetMember.id &&
+      item.roleId === role.id)
+  );
+
+  data.roles.push({
+    guildId: targetMember.guild.id,
+    userId: targetMember.id,
+    roleId: role.id,
+    roleName: role.name,
+    givenBy: moderatorMember?.id || null,
+    givenAt: Date.now(),
+    expiresAt
+  });
+
+  writeTempRoles(data);
+
+  await safeSend(
+    channel,
+    amount > 0
+      ? `✅ ${targetMember} telah diberi role **${role.name}** selama **${days} hari** dari donasi **${formatRupiah(amount)}**`
+      : `✅ ${targetMember} telah diberi role **${role.name}** selama **${days} hari**`
+  );
+
+  return true;
+}
+
+async function removeExpiredTempRoles(guild) {
+  try {
+    if (!guild) return;
+
+    const data = readTempRoles();
+    const now = Date.now();
+    let changed = false;
+
+    for (const item of [...(data.roles || [])]) {
+      if (item.guildId !== guild.id) continue;
+      if (!item.expiresAt || item.expiresAt > now) continue;
+
+      const member = await guild.members.fetch(item.userId).catch(() => null);
+      const role = guild.roles.cache.get(item.roleId);
+
+      if (member && role && member.roles.cache.has(role.id)) {
+        await member.roles.remove(role).catch((err) => {
+          console.log("TEMP ROLE REMOVE ERROR:", err.message);
+        });
+      }
+
+      data.roles = data.roles.filter((x) =>
+        !(x.guildId === item.guildId &&
+          x.userId === item.userId &&
+          x.roleId === item.roleId)
+      );
+
+      changed = true;
+    }
+
+    if (changed) writeTempRoles(data);
+  } catch (err) {
+    console.log("TEMP ROLE CHECK ERROR:", err.message);
+  }
+}
+
+function findTempRole(guildId, userId, roleId) {
+  const data = readTempRoles();
+  return (data.roles || []).find((item) =>
+    item.guildId === guildId &&
+    item.userId === userId &&
+    item.roleId === roleId
+  );
+}
+
+
+function isDonaturMember(member) {
+  if (!member || !isFilledId(config.donaturRoleId)) return false;
+  return member.roles.cache.has(config.donaturRoleId);
+}
+
+function buildDonaturOnlyEmbed(member) {
+  const temp = isFilledId(config.donaturRoleId)
+    ? findTempRole(member.guild.id, member.id, config.donaturRoleId)
+    : null;
+
+  const expiredText = temp?.expiresAt
+    ? `Aktif sampai **${formatDateTime(temp.expiresAt)}**`
+    : "Masa aktif tidak ditemukan di data sementara Pak RW.";
+
+  const e = embedCfg("donatur");
+  const data = {
+    user: `${member}`,
+    username: member.user.username,
+    displayName: member.displayName || member.user.username,
+    server: config.serverName,
+    expiredText
+  };
+
+  return new EmbedBuilder()
+    .setColor(hexColor(e.color, 0x2f6bff))
+    .setTitle(applyTemplate(e.title || "💎 Donatur Desa Access", data))
+    .setDescription(applyTemplate(e.description || "Halo {user}, ini adalah menu khusus untuk role **Donatur DESA TULUS** 🤍\n\nStatus role kamu: **Aktif**\n{expiredText}", data))
+    .addFields(
+      {
+        name: "🎁 Benefit Donatur",
+        value:
+          "➤ Role Donatur spesial\n" +
+          "➤ Akses benefit khusus Donatur/Juragan\n" +
+          "➤ Akses AI Juragan Premium jika tersedia\n" +
+          "➤ Prioritas support dari staff\n" +
+          "➤ Nama dikenal sebagai supporter DESA TULUS",
+        inline: false
+      },
+      {
+        name: "ℹ️ Catatan",
+        value: "Role Donatur bisa otomatis dicabut saat masa aktifnya habis.",
+        inline: false
+      }
+    )
+    .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 512 }))
+    .setFooter({ text: makeOTFooter(applyTemplate(e.footer || "{server} • Donatur System", data)) })
+    .setTimestamp();
+}
+
+async function replyDonaturOnly(member, target) {
+  if (!isFilledId(config.donaturRoleId)) {
+    const msg = "❌ `donaturRoleId` belum diisi di config.json.";
+    if (target?.isRepliable?.()) {
+      return target.reply({ content: msg, flags: 64 }).catch(() => {});
+    }
+    return safeReply(target, msg);
+  }
+
+  if (!isDonaturMember(member)) {
+    const msg = "❌ Command ini khusus untuk member yang punya role Donatur.";
+    if (target?.isRepliable?.()) {
+      return target.reply({ content: msg, flags: 64 }).catch(() => {});
+    }
+    return safeReply(target, msg);
+  }
+
+  const payload = { embeds: [buildDonaturOnlyEmbed(member)] };
+
+  if (target?.isRepliable?.()) {
+    return target.reply({ ...payload, flags: 64 }).catch(() => {});
+  }
+
+  return safeReply(target, payload);
+}
+
+
+async function removeDonaturRole(targetMember, channel) {
+  if (!targetMember || !targetMember.guild) return false;
+
+  if (!isFilledId(config.donaturRoleId)) {
+    await safeSend(channel, "❌ `donaturRoleId` belum diisi di config.json.");
+    return false;
+  }
+
+  const role = targetMember.guild.roles.cache.get(config.donaturRoleId);
+  if (!role) {
+    await safeSend(channel, "❌ Role Donatur tidak ditemukan. Cek `donaturRoleId` di config.json.");
+    return false;
+  }
+
+  if (targetMember.roles.cache.has(role.id)) {
+    await targetMember.roles.remove(role).catch((err) => {
+      console.log("DONATUR ROLE REMOVE ERROR:", err.message);
+    });
+  }
+
+  const data = readTempRoles();
+  data.roles = (data.roles || []).filter((item) =>
+    !(item.guildId === targetMember.guild.id &&
+      item.userId === targetMember.id &&
+      item.roleId === role.id)
+  );
+  writeTempRoles(data);
+
+  await safeSend(channel, `✅ Role **${role.name}** berhasil dicabut dari ${targetMember}.`);
+  return true;
+}
+
+
+
+const levelFile = resolvePersistentDataFile("level.json");
+const levelCooldown = new Map();
+const voiceSessions = new Map();
+const topActiveDailyPostMemory = new Map();
+const topPoinPostStateFile = resolvePersistentDataFile("top-poin-post-state.json");
+const boostPoinStateFile = resolvePersistentDataFile("boost-poin-events.json");
+const TOP_POIN_AUTO_WINDOW_MINUTES = 10;
+
+const LEVEL_ROLES = [
+  { level: 1, name: "Warga Baru", minPoints: 0 },
+  { level: 5, name: "Warga Magang", minPoints: 2000 },
+  { level: 10, name: "Warga Aktif", minPoints: 4500 },
+  { level: 20, name: "Warga Loyal", minPoints: 9500 },
+  { level: 35, name: "Warga Senior", minPoints: 17000 },
+  { level: 50, name: "Warga Elite", minPoints: 24500 },
+  { level: 75, name: "Warga Tulus", minPoints: 37000 },
+  { level: 100, name: "Sesepuh Tulus", minPoints: 49500 }
+];
+
+function getLevelTuningConfig() {
+  const levelCfg = config.level || {};
+  return {
+    // totalPoints = level dari total poin; chatVoiceSum = level chat + level voice.
+    // DESA TULUS sekarang memakai chatVoiceSum supaya alur Chat Lv.10 + Voice Lv.8 = Total Lv.18.
+    mode: levelCfg.mode || "chatVoiceSum",
+    totalLevelFormula: levelCfg.totalLevelFormula || levelCfg.mode || "chatVoiceSum",
+    pointsPerLevel: Math.max(1, Number(levelCfg.pointsPerLevel || 500)),
+    chatPointsPerLevel: Math.max(1, Number(levelCfg.chatPointsPerLevel || levelCfg.pointsPerLevel || 500)),
+    voicePointsPerLevel: Math.max(1, Number(levelCfg.voicePointsPerLevel || levelCfg.pointsPerLevel || 500)),
+    maxLevel: Math.max(1, Math.min(1000, Number(levelCfg.maxLevel || 100)))
+  };
+}
+
+function getCategoryLevelNumber(points = 0, perLevel = 500) {
+  const n = Math.max(0, Number(points || 0));
+  const step = Math.max(1, Number(perLevel || 500));
+  // 0 poin tidak dihitung sebagai level kategori, supaya total tidak otomatis jadi 2.
+  return n > 0 ? Math.floor(n / step) + 1 : 0;
+}
+
+function getTotalPointsForLevel(userData = {}) {
+  return Number(((Number(userData.chat || 0)) + (Number(userData.voice || 0))).toFixed(1));
+}
+
+function getLevelNameByLevel(level = 1) {
+  let current = LEVEL_ROLES[0];
+  for (const item of LEVEL_ROLES) {
+    if (Number(level || 1) >= item.level) current = item;
+  }
+  return current.name;
+}
+
+function ensureLevelFile() {
+  const dir = path.dirname(levelFile);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  if (!fs.existsSync(levelFile)) fs.writeFileSync(levelFile, JSON.stringify({ users: {} }, null, 2));
+}
+
+function readLevelData() {
+  const mongoData = readStore("level", null);
+  if (mongoData) return mongoData;
+
+  try {
+    ensureLevelFile();
+    return JSON.parse(fs.readFileSync(levelFile, "utf8"));
+  } catch {
+    return { users: {} };
+  }
+}
+
+function writeLevelData(data) {
+  writeStore("level", data);
+
+  try {
+    ensureLevelFile();
+    fs.writeFileSync(levelFile, JSON.stringify(data, null, 2));
+  } catch (err) {
+    console.log("LEVEL WRITE ERROR:", err.message);
+  }
+}
+
+function getLevelUser(data, guildId, userId) {
+  const key = `${guildId}:${userId}`;
+  if (!data.users[key]) {
+    data.users[key] = {
+      guildId,
+      userId,
+      chat: 0,
+      voice: 0,
+      level: 1,
+      lastMessageAt: 0
+    };
+  }
+  return data.users[key];
+}
+
+function getLevelInfo(userData = {}) {
+  const tuning = getLevelTuningConfig();
+  const total = getTotalPointsForLevel(userData);
+  const chatPoints = Math.max(0, Number(userData.chat || 0));
+  const voicePoints = Math.max(0, Number(userData.voice || 0));
+  const chatLevel = getCategoryLevelNumber(chatPoints, tuning.chatPointsPerLevel);
+  const voiceLevel = getCategoryLevelNumber(voicePoints, tuning.voicePointsPerLevel);
+
+  // Alur premium DESA TULUS:
+  // Level Chat + Level Voice = Total Level.
+  // Contoh: Chat Lv.10 + Voice Lv.8 = Total Lv.18.
+  // Poin tetap jelas: Total Poin = Poin Chat + Poin Voice + bonus event/role.
+  const formula = tuning.totalLevelFormula || tuning.mode;
+  const calculatedLevel = formula === "chatVoiceSum"
+    ? Math.max(1, chatLevel + voiceLevel)
+    : Math.floor(total / tuning.pointsPerLevel) + 1;
+  const level = Math.max(1, Math.min(tuning.maxLevel, calculatedLevel));
+  const current = {
+    level,
+    name: getLevelNameByLevel(level),
+    total: Math.max(0, (level - 1) * tuning.pointsPerLevel),
+    chat: chatPoints,
+    voice: voicePoints,
+    chatLevel,
+    voiceLevel
+  };
+
+  const nextLevel = level < tuning.maxLevel ? level + 1 : null;
+  const next = nextLevel
+    ? {
+        level: nextLevel,
+        name: getLevelNameByLevel(nextLevel),
+        total: formula === "chatVoiceSum" ? total + Math.min(tuning.chatPointsPerLevel, tuning.voicePointsPerLevel) : (nextLevel - 1) * tuning.pointsPerLevel,
+        chat: chatPoints,
+        voice: voicePoints
+      }
+    : null;
+
+  return { current, next, total, tuning };
+}
+
+function getLevelInfoFromPoints(points = 0) {
+  const tuning = getLevelTuningConfig();
+  const total = Math.max(0, Number(points || 0));
+  const level = Math.max(1, Math.min(tuning.maxLevel, Math.floor(total / tuning.pointsPerLevel) + 1));
+  const current = {
+    level,
+    name: getLevelNameByLevel(level),
+    total: Math.max(0, (level - 1) * tuning.pointsPerLevel),
+    chat: 0,
+    voice: 0
+  };
+  const nextLevel = level < tuning.maxLevel ? level + 1 : null;
+  const next = nextLevel
+    ? {
+        level: nextLevel,
+        name: getLevelNameByLevel(nextLevel),
+        total: (nextLevel - 1) * tuning.pointsPerLevel,
+        chat: 0,
+        voice: 0
+      }
+    : null;
+  return { current, next, total, tuning };
+}
+
+function getLeaderboardPoints(userData = {}, kind = "active") {
+  if (kind === "chat") return Number(userData.monthlyChat || 0);
+  if (kind === "voice") return Number(userData.monthlyVoice || 0);
+  return Number(userData.monthlyTotal || 0);
+}
+
+function getLeaderboardLevelInfo(userData = {}, kind = "active") {
+  // Leaderboard Top Aktif/Top Chat/Top Voice pakai data BULAN INI.
+  // Biar tidak membingungkan, level/rank yang tampil di board juga dihitung dari poin yang sedang ditampilkan.
+  return getLevelInfoFromPoints(getLeaderboardPoints(userData, kind));
+}
+
+function formatNumber(num) {
+  const n = Number(num || 0);
+  if (Number.isInteger(n)) return n.toLocaleString("id-ID");
+  return n.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
+async function getOrCreateLevelChannel(guild) {
+  if (!guild) return null;
+
+  const levelChannel = getTextChannel(guild, config.levelChannelId);
+
+  if (!levelChannel) {
+    console.log("LEVEL CHANNEL ERROR: levelChannelId belum diisi, salah, atau bot tidak bisa akses channel.");
+    return null;
+  }
+
+  return levelChannel;
+}
+
+
+function getTotalLevelPoints(userData) {
+  return getTotalPointsForLevel(userData);
+}
+
+function isServerOwnerId(guildOrOwnerId, userId) {
+  const ownerId = typeof guildOrOwnerId === "string" ? guildOrOwnerId : guildOrOwnerId?.ownerId;
+  return Boolean(ownerId && userId && String(ownerId) === String(userId));
+}
+
+function shouldExcludeOwnerFromLevel(guildOrOwnerId, userId) {
+  const levelCfg = config.level || {};
+  const topCfg = config.topActive || {};
+  const enabled = levelCfg.excludeOwnerFromLevel !== false && topCfg.excludeOwnerFromLevel !== false;
+  return Boolean(enabled && isServerOwnerId(guildOrOwnerId, userId));
+}
+
+function shouldExcludeOwnerFromLeaderboard(guildOrOwnerId, userId) {
+  const topCfg = config.topActive || {};
+  const enabled = topCfg.excludeOwnerFromLeaderboard !== false;
+  return Boolean(enabled && isServerOwnerId(guildOrOwnerId, userId));
+}
+
+function removeOwnerLevelData(guild) {
+  try {
+    if (!guild?.ownerId) return false;
+    const data = readLevelData();
+    let changed = false;
+    for (const [key, userData] of Object.entries(data.users || {})) {
+      if (userData.guildId === guild.id && userData.userId === guild.ownerId) {
+        delete data.users[key];
+        changed = true;
+      }
+    }
+    if (changed) {
+      writeLevelData(data);
+      console.log(`✅ Owner dikecualikan dari level/leaderboard: data owner dibersihkan di ${guild.name}`);
+    }
+    return changed;
+  } catch (err) {
+    console.log("OWNER LEVEL CLEAN ERROR:", err.message);
+    return false;
+  }
+}
+function syncAllLevelsWithPoints(guild) {
+  const data = readLevelData();
+  let changed = 0;
+  for (const userData of Object.values(data.users || {})) {
+    if (guild?.id && userData.guildId !== guild.id) continue;
+    if (guild?.ownerId && shouldExcludeOwnerFromLevel(guild, userData.userId)) continue;
+    const correctLevel = getLevelInfo(userData).current.level;
+    if (Number(userData.level || 1) !== correctLevel) {
+      userData.level = correctLevel;
+      changed++;
+    }
+  }
+  if (changed > 0) writeLevelData(data);
+  return { changed, total: Object.values(data.users || {}).filter((u) => !guild?.id || u.guildId === guild.id).length };
+}
+
+
+function memberHasRole(member, roleId) {
+  return Boolean(member && isFilledId(roleId) && member.roles?.cache?.has(roleId));
+}
+
+function getLevelBonusInfo(member) {
+  const cfg = getTopActiveConfig();
+  const percent = Math.max(0, Number(cfg.bonusPercent ?? 15));
+  const sources = [];
+
+  if (member?.premiumSince) sources.push("Server Booster");
+  if (memberHasRole(member, config.juragan?.roleId)) sources.push("Role Juragan");
+  if (memberHasRole(member, config.donaturRoleId)) sources.push("Role Donatur");
+
+  const active = Boolean(cfg.bonusEnabled && percent > 0 && sources.length);
+  return {
+    enabled: cfg.bonusEnabled !== false,
+    active,
+    percent,
+    multiplier: active ? Number((1 + percent / 100).toFixed(4)) : 1,
+    sources,
+    sourceText: sources.length ? sources.join(" + ") : "Belum ada role bonus"
+  };
+}
+
+function calculateLevelBonus(member, baseAmount) {
+  const base = Number(baseAmount || 0);
+  const info = getLevelBonusInfo(member);
+  const bonus = info.active ? Number((base * (info.percent / 100)).toFixed(1)) : 0;
+  return {
+    ...info,
+    baseAmount: base,
+    bonusAmount: bonus,
+    totalAmount: Number((base + bonus).toFixed(1))
+  };
+}
+
+
+function getBoostPoinConfig() {
+  const raw = config.boostPoin || {};
+  const channelId = parseDiscordId(raw.channelId || "");
+  const chatChannelIds = Array.isArray(raw.chatChannelIds) ? raw.chatChannelIds.map(parseDiscordId).filter(Boolean) : [];
+  const voiceChannelIds = Array.isArray(raw.voiceChannelIds) ? raw.voiceChannelIds.map(parseDiscordId).filter(Boolean) : [];
+  return {
+    enabled: raw.enabled !== false,
+    eventActive: raw.eventActive === true,
+    eventId: String(raw.eventId || getJakartaMonthKey(new Date()).replace("-", "") + "-boost").trim(),
+    eventName: String(raw.eventName || "Boost Poin DESA TULUS").trim(),
+    eventMode: String(raw.eventMode || "chat_voice").trim(),
+    boostPercent: Math.max(0, Number(raw.boostPercent ?? 5)),
+    durationMinutes: Math.max(1, Number(raw.durationMinutes || 60)),
+    eventByText: String(raw.eventByText || raw.eventBy || config.ownerName || "PAK RW").trim(),
+    eventByUserId: parseDiscordId(raw.eventByUserId || ""),
+    channelId,
+    channelName: String(raw.channelName || "⚡・boost-poin").trim(),
+    chatChannelIds: chatChannelIds.length ? chatChannelIds : (channelId ? [channelId] : []),
+    voiceChannelIds,
+    includeAllChatChannels: raw.includeAllChatChannels === true,
+    includeAllVoiceChannels: raw.includeAllVoiceChannels === true,
+    autoRegisterParticipants: raw.autoRegisterParticipants !== false,
+    logToConsole: raw.logToConsole !== false,
+    sendNotice: raw.sendNotice === true
+  };
+}
+
+function readBoostPoinState() {
+  try {
+    const dir = path.dirname(boostPoinStateFile);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    if (!fs.existsSync(boostPoinStateFile)) fs.writeFileSync(boostPoinStateFile, JSON.stringify({ events: {} }, null, 2), "utf8");
+    const parsed = JSON.parse(fs.readFileSync(boostPoinStateFile, "utf8"));
+    if (!parsed.events || typeof parsed.events !== "object") parsed.events = {};
+    return parsed;
+  } catch (err) {
+    console.log("BOOST POIN STATE READ ERROR:", err?.message || err);
+    return { events: {} };
+  }
+}
+
+function writeBoostPoinState(state = { events: {} }) {
+  try {
+    const dir = path.dirname(boostPoinStateFile);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(boostPoinStateFile, JSON.stringify(state, null, 2), "utf8");
+    return true;
+  } catch (err) {
+    console.log("BOOST POIN STATE WRITE ERROR:", err?.message || err);
+    return false;
+  }
+}
+
+function isBoostPoinTypeAllowed(type, cfg = getBoostPoinConfig()) {
+  if (cfg.eventMode === "chat") return type === "chat";
+  if (cfg.eventMode === "voice") return type === "voice";
+  return type === "chat" || type === "voice";
+}
+
+function isBoostPoinChannelAllowed(type, channelId, cfg = getBoostPoinConfig()) {
+  const id = parseDiscordId(channelId || "");
+  if (!id) return false;
+  if (type === "chat") return cfg.includeAllChatChannels || cfg.chatChannelIds.includes(id);
+  if (type === "voice") return cfg.includeAllVoiceChannels || cfg.voiceChannelIds.includes(id);
+  return false;
+}
+
+function registerBoostPoinParticipant(member, type, sourceChannelId, baseAmount, boostAmount) {
+  const cfg = getBoostPoinConfig();
+  if (!cfg.autoRegisterParticipants || !member?.guild) return;
+  const state = readBoostPoinState();
+  const eventId = cfg.eventId || "boost-event";
+  state.events[eventId] = state.events[eventId] || {
+    eventId,
+    eventName: cfg.eventName,
+    mode: cfg.eventMode,
+    boostPercent: cfg.boostPercent,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    participants: {}
+  };
+  const ev = state.events[eventId];
+  ev.eventName = cfg.eventName;
+  ev.mode = cfg.eventMode;
+  ev.boostPercent = cfg.boostPercent;
+  ev.updatedAt = Date.now();
+  ev.participants[member.id] = ev.participants[member.id] || {
+    userId: member.id,
+    username: member.user?.username || "Unknown",
+    displayName: member.displayName || member.user?.username || "Unknown",
+    chatCount: 0,
+    voiceMinutes: 0,
+    basePoints: 0,
+    boostPoints: 0,
+    totalAwarded: 0,
+    firstAt: Date.now(),
+    lastAt: Date.now(),
+    channels: []
+  };
+  const p = ev.participants[member.id];
+  if (type === "chat") p.chatCount = Number(p.chatCount || 0) + 1;
+  if (type === "voice") p.voiceMinutes = Number((Number(p.voiceMinutes || 0) + (Number(baseAmount || 0) / Math.max(0.1, getLevelVoicePointPerMinute()))).toFixed(2));
+  p.basePoints = Number((Number(p.basePoints || 0) + Number(baseAmount || 0)).toFixed(1));
+  p.boostPoints = Number((Number(p.boostPoints || 0) + Number(boostAmount || 0)).toFixed(1));
+  p.totalAwarded = Number((Number(p.totalAwarded || 0) + Number(baseAmount || 0) + Number(boostAmount || 0)).toFixed(1));
+  p.lastAt = Date.now();
+  if (sourceChannelId && !p.channels.includes(String(sourceChannelId))) p.channels.push(String(sourceChannelId));
+  writeBoostPoinState(state);
+}
+
+function getBoostPoinBonusInfo(member, type, baseAmount, sourceChannelId) {
+  const cfg = getBoostPoinConfig();
+  const base = Number(baseAmount || 0);
+  if (!cfg.enabled || !cfg.eventActive || cfg.boostPercent <= 0 || base <= 0) {
+    return { active: false, percent: cfg.boostPercent, bonusAmount: 0, sourceText: "Boost Poin nonaktif" };
+  }
+  if (!isBoostPoinTypeAllowed(type, cfg) || !isBoostPoinChannelAllowed(type, sourceChannelId, cfg)) {
+    return { active: false, percent: cfg.boostPercent, bonusAmount: 0, sourceText: "Aktivitas bukan channel event" };
+  }
+  const bonus = Number((base * (cfg.boostPercent / 100)).toFixed(1));
+  registerBoostPoinParticipant(member, type, sourceChannelId, base, bonus);
+  if (cfg.logToConsole) console.log(`⚡ BOOST POIN +${cfg.boostPercent}%: ${member.user?.tag || member.id} ${type} +${bonus} poin (${cfg.eventName})`);
+  return { active: true, percent: cfg.boostPercent, bonusAmount: bonus, sourceText: `Event ${cfg.eventName}` };
+}
+
+
+function getBoostPoinMultiplierText(boostPercent = 5) {
+  const percent = Number(boostPercent || 5);
+  if (percent >= 100) {
+    const multiplier = 1 + (percent / 100);
+    return `${formatNumber(multiplier)}x`;
+  }
+  return `+${formatNumber(percent)}%`;
+}
+
+function getBoostPoinModeText(mode = "chat_voice") {
+  if (mode === "chat") return "chat";
+  if (mode === "voice") return "voice";
+  return "chat dan voice";
+}
+
+function mentionListFromIds(ids = [], type = "role") {
+  const safeIds = (Array.isArray(ids) ? ids : [])
+    .map((id) => parseDiscordId(id))
+    .filter(Boolean)
+    .slice(0, 8);
+  if (!safeIds.length) return "";
+  if (type === "channel") return safeIds.map((id) => `<#${id}>`).join(" ");
+  return safeIds.map((id) => `<@&${id}>`).join(" ");
+}
+
+function getBoostPoinByText(cfg = getBoostPoinConfig()) {
+  if (cfg.eventByUserId) return `<@${cfg.eventByUserId}>`;
+  const raw = String(cfg.eventByText || config.ownerName || "PAK RW").trim();
+  if (!raw) return config.ownerName || "PAK RW";
+  const id = parseDiscordId(raw);
+  if (id && raw.includes("@")) return `<@${id}>`;
+  return raw;
+}
+
+function getBoostPoinEndsAtText(cfg = getBoostPoinConfig()) {
+  const duration = Math.max(1, Number(cfg.durationMinutes || 60));
+  const unix = Math.floor((Date.now() + duration * 60 * 1000) / 1000);
+  return `<t:${unix}:R>`;
+}
+
+function getBoostPoinTargetChannelsText(cfg = getBoostPoinConfig()) {
+  const rows = [];
+  if (cfg.eventMode !== "voice") {
+    rows.push(cfg.includeAllChatChannels ? "Semua channel chat" : (mentionListFromIds(cfg.chatChannelIds, "channel") || "Channel chat belum diatur"));
+  }
+  if (cfg.eventMode !== "chat") {
+    rows.push(cfg.includeAllVoiceChannels ? "Semua voice channel" : (mentionListFromIds(cfg.voiceChannelIds, "channel") || "Voice channel belum diatur"));
+  }
+  return rows.join("\n") || "Channel event belum diatur";
+}
+
+function getBoostPoinAnnouncementConfig() {
+  const raw = config.boostPoin || {};
+  const cfg = getBoostPoinConfig();
+  return {
+    title: String(raw.announcementTitle || `BOOST POIN ${getBoostPoinMultiplierText(cfg.boostPercent)} LEBIH CEPAT! 🚀`).trim(),
+    description: String(raw.announcementDescription || `Boost poin ${getBoostPoinMultiplierText(cfg.boostPercent)} khusus event **{eventName}**.\n\nLets go yang mau ngejar poin keaktifan buat jadi **Member Of The Month** 🏆`).trim(),
+    endTitle: String(raw.endTitle || "⚠️ BOOST POIN BERAKHIR").trim(),
+    endDescription: String(raw.endDescription || "Boost poin telah selesai. Terima kasih buat warga yang sudah ikut event.").trim(),
+    mentionText: String(raw.mentionText || "").trim(),
+    roleMentionIds: Array.isArray(raw.roleMentionIds) ? raw.roleMentionIds.map(parseDiscordId).filter(Boolean) : [],
+    color: String(raw.announcementColor || "#F5C542").trim(),
+    endColor: String(raw.endColor || "#FF5C7A").trim(),
+    showJoinButton: raw.showJoinButton !== false,
+    joinButtonLabel: String(raw.joinButtonLabel || "Join Event").trim()
+  };
+}
+
+function applyBoostPoinTemplate(text = "", guild = null) {
+  const cfg = getBoostPoinConfig();
+  const data = {
+    server: config.serverName || guild?.name || "DESA TULUS",
+    eventName: cfg.eventName,
+    eventId: cfg.eventId,
+    boostPercent: formatNumber(cfg.boostPercent),
+    multiplier: getBoostPoinMultiplierText(cfg.boostPercent),
+    mode: getBoostPoinModeText(cfg.eventMode),
+    channels: getBoostPoinTargetChannelsText(cfg),
+    by: getBoostPoinByText(cfg),
+    duration: formatNumber(cfg.durationMinutes || 60),
+    endsAt: getBoostPoinEndsAtText(cfg)
+  };
+  return String(text || "")
+    .replaceAll("{server}", data.server)
+    .replaceAll("{eventName}", data.eventName)
+    .replaceAll("{eventId}", data.eventId)
+    .replaceAll("{boostPercent}", data.boostPercent)
+    .replaceAll("{multiplier}", data.multiplier)
+    .replaceAll("{mode}", data.mode)
+    .replaceAll("{channels}", data.channels)
+    .replaceAll("{by}", data.by)
+    .replaceAll("{duration}", data.duration)
+    .replaceAll("{endsAt}", data.endsAt);
+}
+
+function buildBoostPoinPublicPayload(guild, state = "active") {
+  const cfg = getBoostPoinConfig();
+  const ac = getBoostPoinAnnouncementConfig();
+  const isEnd = state === "end";
+  const title = applyBoostPoinTemplate(isEnd ? ac.endTitle : ac.title, guild);
+  const description = applyBoostPoinTemplate(isEnd ? ac.endDescription : ac.description, guild);
+  const roleMentions = mentionListFromIds(ac.roleMentionIds, "role");
+  const contentParts = [];
+  if (!isEnd && ac.mentionText) contentParts.push(applyBoostPoinTemplate(ac.mentionText, guild));
+  if (!isEnd && roleMentions) contentParts.push(roleMentions);
+
+  const embed = new EmbedBuilder()
+    .setColor(hexColor(isEnd ? ac.endColor : ac.color, isEnd ? 0xff5c7a : 0xf5c542))
+    .setTitle(title)
+    .setDescription(description)
+    .setFooter({ text: `DESA TULUS • Boost Poin` })
+    .setTimestamp();
+
+  const payload = { content: contentParts.join("\n") || undefined, embeds: [embed] };
+
+  if (!isEnd && ac.showJoinButton && guild) {
+    const firstVoiceId = cfg.voiceChannelIds?.[0] || "";
+    const firstChatId = cfg.chatChannelIds?.[0] || cfg.channelId || "";
+    const targetId = firstVoiceId || firstChatId;
+    if (targetId) {
+      payload.components = [new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setLabel(ac.joinButtonLabel || "Join Event")
+          .setStyle(ButtonStyle.Link)
+          .setURL(`https://discord.com/channels/${guild.id}/${targetId}`)
+      )];
+    }
+  }
+
+  return payload;
+}
+
+async function sendBoostPoinPublicPost(guild, state = "active") {
+  const cfg = getBoostPoinConfig();
+  if (!guild) return { ok: false, message: "Bot belum membaca server Discord." };
+  if (!cfg.channelId) return { ok: false, message: "Channel Boost Poin belum diatur." };
+  const channel = getTextChannel(guild, cfg.channelId);
+  if (!channel) return { ok: false, message: `Channel Boost Poin tidak ditemukan atau bot tidak punya akses. ID: ${cfg.channelId}` };
+
+  try {
+    const me = guild.members.me || await guild.members.fetchMe().catch(() => null);
+    const perms = me && channel.permissionsFor ? channel.permissionsFor(me) : null;
+    if (perms && (!perms.has(PermissionsBitField.Flags.ViewChannel) || !perms.has(PermissionsBitField.Flags.SendMessages) || !perms.has(PermissionsBitField.Flags.EmbedLinks))) {
+      return { ok: false, message: "Permission kurang di channel Boost Poin. Wajib: View Channel, Send Messages, Embed Links." };
+    }
+  } catch (err) {
+    console.log("BOOST POIN PERMISSION CHECK WARNING:", err?.message || err);
+  }
+
+  console.log(`🚀 BOOST POIN SEND REQUEST: state=${state} channel=#${channel.name} (${channel.id})`);
+  const sent = await safeSend(channel, buildBoostPoinPublicPayload(guild, state));
+  if (!sent) return { ok: false, message: "Gagal mengirim pengumuman Boost Poin. Cek permission channel dan DisCloud log SAFE SEND ERROR." };
+  return { ok: true, message: state === "end" ? `Pengumuman boost berakhir terkirim ke #${channel.name}.` : `Pengumuman boost aktif terkirim ke #${channel.name}.` };
+}
+
+function buildBonusStatusText(member, userData = {}) {
+  const info = getLevelBonusInfo(member);
+  const last = userData.lastBonusInfo || {};
+  const totalBonus = Number(userData.bonusExtraPoints || 0);
+
+  if (!info.enabled) {
+    return "Status: **Nonaktif** dari dashboard Top Aktif.";
+  }
+
+  if (!info.active) {
+    return [
+      `Status: **Belum aktif**`,
+      `Syarat: punya salah satu dari **Server Booster**, **Role Juragan**, atau **Role Donatur**.`,
+      `Bonus yang akan didapat: **+${formatNumber(info.percent)}%** dari poin chat/voice.`
+    ].join("\n");
+  }
+
+  return [
+    `Status: **Aktif +${formatNumber(info.percent)}%**`,
+    `Sumber bonus: **${info.sourceText}**`,
+    last.bonusAmount ? `Bonus terakhir: **+${formatNumber(last.bonusAmount)}** poin dari **${formatNumber(last.baseAmount)}** poin dasar.` : `Bonus langsung masuk otomatis setiap dapat poin.`,
+    `Total bonus terkumpul: **${formatNumber(totalBonus)}** poin.`
+  ].join("\n");
+}
+
+function progressBar(current, need, size = 12) {
+  if (!need || need <= 0) return "▰".repeat(size);
+  const ratio = Math.max(0, Math.min(1, current / need));
+  const filled = Math.round(ratio * size);
+  return "▰".repeat(filled) + "▱".repeat(size - filled);
+}
+
+function buildLevelProgressText(userData, next) {
+  if (!next) return "🏆 Kamu sudah berada di puncak level DESA TULUS.";
+
+  const totalNow = getTotalPointsForLevel(userData);
+  const targetTotal = Number(next.total || 0);
+  const totalNeed = Math.max(0, Number((targetTotal - totalNow).toFixed(1)));
+  const totalBar = progressBar(Math.max(0, totalNow - Number(next.total || 0) + getLevelTuningConfig().pointsPerLevel), getLevelTuningConfig().pointsPerLevel, 10);
+
+  return [
+    `Menuju **Level ${next.level} (${next.name})**`,
+    `Butuh: **${formatNumber(totalNeed)} poin lagi**`,
+    `Progress: \`${totalBar}\``,
+    "",
+    `💬 Chat: **${formatNumber(userData.chat || 0)}** poin`,
+    `🎙️ Voice: **${formatNumber(userData.voice || 0)}** poin`,
+    `⭐ Total: **${formatNumber(totalNow)}** poin`
+  ].join("\n");
+}
+
+function getCategoryLevelInfo(userData = {}, type = "chat") {
+  const tuning = getLevelTuningConfig();
+  const levelCfg = config.level || {};
+  const perLevel = Math.max(1, Number(
+    type === "voice"
+      ? (levelCfg.voicePointsPerLevel || levelCfg.pointsPerLevel || tuning.pointsPerLevel)
+      : (levelCfg.chatPointsPerLevel || levelCfg.pointsPerLevel || tuning.pointsPerLevel)
+  ));
+  const points = Math.max(0, Number(userData[type] || 0));
+  const level = Math.max(1, Math.min(tuning.maxLevel, Math.floor(points / perLevel) + 1));
+  const nextLevel = level < tuning.maxLevel ? level + 1 : null;
+  const currentBase = Math.max(0, (level - 1) * perLevel);
+  const nextTarget = nextLevel ? (nextLevel - 1) * perLevel : currentBase;
+  const need = nextLevel ? Math.max(0, Number((nextTarget - points).toFixed(1))) : 0;
+  const progress = nextLevel ? Math.max(0, points - currentBase) : perLevel;
+  const percent = nextLevel ? Math.max(0, Math.min(100, Math.round((progress / perLevel) * 100))) : 100;
+
+  return {
+    type,
+    points,
+    level,
+    rank: getLevelNameByLevel(level),
+    perLevel,
+    nextLevel,
+    nextRank: nextLevel ? getLevelNameByLevel(nextLevel) : getLevelNameByLevel(level),
+    need,
+    percent,
+    bar: progressBar(progress, perLevel, 10)
+  };
+}
+
+function buildCekPoinSection(label, emoji, info) {
+  if (!info.nextLevel) {
+    return [
+      `${emoji} **${label}**`,
+      `Level: **${info.level}**`,
+      `Poin: **${formatNumber(info.points)}**`,
+      `Status: **Level maksimal**`,
+      `\`${progressBar(1, 1, 10)}\` **100%**`
+    ].join("\n");
+  }
+
+  return [
+    `${emoji} **${label}**`,
+    `Level: **${info.level}**`,
+    `Poin: **${formatNumber(info.points)}**`,
+    `Naik Lv.${info.nextLevel}: **${formatNumber(info.need)} poin lagi**`,
+    `\`${info.bar}\` **${info.percent}%**`
+  ].join("\n");
+}
+
+function getCekPoinChannelId() {
+  return String(config.cekPoinChannelId || config.level?.checkPointChannelId || config.levelChannelId || "").trim();
+}
+
+async function getCekPoinChannel(guild) {
+  if (!guild) return null;
+  const channelId = getCekPoinChannelId();
+  if (!isFilledId(channelId)) return null;
+  return getTextChannel(guild, channelId);
+}
+
+async function sendLevelProfileMessage(message, target, userData) {
+  const channel = await getCekPoinChannel(message.guild);
+  const payload = {
+    content: `${target}`,
+    embeds: [buildLevelProfileEmbed(target, userData)]
+  };
+
+  if (channel && channel.id !== message.channel.id) {
+    await safeSend(channel, payload);
+    await safeReply(message, `✅ Cek poin ${target} dikirim ke ${channel}.`);
+    return true;
+  }
+
+  await safeReply(message, payload);
+  return true;
+}
+
+async function sendLevelProfileInteraction(interaction, target, userData) {
+  const channel = await getCekPoinChannel(interaction.guild);
+  const payload = {
+    content: `${target}`,
+    embeds: [buildLevelProfileEmbed(target, userData)]
+  };
+
+  if (channel && channel.id !== interaction.channelId) {
+    await safeSend(channel, payload);
+    await interaction.reply({ content: `✅ Cek poin ${target} dikirim ke ${channel}.`, flags: 64 });
+    return true;
+  }
+
+  await interaction.reply(payload);
+  return true;
+}
+
+function getLevelBadge(level) {
+  if (level >= 100) return "👑";
+  if (level >= 75) return "💎";
+  if (level >= 50) return "🔥";
+  if (level >= 35) return "⚡";
+  if (level >= 20) return "🌟";
+  if (level >= 10) return "🚀";
+  if (level >= 5) return "✨";
+  return "🌱";
+}
+
+
+function buildLevelUpEmbed(member, userData) {
+  const info = getLevelInfo(userData);
+  const next = info.next;
+  const badge = getLevelBadge(info.current.level);
+  const total = getTotalLevelPoints(userData);
+  const chatInfo = getCategoryLevelInfo(userData, "chat");
+  const voiceInfo = getCategoryLevelInfo(userData, "voice");
+  const e = embedCfg("levelUp");
+  const data = {
+    user: `${member}`,
+    username: member.user.username,
+    displayName: member.displayName || member.user.username,
+    server: config.serverName || "DESA TULUS",
+    badge,
+    rank: info.current.name,
+    level: info.current.level,
+    total: formatNumber(total)
+  };
+
+  const nextText = next
+    ? [
+        `Butuh:`,
+        `- **${formatNumber(Math.max(0, Number((next.total - total).toFixed(1))))} poin total** lagi`,
+        `- Chat: **${formatNumber(chatInfo.points)}** poin`,
+        `- Voice: **${formatNumber(voiceInfo.points)}** poin`
+      ].join("\n")
+    : "Kamu sudah mencapai level tertinggi warga DESA TULUS. Keren banget 🔥";
+
+  const embed = new EmbedBuilder()
+    .setColor(hexColor(e.color || "#2ECC71", 0x2ecc71))
+    .setTitle(applyTemplate(e.title || "<a:rocket_animated:1512884173453529288> WARGA NAIK LEVEL!", data))
+    .setDescription(applyTemplate(e.description || "Sekarang menjadi **{rank} (Lvl. {level})** 🔥", data))
+    .addFields(
+      {
+        name: next ? `📈 Menuju Level ${next.level} (${next.name})` : "🏆 Level Maksimal",
+        value: nextText,
+        inline: false
+      }
+    )
+    .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 512 }))
+    .setFooter({ text: makeOTFooter(applyTemplate(e.footer || "{server} | Gunakan rwcekpoin untuk melihat level", data)) })
+    .setTimestamp();
+
+  return embed;
+}
+
+function buildLevelProfileEmbed(member, userData) {
+  const info = getLevelInfo(userData);
+  const badge = getLevelBadge(info.current.level);
+  const total = getTotalLevelPoints(userData);
+  const chatInfo = getCategoryLevelInfo(userData, "chat");
+  const voiceInfo = getCategoryLevelInfo(userData, "voice");
+  const e = embedCfg("levelProfile");
+  const data = {
+    user: `${member}`,
+    username: member.user.username,
+    displayName: member.displayName || member.user.username,
+    server: config.serverName || "DESA TULUS",
+    badge,
+    rank: info.current.name,
+    level: info.current.level,
+    total: formatNumber(total)
+  };
+
+  const embed = new EmbedBuilder()
+    .setColor(hexColor(e.color || "#22D3EE", 0x22d3ee))
+    .setTitle(applyTemplate(e.title || "📊 Level Warga", data))
+    .setDescription([
+      `${member}`,
+      "",
+      buildCekPoinSection("Chat", "💬", chatInfo),
+      "",
+      buildCekPoinSection("Voice", "🎙️", voiceInfo),
+      "",
+      `⭐ **Total Level:** ${info.current.name} (Lvl. ${info.current.level})`,
+      `Total Poin: **${formatNumber(total)}**`
+    ].join("\n"))
+    .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 512 }))
+    .setFooter({ text: makeOTFooter(applyTemplate(e.footer || "{server} | Level Warga", data)) })
+    .setTimestamp();
+
+  return embed;
+}
+
+function safeMotmRatio(value, fallback, min = 0, max = 1) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
+function safeMotmFontRatio(value, fallback, min = 0.018, max = 0.085) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
+function getTopActiveConfig() {
+  const t = config.topActive || {};
+  return {
+    enabled: t.enabled !== false,
+    channelId: t.channelId || config.levelChannelId || "",
+    memberOfTheMonthRoleId: t.memberOfTheMonthRoleId || "",
+    pointsThreshold: Number(t.pointsThreshold || 10000),
+    useOneChannel: t.useOneChannel !== false,
+    topLimit: Math.max(3, Math.min(25, Number(t.topLimit || 10))),
+    chatPointPerMessage: Number(t.chatPointPerMessage || 5),
+    voicePointPerMinute: Number(t.voicePointPerMinute || 2),
+    bonusEnabled: t.bonusEnabled !== false,
+    bonusPercent: Math.max(0, Number(t.bonusPercent ?? 15)),
+    announceLevelUp: t.announceLevelUp === true,
+    announceMemberOfTheMonth: t.announceMemberOfTheMonth === true && t.motmAwardMode !== "manual_only",
+    motmAwardMode: t.motmAwardMode || "manual_only",
+    autoMotmRole: t.autoMotmRole === true,
+    bannerEnabled: t.bannerEnabled !== false,
+    autoImageThreadEnabled: t.autoImageThreadEnabled !== false,
+    autoImageThreadMessage: t.autoImageThreadMessage || "🖼️ Thread otomatis dibuat buat diskusi gambar ini. Silakan ngobrol di sini ya 🤍",
+    autoImageThreadName: t.autoImageThreadName || "🖼️ Diskusi Gambar • {username}",
+    autoImageThreadArchiveMinutes: Number(t.autoImageThreadArchiveMinutes || 1440),
+    title: t.title || "🏆 TOP AKTIF WARGA DESA TULUS",
+    subtitle: t.subtitle || "Update otomatis dari chat dan voice bulan ini. Level/rank di leaderboard dihitung dari poin bulan ini supaya tidak berantakan.",
+    footer: t.footer || `${config.serverName} • Top Aktif Warga`,
+    bannerTitle: t.bannerTitle || "MEMBER OF THE MONTH",
+    bannerSubtitle: t.bannerSubtitle || "TOP CHAT • TOP VOICE • TOP AKTIF",
+    bannerNameLabel: t.bannerNameLabel || "NAMA MEMBER",
+    bannerFooterText: t.bannerFooterText || "DESA TULUS • MEMBER PALING AKTIF",
+    bannerAvatarRingText: t.bannerAvatarRingText || "",
+    bannerShowStats: t.bannerShowStats !== false,
+    bannerMode: t.bannerMode || "manual_image",
+    bannerCategoryTemplate: t.bannerCategoryTemplate || "TOP CHAT BULAN INI",
+    bannerCardWidth: Number(t.bannerCardWidth || 900),
+    bannerCardHeight: Number(t.bannerCardHeight || 506),
+    bannerAvatarX: safeMotmRatio(t.bannerAvatarX, 0.5, 0.36, 0.64),
+    bannerAvatarY: safeMotmRatio(t.bannerAvatarY, 0.485, 0.40, 0.59),
+    bannerAvatarRadius: safeMotmRatio(t.bannerAvatarRadius, 0.132, 0.090, 0.170),
+    bannerNameX: safeMotmRatio(t.bannerNameX, 0.5, 0.20, 0.80),
+    bannerNameY: safeMotmRatio(t.bannerNameY, 0.690, 0.60, 0.77),
+    bannerNameFontSize: safeMotmFontRatio(t.bannerNameFontSize, 0.064, 0.043, 0.085),
+    bannerCategoryX: safeMotmRatio(t.bannerCategoryX, 0.5, 0.20, 0.80),
+    bannerCategoryY: safeMotmRatio(t.bannerCategoryY, 0.765, 0.68, 0.84),
+    bannerCategoryFontSize: safeMotmFontRatio(t.bannerCategoryFontSize, 0.043, 0.032, 0.060),
+    bannerTotalX: safeMotmRatio(t.bannerTotalX, 0.5, 0.20, 0.80),
+    bannerTotalY: safeMotmRatio(t.bannerTotalY, 0.835, 0.74, 0.91),
+    bannerTotalFontSize: safeMotmFontRatio(t.bannerTotalFontSize, 0.044, 0.032, 0.065),
+    bannerTextMaxWidth: safeMotmRatio(t.bannerTextMaxWidth, 0.62, 0.40, 0.82),
+    bannerImageUrl: t.bannerImageUrl || "",
+    manualBannerUrl: t.manualBannerUrl || t.bannerImageUrl || "",
+    // Safety lock: MOTM banner wajib menampilkan avatar + nama member.
+    // Banyak kasus lama dashboard menyimpan false/angka kosong, jadi hasil banner polos.
+    manualBannerOverlayEnabled: true,
+    manualBannerDim: t.manualBannerDim !== false,
+    manualBannerAvatarEnabled: true,
+    manualBannerNameEnabled: true,
+    boardAuthor: t.boardAuthor || `${config.serverName || "DESA TULUS"} • Papan peringkat warga paling aktif`,
+    boardTitleTemplate: t.boardTitleTemplate || "🏆 TOP AKTIF WARGA BULAN {month} {server}",
+    boardUpdateText: t.boardUpdateText || "Update otomatis setiap hari pukul 00.00 WIB",
+    boardFooterText: t.boardFooterText || "Gunakan perintah rapihin untuk melihat poin top aktifnya",
+    topActiveFieldTitle: t.topActiveFieldTitle || "🏆 Top Aktif",
+    topVoiceFieldTitle: t.topVoiceFieldTitle || "🎙️ Top Voice",
+    topChatFieldTitle: t.topChatFieldTitle || "💬 Top Chat",
+    rowArrowEmoji: t.rowArrowEmoji || "<a:Animated_Arrow_Bluelite:1512751559140839576>",
+    motmReactionEmojis: t.motmReactionEmojis || "🔥,👏,🏆,🎉,🥳",
+    motmThreadArchiveMinutes: Number(t.motmThreadArchiveMinutes || 1440),
+    bannerBgStart: t.bannerBgStart || "#080704",
+    bannerBgMiddle: t.bannerBgMiddle || "#171006",
+    bannerBgEnd: t.bannerBgEnd || "#120c04",
+    bannerGold: t.bannerGold || "#F6C75A",
+    bannerTextColor: t.bannerTextColor || "#FFFFFF",
+    dailyAutoPost: t.dailyAutoPost === true,
+    dailyPostHourWIB: Number(t.dailyPostHourWIB ?? 0),
+    dailyPostWindowMinutes: Math.max(1, Number(t.dailyPostWindowMinutes || TOP_POIN_AUTO_WINDOW_MINUTES)),
+    excludeOwnerFromLevel: t.excludeOwnerFromLevel !== false,
+    excludeOwnerFromLeaderboard: t.excludeOwnerFromLeaderboard !== false
+  };
+}
+
+function getJakartaMonthKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit"
+  }).formatToParts(date);
+
+  const year = parts.find((p) => p.type === "year")?.value || String(date.getFullYear());
+  const month = parts.find((p) => p.type === "month")?.value || String(date.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
+function getMonthLabel(monthKey = getJakartaMonthKey()) {
+  const [year, month] = String(monthKey).split("-");
+  const date = new Date(Number(year || new Date().getFullYear()), Number(month || 1) - 1, 1);
+  return date.toLocaleDateString("id-ID", { month: "long", year: "numeric", timeZone: "Asia/Jakarta" }).toUpperCase();
+}
+
+function ensureMonthlyStats(userData, monthKey = getJakartaMonthKey()) {
+  if (!userData.monthly || userData.monthly.key !== monthKey) {
+    userData.monthly = {
+      key: monthKey,
+      chat: 0,
+      voice: 0,
+      bonus: 0,
+      total: 0,
+      lastActivityAt: 0
+    };
+  }
+
+  userData.monthly.chat = Number(userData.monthly.chat || 0);
+  userData.monthly.voice = Number(userData.monthly.voice || 0);
+  userData.monthly.bonus = Number(userData.monthly.bonus || 0);
+  userData.monthly.total = Number(userData.monthly.chat || 0) + Number(userData.monthly.voice || 0);
+  return userData.monthly;
+}
+
+function getMonthlyStats(userData, monthKey = getJakartaMonthKey()) {
+  if (!userData?.monthly || userData.monthly.key !== monthKey) {
+    return { key: monthKey, chat: 0, voice: 0, bonus: 0, total: 0, lastActivityAt: 0 };
+  }
+
+  const chat = Number(userData.monthly.chat || 0);
+  const voice = Number(userData.monthly.voice || 0);
+  return {
+    key: monthKey,
+    chat,
+    voice,
+    bonus: Number(userData.monthly.bonus || 0),
+    total: Number((chat + voice).toFixed(1)),
+    lastActivityAt: Number(userData.monthly.lastActivityAt || 0)
+  };
+}
+
+function incrementMonthlyStats(userData, type, amount) {
+  const month = ensureMonthlyStats(userData);
+  const value = Number(amount || 0);
+
+  if (type === "chat") month.chat = Number((month.chat + value).toFixed(1));
+  if (type === "voice") month.voice = Number((month.voice + value).toFixed(1));
+
+  month.total = Number((month.chat + month.voice).toFixed(1));
+  month.lastActivityAt = Date.now();
+  return month;
+}
+
+function getTopActiveRows(guildId, kind = "active", limit = 10, ownerId = "") {
+  const data = readLevelData();
+  const monthKey = getJakartaMonthKey();
+  const rows = Object.values(data.users || {})
+    .filter((u) => u.guildId === guildId)
+    .filter((u) => !shouldExcludeOwnerFromLeaderboard(ownerId, u.userId))
+    .map((u) => {
+      const monthly = getMonthlyStats(u, monthKey);
+      return {
+        ...u,
+        monthly,
+        monthlyChat: monthly.chat,
+        monthlyVoice: monthly.voice,
+        monthlyTotal: monthly.total
+      };
+    })
+    .filter((u) => u.monthlyTotal > 0 || u.monthlyChat > 0 || u.monthlyVoice > 0);
+
+  const key = kind === "chat" ? "monthlyChat" : kind === "voice" ? "monthlyVoice" : "monthlyTotal";
+  return rows.sort((a, b) => (b[key] || 0) - (a[key] || 0)).slice(0, limit);
+}
+
+function topMedal(index) {
+  return ["🥇", "🥈", "🥉"][index] || `**${index + 1}.**`;
+}
+
+function getTopActiveArrowEmoji() {
+  return String(getTopActiveConfig().rowArrowEmoji || "<a:Animated_Arrow_Bluelite:1512751559140839576>").trim();
+}
+
+function getTopRankLabel(index) {
+  return ["🥇", "🥈", "🥉"][index] || `**${index + 1}**`;
+}
+
+function formatTopActiveRows(rows, kind = "active") {
+  if (!rows.length) return config.texts?.emptyLeaderboardText || "Belum ada data bulan ini.";
+
+  return rows.map((u, i) => {
+    const info = getLeaderboardLevelInfo(u, kind);
+    const points = getLeaderboardPoints(u, kind);
+    const medal = topMedal(i);
+    const icon = kind === "voice" ? "🎙️" : kind === "chat" ? "💬" : "🏆";
+    const bonusText = kind === "active" && u.monthly?.bonus ? ` • Bonus **+${formatNumber(u.monthly.bonus)}**` : "";
+    return `${medal} <@${u.userId}>\n${icon} Poin bulan ini: **${formatNumber(points)}**${bonusText}\n🏷️ Rank bulan ini: **${info.current.name}** • Level **${info.current.level}**`;
+  }).join("\n\n");
+}
+
+function formatTopRowsPakRwStyle(rows, kind = "active") {
+  if (!rows.length) return config.texts?.emptyLeaderboardText || "Belum ada data bulan ini.";
+
+  const arrow = getTopActiveArrowEmoji();
+  return rows.map((u, i) => {
+    const points = getLeaderboardPoints(u, kind);
+    const rank = getTopRankLabel(i);
+    return `${rank} <@${u.userId}> ${arrow} **${formatNumber(points)} poin**`;
+  }).join("\n");
+}
+
+function buildTopActiveBoardEmbed(guild, reason = "update") {
+  const cfg = getTopActiveConfig();
+  const monthKey = getJakartaMonthKey();
+  const monthLabel = getMonthLabel(monthKey);
+  const limit = cfg.topLimit;
+  const chatRows = getTopActiveRows(guild.id, "chat", limit, guild.ownerId);
+  const voiceRows = getTopActiveRows(guild.id, "voice", limit, guild.ownerId);
+
+  const boardEmbedCfg = config.embeds?.topActiveBoard || {};
+  const media = config.embeds?.dashboard?.media || {};
+  const serverName = config.serverName || "DESA TULUS";
+  const boardTitle = applyTemplate(cfg.boardTitleTemplate || boardEmbedCfg.title || "🏆 TOP AKTIF WARGA BULAN {month} {server}", {
+    month: monthLabel,
+    server: serverName
+  });
+
+  const updateText = String(cfg.boardUpdateText || "Update otomatis setiap hari pukul 00.00 WIB").replace(/\*\*/g, "");
+  const footerText = cfg.boardFooterText || boardEmbedCfg.footer || "Gunakan perintah rapihin untuk melihat poin top aktifnya";
+
+  const embed = new EmbedBuilder()
+    .setColor(hexColor(boardEmbedCfg.color || config.embeds?.memberOfTheMonth?.color || "#F5C542", 0xf5c542))
+    .setAuthor({ name: cfg.boardAuthor || `${serverName} • Top Aktif Warga` })
+    .setTitle(boardTitle)
+    .setDescription(updateText)
+    .addFields(
+      { name: cfg.topVoiceFieldTitle || "🎙️ Top Voice", value: formatTopRowsPakRwStyle(voiceRows, "voice").slice(0, 1024), inline: false },
+      { name: cfg.topChatFieldTitle || "💬 Top Chat", value: formatTopRowsPakRwStyle(chatRows, "chat").slice(0, 1024), inline: false }
+    )
+    .setFooter({ text: makeOTFooter(footerText) })
+    .setTimestamp();
+
+  const boardImage = boardEmbedCfg.image || media.topActiveBoardImageUrl || "";
+  if (boardImage) embed.setImage(boardImage);
+  const boardThumb = boardEmbedCfg.thumbnail || media.defaultThumbnailUrl || "";
+  if (boardThumb) embed.setThumbnail(boardThumb);
+  return embed;
+}
+
+async function getTopActiveChannel(guild) {
+  const cfg = getTopActiveConfig();
+  if (!cfg.enabled || !isFilledId(cfg.channelId)) return null;
+  return getTextChannel(guild, cfg.channelId);
+}
+
+async function sendTopActiveBoard(guild, reason = "update") {
+  const channel = await getTopActiveChannel(guild);
+  if (!channel) return false;
+
+  await safeSend(channel, { embeds: [buildTopActiveBoardEmbed(guild, reason)] });
+  return true;
+}
+
+
+
+function readTopPoinPostState() {
+  try {
+    const dir = path.dirname(topPoinPostStateFile);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    if (!fs.existsSync(topPoinPostStateFile)) {
+      fs.writeFileSync(topPoinPostStateFile, JSON.stringify({ posted: {} }, null, 2), "utf8");
+    }
+    const parsed = JSON.parse(fs.readFileSync(topPoinPostStateFile, "utf8"));
+    if (!parsed.posted || typeof parsed.posted !== "object") parsed.posted = {};
+    return parsed;
+  } catch (err) {
+    console.log("TOP POIN POST STATE READ ERROR:", err?.message || err);
+    return { posted: {} };
+  }
+}
+
+function writeTopPoinPostState(state = { posted: {} }) {
+  try {
+    const dir = path.dirname(topPoinPostStateFile);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(topPoinPostStateFile, JSON.stringify(state, null, 2), "utf8");
+  } catch (err) {
+    console.log("TOP POIN POST STATE WRITE ERROR:", err?.message || err);
+  }
+}
+
+function shouldRunTopPoinAutoPostToday(now, targetHour) {
+  const hour = Number(now.hour || 0);
+  const target = Number(targetHour || 0);
+
+  // Jika target 00.00 WIB, semua waktu setelah 00.00 pada tanggal itu valid
+  // selama state harian belum pernah terkirim. Ini mencegah Railway yang restart
+  // lewat 00.10 WIB membuat board Top Poin kelewat seharian.
+  return hour >= target;
+}
+
+function getJakartaTimeParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).formatToParts(date);
+
+  const get = (type) => parts.find((p) => p.type === type)?.value || "00";
+  return {
+    dateKey: `${get("year")}-${get("month")}-${get("day")}`,
+    hour: Number(get("hour")),
+    minute: Number(get("minute"))
+  };
+}
+
+async function runTopPoinDailyPosterOnce() {
+  try {
+    const cfg = getTopActiveConfig();
+    if (!cfg.enabled || !cfg.dailyAutoPost) return;
+
+    const now = getJakartaTimeParts();
+    const targetHour = Number(cfg.dailyPostHourWIB ?? 0);
+    if (!shouldRunTopPoinAutoPostToday(now, targetHour)) return;
+
+    const state = readTopPoinPostState();
+
+    for (const guild of client.guilds.cache.values()) {
+      const key = `${guild.id}:${now.dateKey}:${targetHour}`;
+      if (topActiveDailyPostMemory.has(key) || state.posted[key]) continue;
+
+      const channel = await getTopActiveChannel(guild);
+      if (!channel) {
+        console.log(`TOP POIN AUTO POST: channel Top Aktif belum valid untuk ${guild.name}. Cek topActive.channelId di dashboard.`);
+        topActiveDailyPostMemory.set(key, Date.now());
+        continue;
+      }
+
+      const ok = await sendTopActiveBoard(guild, "auto top poin harian 00.00 WIB");
+      if (ok) {
+        state.posted[key] = {
+          guildId: guild.id,
+          guildName: guild.name,
+          channelId: channel.id,
+          dateKey: now.dateKey,
+          targetHour,
+          postedAt: new Date().toISOString(),
+          note: "Auto post Top Poin harian WIB"
+        };
+        writeTopPoinPostState(state);
+        topActiveDailyPostMemory.set(key, Date.now());
+      }
+
+      console.log(ok
+        ? `✅ Auto post Top Poin 00.00 WIB terkirim ke #${channel.name} (${guild.name}).` 
+        : `❌ Auto post Top Poin gagal terkirim (${guild.name}). Cek permission Send Messages + Embed Links.`);
+    }
+  } catch (err) {
+    console.log("TOP POIN DAILY POST ERROR:", err?.message || err);
+  }
+}
+
+function startTopActiveDailyPoster() {
+  const cfg = getTopActiveConfig();
+  console.log(`🏆 Auto post Top Poin: ${cfg.enabled && cfg.dailyAutoPost ? "aktif" : "nonaktif"} • jam ${String(cfg.dailyPostHourWIB ?? 0).padStart(2, "0")}.00 WIB • mode once-per-day persistent`);
+
+  // Cek langsung setelah bot online, lalu cek tiap menit.
+  setTimeout(() => runTopPoinDailyPosterOnce(), 5000);
+  setInterval(() => runTopPoinDailyPosterOnce(), 60 * 1000);
+}
+
+function getPublicDashboardBaseUrl() {
+  const raw = String(
+    process.env.DASHBOARD_PUBLIC_URL ||
+    process.env.PUBLIC_URL ||
+    process.env.RAILWAY_PUBLIC_DOMAIN ||
+    ""
+  ).trim();
+
+  if (!raw) return "";
+  if (raw.startsWith("http://") || raw.startsWith("https://")) return raw.replace(/\/$/, "");
+  return `https://${raw.replace(/\/$/, "")}`;
+}
+
+function buildMotmBannerUrl(member, userData) {
+  const cfg = getTopActiveConfig();
+  if (!cfg.bannerEnabled) return "";
+
+  const base = getPublicDashboardBaseUrl();
+  if (!base) return "";
+
+  const monthly = getMonthlyStats(userData);
+  const qs = new URLSearchParams({
+    name: member.displayName || member.user.username,
+    total: formatNumber(monthly.total),
+    chat: formatNumber(monthly.chat),
+    voice: formatNumber(monthly.voice),
+    month: getMonthLabel(monthly.key),
+    server: config.serverName || member.guild.name,
+    title: cfg.bannerTitle,
+    subtitle: cfg.bannerSubtitle
+  });
+
+  return `${base}/motm-banner.svg?${qs.toString()}`;
+}
+
+
+function canvasRoundRect(ctx, x, y, w, h, r) {
+  const radius = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + w - radius, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+  ctx.lineTo(x + w, y + h - radius);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+  ctx.lineTo(x + radius, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+}
+
+function canvasFitText(ctx, text, maxWidth) {
+  const raw = String(text || "");
+  if (ctx.measureText(raw).width <= maxWidth) return raw;
+  let out = raw;
+  while (out.length > 2 && ctx.measureText(`${out}…`).width > maxWidth) out = out.slice(0, -1);
+  return `${out}…`;
+}
+
+
+function getMotmAvatarUrls(member) {
+  const urls = [];
+  const push = (url) => {
+    const clean = String(url || "").trim();
+    if (clean && !urls.includes(clean)) urls.push(clean);
+  };
+
+  const avatarOptsList = [
+    { extension: "png", size: 1024, forceStatic: true },
+    { extension: "jpg", size: 1024, forceStatic: true },
+    { format: "png", size: 1024, forceStatic: true },
+    { format: "jpg", size: 1024, forceStatic: true },
+    { size: 1024, forceStatic: true }
+  ];
+
+  for (const opts of avatarOptsList) {
+    try { if (typeof member?.displayAvatarURL === "function") push(member.displayAvatarURL(opts)); } catch {}
+    try { if (typeof member?.avatarURL === "function") push(member.avatarURL(opts)); } catch {}
+    try { if (typeof member?.user?.displayAvatarURL === "function") push(member.user.displayAvatarURL(opts)); } catch {}
+    try { if (typeof member?.user?.avatarURL === "function") push(member.user.avatarURL(opts)); } catch {}
+  }
+
+  try {
+    const defaultUrl = member?.user?.defaultAvatarURL;
+    if (defaultUrl) push(defaultUrl.replace(".webp", ".png"));
+  } catch {}
+
+  return urls.filter(Boolean);
+}
+
+async function loadMotmAvatarImage(loadImage, member) {
+  const urls = getMotmAvatarUrls(member);
+  let lastError = "no avatar url";
+
+  console.log(`🖼️ MOTM avatar candidates for ${member?.user?.tag || member?.id || "unknown"}: ${urls.length}`);
+
+  for (const url of urls) {
+    try {
+      // Coba langsung dulu. Beberapa runtime canvas lebih stabil kalau load dari URL langsung.
+      return await loadImage(url);
+    } catch (err) {
+      lastError = `direct: ${err?.message || err}`;
+    }
+
+    try {
+      // Fallback: download jadi buffer, lalu load buffer. Ini lebih aman untuk Discord CDN di Railway.
+      const response = await axios.get(url, {
+        responseType: "arraybuffer",
+        timeout: 15000,
+        headers: {
+          "User-Agent": "Pak RW-OT-MOTM-Banner/3.9.0",
+          "Accept": "image/png,image/jpeg,image/webp,image/*,*/*"
+        },
+        maxRedirects: 5,
+        validateStatus: (status) => status >= 200 && status < 300
+      });
+      const buffer = Buffer.from(response.data);
+      if (!buffer.length) throw new Error("avatar buffer kosong");
+      return await loadImage(buffer);
+    } catch (err) {
+      lastError = `buffer: ${err?.message || err}`;
+      console.log("MOTM AVATAR URL FAILED:", url, lastError);
+    }
+  }
+
+  throw new Error(lastError);
+}
+
+function drawMotmAvatarFallback(ctx, member, x, y, r, gold) {
+  const name = member?.displayName || member?.user?.username || "OT";
+  const initial = String(name).trim().charAt(0).toUpperCase() || "O";
+
+  const fallbackGrad = ctx.createRadialGradient(x - 20, y - 30, 8, x, y, r);
+  fallbackGrad.addColorStop(0, "#3a3324");
+  fallbackGrad.addColorStop(0.55, "#16140f");
+  fallbackGrad.addColorStop(1, "#050505");
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = fallbackGrad;
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,.18)";
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  ctx.font = "900 96px Arial";
+  ctx.fillStyle = gold;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.shadowColor = "rgba(246,199,90,.35)";
+  ctx.shadowBlur = 18;
+  ctx.fillText(initial, x, y + 6);
+  ctx.restore();
+}
+
+function canvasSparkles(ctx, width, height) {
+  const dots = [
+    [92, 82, 3], [160, 132, 2], [245, 94, 2.5], [312, 164, 2], [780, 90, 3], [690, 145, 2], [835, 175, 2.5],
+    [120, 300, 2], [240, 330, 3], [670, 305, 2], [770, 340, 2.7], [850, 285, 2], [450, 78, 2], [520, 132, 2]
+  ];
+  ctx.save();
+  ctx.fillStyle = "rgba(255, 231, 151, .88)";
+  for (const [x, y, r] of dots) {
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.strokeStyle = "rgba(255, 216, 102, .72)";
+  ctx.lineWidth = 1.6;
+  for (const [x, y] of [[194, 62], [730, 68], [97, 218], [812, 236], [520, 330]]) {
+    ctx.beginPath();
+    ctx.moveTo(x - 8, y);
+    ctx.lineTo(x + 8, y);
+    ctx.moveTo(x, y - 8);
+    ctx.lineTo(x, y + 8);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+
+function normalizeCanvasImageUrl(url = "") {
+  const raw = String(url || "").trim();
+  if (!raw) return "";
+  if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
+  return "";
+}
+
+async function loadCanvasImageFromUrl(loadImage, url = "") {
+  const clean = normalizeCanvasImageUrl(url);
+  if (!clean) return null;
+
+  try {
+    return await loadImage(clean);
+  } catch (firstErr) {
+    try {
+      const response = await axios.get(clean, {
+        responseType: "arraybuffer",
+        timeout: 15000,
+        headers: { "User-Agent": "Pak RW-OT-Canvas-Image/3.10.0" }
+      });
+      const buffer = Buffer.from(response.data || []);
+      if (!buffer.length) throw new Error("buffer kosong");
+      return await loadImage(buffer);
+    } catch (secondErr) {
+      console.log("CANVAS IMAGE LOAD ERROR:", clean, firstErr?.message || firstErr, secondErr?.message || secondErr);
+      return null;
+    }
+  }
+}
+
+function drawCoverCanvasImage(ctx, image, x, y, w, h) {
+  const iw = Number(image?.width || 0);
+  const ih = Number(image?.height || 0);
+  if (!iw || !ih) return false;
+  const scale = Math.max(w / iw, h / ih);
+  const sw = w / scale;
+  const sh = h / scale;
+  const sx = Math.max(0, (iw - sw) / 2);
+  const sy = Math.max(0, (ih - sh) / 2);
+  ctx.drawImage(image, sx, sy, sw, sh, x, y, w, h);
+  return true;
+}
+
+function drawMotmReadabilityOverlay(ctx, width, height, cfg, usingManualBanner = false) {
+  ctx.save();
+  const top = ctx.createLinearGradient(0, 0, 0, height);
+  top.addColorStop(0, usingManualBanner ? "rgba(0,0,0,.62)" : "rgba(0,0,0,.18)");
+  top.addColorStop(0.28, usingManualBanner ? "rgba(0,0,0,.20)" : "rgba(0,0,0,0)");
+  top.addColorStop(0.70, usingManualBanner ? "rgba(0,0,0,.28)" : "rgba(0,0,0,0)");
+  top.addColorStop(1, usingManualBanner ? "rgba(0,0,0,.72)" : "rgba(0,0,0,.10)");
+  ctx.fillStyle = top;
+  ctx.fillRect(0, 0, width, height);
+
+  if (usingManualBanner && cfg.manualBannerDim !== false) {
+    ctx.fillStyle = "rgba(0,0,0,.18)";
+    ctx.fillRect(0, 0, width, height);
+  }
+  ctx.restore();
+}
+
+function getBuiltinMotmTemplatePath() {
+  return path.join(__dirname, "assets", "motm-orang-tulus-template.png");
+}
+
+async function loadCanvasImageSource(loadImage, source = "") {
+  const raw = String(source || "").trim();
+  if (!raw) return null;
+
+  if (raw.startsWith("http://") || raw.startsWith("https://")) {
+    return loadCanvasImageFromUrl(loadImage, raw);
+  }
+
+  try {
+    const filePath = path.isAbsolute(raw) ? raw : path.join(__dirname, raw);
+    if (!fs.existsSync(filePath)) return null;
+    const buffer = fs.readFileSync(filePath);
+    return await loadImage(buffer);
+  } catch (err) {
+    console.log("CANVAS LOCAL IMAGE LOAD ERROR:", raw, err?.message || err);
+    return null;
+  }
+}
+
+function drawCoverImageInsideCircle(ctx, image, x, y, r) {
+  const iw = Number(image?.width || 0);
+  const ih = Number(image?.height || 0);
+  if (!iw || !ih) return false;
+
+  const size = r * 2;
+  const scale = Math.max(size / iw, size / ih);
+  const sw = size / scale;
+  const sh = size / scale;
+  const sx = Math.max(0, (iw - sw) / 2);
+  const sy = Math.max(0, (ih - sh) / 2);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.drawImage(image, sx, sy, sw, sh, x - r, y - r, size, size);
+  ctx.restore();
+  return true;
+}
+
+function applyMotmBannerTemplateText(template = "", data = {}) {
+  return String(template || "")
+    .replaceAll("{month}", data.month || "BULAN INI")
+    .replaceAll("{server}", data.server || config.serverName || "DESA TULUS")
+    .replaceAll("{username}", data.username || "")
+    .replaceAll("{displayName}", data.displayName || data.name || "")
+    .replaceAll("{name}", data.name || data.displayName || "")
+    .replaceAll("{total}", data.total || "0")
+    .replaceAll("{chat}", data.chat || "0")
+    .replaceAll("{voice}", data.voice || "0");
+}
+
+async function buildMotmTemplateOverlayAttachment(member, userData, cfg, backgroundSource) {
+  try {
+    const { createCanvas, loadImage } = CanvasKit;
+    const bgImage = await loadCanvasImageSource(loadImage, backgroundSource);
+    if (!bgImage) return null;
+
+    const clamp = (value, def, min, max) => {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return def;
+      return Math.max(min, Math.min(max, n));
+    };
+
+    // FINAL GANG DESA STYLE:
+    // Discord embed card dibuat compact, bukan poster besar kosong.
+    // Default 900x506 supaya tampilannya mirip contoh: padat, jelas, dan rapi di chat Discord.
+    const width = Math.round(clamp(cfg.bannerCardWidth, 900, 720, 1200));
+    const height = Math.round(clamp(cfg.bannerCardHeight, 506, 405, 700));
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext("2d");
+    const monthly = getMonthlyStats(userData);
+    const name = member.displayName || member.user.username;
+    const username = member.user.username;
+    const monthLabel = getMonthLabel(monthly.key).replace(/^BULAN\s+/i, "");
+    const gold = cfg.bannerGold || "#F6C75A";
+
+    // Background template tetap dari asset DESA TULUS, tapi di-cover ke ukuran card compact.
+    drawCoverCanvasImage(ctx, bgImage, 0, 0, width, height);
+
+    const data = {
+      month: monthLabel,
+      server: config.serverName || "DESA TULUS",
+      name,
+      displayName: name,
+      username,
+      total: formatNumber(monthly.total),
+      chat: formatNumber(monthly.chat),
+      voice: formatNumber(monthly.voice)
+    };
+
+    const avatarX = width * clamp(cfg.bannerAvatarX, 0.5, 0.38, 0.62);
+    const avatarY = height * clamp(cfg.bannerAvatarY, 0.485, 0.40, 0.59);
+    const avatarR = Math.min(width, height) * clamp(cfg.bannerAvatarRadius, 0.132, 0.090, 0.170);
+    const nameX = width * clamp(cfg.bannerNameX, 0.5, 0.25, 0.75);
+    const nameY = height * clamp(cfg.bannerNameY, 0.690, 0.60, 0.77);
+    const categoryX = width * clamp(cfg.bannerCategoryX, 0.5, 0.25, 0.75);
+    const categoryY = height * clamp(cfg.bannerCategoryY, 0.765, 0.68, 0.84);
+    const totalX = width * clamp(cfg.bannerTotalX, 0.5, 0.25, 0.75);
+    const totalY = height * clamp(cfg.bannerTotalY, 0.835, 0.74, 0.91);
+    const maxTextWidth = width * clamp(cfg.bannerTextMaxWidth, 0.62, 0.40, 0.82);
+    const nameFont = Math.max(24, Math.round(height * clamp(cfg.bannerNameFontSize, 0.064, 0.043, 0.085)));
+    const categoryFont = Math.max(17, Math.round(height * clamp(cfg.bannerCategoryFontSize, 0.043, 0.032, 0.060)));
+    const totalFont = Math.max(17, Math.round(height * clamp(cfg.bannerTotalFontSize, 0.044, 0.032, 0.065)));
+
+    // Fokus cahaya di area avatar + text agar mirip banner contoh, tapi tidak menutupi background.
+    ctx.save();
+    const centerGlow = ctx.createRadialGradient(width / 2, height * 0.55, 10, width / 2, height * 0.55, width * 0.34);
+    centerGlow.addColorStop(0, "rgba(0,0,0,.20)");
+    centerGlow.addColorStop(0.55, "rgba(0,0,0,.10)");
+    centerGlow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = centerGlow;
+    ctx.fillRect(width * 0.20, height * 0.30, width * 0.60, height * 0.60);
+    ctx.restore();
+
+    // Avatar member pemenang MOTM.
+    ctx.save();
+    const glow = ctx.createRadialGradient(avatarX, avatarY, avatarR * 0.30, avatarX, avatarY, avatarR * 1.82);
+    glow.addColorStop(0, "rgba(255,244,205,.70)");
+    glow.addColorStop(0.40, "rgba(246,199,90,.38)");
+    glow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(avatarX, avatarY, avatarR * 1.85, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    const ringGrad = ctx.createLinearGradient(avatarX - avatarR, avatarY - avatarR, avatarX + avatarR, avatarY + avatarR);
+    ringGrad.addColorStop(0, "#fff9df");
+    ringGrad.addColorStop(0.25, gold);
+    ringGrad.addColorStop(0.55, "#a66b1f");
+    ringGrad.addColorStop(1, "#fff2b4");
+    ctx.beginPath();
+    ctx.arc(avatarX, avatarY, avatarR + Math.max(5, width * 0.006), 0, Math.PI * 2);
+    ctx.fillStyle = ringGrad;
+    ctx.shadowColor = "rgba(246,199,90,.55)";
+    ctx.shadowBlur = Math.max(12, width * 0.016);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.arc(avatarX, avatarY, avatarR + Math.max(2, width * 0.0025), 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,255,245,.96)";
+    ctx.fill();
+    ctx.restore();
+
+    try {
+      const avatar = await loadMotmAvatarImage(loadImage, member);
+      if (!drawCoverImageInsideCircle(ctx, avatar, avatarX, avatarY, avatarR)) {
+        drawMotmAvatarFallback(ctx, member, avatarX, avatarY, avatarR, gold);
+      }
+    } catch (err) {
+      console.log("MOTM TEMPLATE AVATAR LOAD ERROR:", err?.message || err);
+      drawMotmAvatarFallback(ctx, member, avatarX, avatarY, avatarR, gold);
+    }
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(avatarX, avatarY, avatarR + Math.max(2, width * 0.0025), 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(255,255,255,.92)";
+    ctx.lineWidth = Math.max(2, width * 0.0025);
+    ctx.stroke();
+    ctx.restore();
+
+    // Teks bawah dibuat seperti contoh: nama, kategori, total poin. Selalu muncul, tidak ikut setting lama yang kosong.
+    const category = applyMotmBannerTemplateText(cfg.bannerCategoryTemplate || "TOP CHAT BULAN INI", data).toUpperCase();
+    const totalText = `Total Poin: ${formatNumber(monthly.total)}`;
+
+    ctx.save();
+    const textGlow = ctx.createRadialGradient(width / 2, height * 0.76, 10, width / 2, height * 0.76, width * 0.32);
+    textGlow.addColorStop(0, "rgba(0,0,0,.72)");
+    textGlow.addColorStop(0.55, "rgba(0,0,0,.38)");
+    textGlow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = textGlow;
+    ctx.fillRect(width * 0.22, height * 0.58, width * 0.56, height * 0.34);
+    ctx.restore();
+
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    ctx.shadowColor = "rgba(0,0,0,.98)";
+    ctx.shadowBlur = Math.max(9, width * 0.010);
+    ctx.lineJoin = "round";
+
+    ctx.font = `900 ${nameFont}px Arial`;
+    ctx.fillStyle = "#FFFFFF";
+    ctx.strokeStyle = "rgba(0,0,0,.88)";
+    ctx.lineWidth = Math.max(3, width * 0.0032);
+    const safeName = canvasFitText(ctx, name, maxTextWidth);
+    ctx.strokeText(safeName, nameX, nameY);
+    ctx.fillText(safeName, nameX, nameY);
+
+    ctx.font = `900 ${categoryFont}px Arial`;
+    ctx.fillStyle = "#FFFFFF";
+    ctx.strokeStyle = "rgba(0,0,0,.84)";
+    ctx.lineWidth = Math.max(2, width * 0.0027);
+    const safeCategory = canvasFitText(ctx, category, maxTextWidth);
+    ctx.strokeText(safeCategory, categoryX, categoryY);
+    ctx.fillText(safeCategory, categoryX, categoryY);
+
+    ctx.font = `900 ${totalFont}px Arial`;
+    ctx.fillStyle = gold;
+    ctx.strokeStyle = "rgba(0,0,0,.84)";
+    ctx.lineWidth = Math.max(2, width * 0.0027);
+    const safeTotal = canvasFitText(ctx, totalText, maxTextWidth);
+    ctx.strokeText(safeTotal, totalX, totalY);
+    ctx.fillText(safeTotal, totalX, totalY);
+    ctx.restore();
+
+    const buffer = canvas.toBuffer("image/png");
+    return new AttachmentBuilder(buffer, { name: "orang-tulus-motm-card.png" });
+  } catch (err) {
+    console.log("MOTM TEMPLATE CANVAS ERROR:", err?.message || err);
+    return null;
+  }
+}
+
+function getManualMotmBannerImageUrl() {
+  const cfg = getTopActiveConfig();
+  const media = config.embeds?.dashboard?.media || {};
+  return normalizeCanvasImageUrl(cfg.manualBannerUrl || cfg.bannerImageUrl || media.motmBackgroundImageUrl || "");
+}
+
+function isMotmManualImageOnlyMode() {
+  const cfg = getTopActiveConfig();
+  return ["manual_image", "manual_static", "manual_only"].includes(String(cfg.bannerMode || "").toLowerCase());
+}
+
+async function buildMotmBannerAttachment(member, userData) {
+  const cfg = getTopActiveConfig();
+
+  // Mode Manual Image Saja: jangan generate banner/canvas sama sekali.
+  // Banner dikirim apa adanya dari URL dashboard supaya tidak berantakan.
+  if (isMotmManualImageOnlyMode()) return null;
+
+  if (!cfg.bannerEnabled || !CanvasKit?.createCanvas) return null;
+
+  try {
+    // Ambil ulang member supaya avatar server/user tidak kosong dari cache.
+    if (member?.guild?.members?.fetch && member?.id) {
+      member = await member.guild.members.fetch({ user: member.id, force: true }).catch(() => member);
+    }
+
+    const { createCanvas, loadImage } = CanvasKit;
+    const width = 1200;
+    const height = 620;
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext("2d");
+    const monthly = getMonthlyStats(userData);
+    const name = member.displayName || member.user.username;
+    const username = member.user.username;
+    const monthLabel = getMonthLabel(monthly.key).replace(/^BULAN\s+/i, "");
+    const server = (config.serverName || "DESA TULUS").toUpperCase();
+    const gold = cfg.bannerGold || "#F6C75A";
+    const textColor = cfg.bannerTextColor || "#FFFFFF";
+
+    const media = config.embeds?.dashboard?.media || {};
+    const manualUrl = normalizeCanvasImageUrl(cfg.manualBannerUrl || cfg.bannerImageUrl || media.motmBackgroundImageUrl || "");
+    const useBuiltinTemplate = cfg.bannerMode === "desa_tulus_template" && fs.existsSync(getBuiltinMotmTemplatePath());
+    const useManualBanner = Boolean(manualUrl && cfg.bannerMode === "manual_background");
+
+    // Mode baru: pakai template banner DESA TULUS dari asset coding, lalu Pak RW menimpa foto profil + nama member asli.
+    // Kalau owner isi URL banner manual, URL itu juga dipakai sebagai background dan tetap ditimpa nama/avatar member.
+    if (useBuiltinTemplate || useManualBanner) {
+      const templateSource = useBuiltinTemplate ? getBuiltinMotmTemplatePath() : manualUrl;
+      const templateAttachment = await buildMotmTemplateOverlayAttachment(member, userData, cfg, templateSource);
+      if (templateAttachment) return templateAttachment;
+    }
+
+    const bg = ctx.createLinearGradient(0, 0, width, height);
+    bg.addColorStop(0, cfg.bannerBgStart || "#080704");
+    bg.addColorStop(0.36, cfg.bannerBgMiddle || "#171006");
+    bg.addColorStop(0.70, "#050507");
+    bg.addColorStop(1, cfg.bannerBgEnd || "#120c04");
+    ctx.fillStyle = bg;
+    canvasRoundRect(ctx, 0, 0, width, height, 38);
+    ctx.fill();
+
+    if (useManualBanner) {
+      const manualImage = await loadCanvasImageFromUrl(loadImage, manualUrl);
+      if (manualImage) {
+        ctx.save();
+        canvasRoundRect(ctx, 0, 0, width, height, 38);
+        ctx.clip();
+        drawCoverCanvasImage(ctx, manualImage, 0, 0, width, height);
+        ctx.restore();
+      } else {
+        console.log("MOTM MANUAL BANNER LOAD ERROR: gagal memuat banner manual, fallback ke auto premium.");
+      }
+    }
+
+    if (!useManualBanner) {
+      const centerGlow = ctx.createRadialGradient(width / 2, 230, 10, width / 2, 230, 430);
+      centerGlow.addColorStop(0, "rgba(255,236,169,.58)");
+      centerGlow.addColorStop(0.36, "rgba(246,199,90,.23)");
+      centerGlow.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = centerGlow;
+      ctx.fillRect(0, 0, width, height);
+
+      const cornerGlow = ctx.createRadialGradient(1100, 60, 20, 1100, 60, 330);
+      cornerGlow.addColorStop(0, "rgba(60,180,255,.20)");
+      cornerGlow.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = cornerGlow;
+      ctx.fillRect(0, 0, width, height);
+    } else {
+      drawMotmReadabilityOverlay(ctx, width, height, cfg, true);
+    }
+
+    ctx.save();
+    ctx.globalAlpha = 0.22;
+    ctx.strokeStyle = gold;
+    ctx.lineWidth = 1;
+    for (let x = 70; x < width; x += 70) {
+      ctx.beginPath();
+      ctx.moveTo(x, 44);
+      ctx.lineTo(x - 70, height - 54);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    ctx.strokeStyle = gold;
+    ctx.lineWidth = 5;
+    canvasRoundRect(ctx, 28, 28, width - 56, height - 56, 34);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,.15)";
+    ctx.lineWidth = 2;
+    canvasRoundRect(ctx, 46, 46, width - 92, height - 92, 28);
+    ctx.stroke();
+
+    canvasSparkles(ctx, width, height);
+
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.font = "900 58px Arial";
+    ctx.fillStyle = gold;
+    ctx.shadowColor = "rgba(246,199,90,.35)";
+    ctx.shadowBlur = 24;
+    ctx.fillText(String(cfg.bannerTitle || "MEMBER OF THE MONTH").toUpperCase(), width / 2, 102);
+    ctx.shadowBlur = 0;
+    ctx.font = "800 20px Arial";
+    ctx.fillStyle = "#fff3c4";
+    ctx.fillText(String(cfg.bannerSubtitle || "TOP CHAT • TOP VOICE • TOP AKTIF").toUpperCase(), width / 2, 137);
+    ctx.restore();
+
+    const avatarX = width / 2;
+    const avatarY = 282;
+    const avatarR = 106;
+
+    ctx.save();
+    const ringGrad = ctx.createLinearGradient(avatarX - 120, avatarY - 120, avatarX + 120, avatarY + 120);
+    ringGrad.addColorStop(0, "#fff6cf");
+    ringGrad.addColorStop(0.42, gold);
+    ringGrad.addColorStop(0.72, "#8a5510");
+    ringGrad.addColorStop(1, "#fff0ad");
+    ctx.beginPath();
+    ctx.arc(avatarX, avatarY, avatarR + 20, 0, Math.PI * 2);
+    ctx.fillStyle = ringGrad;
+    ctx.shadowColor = "rgba(246,199,90,.42)";
+    ctx.shadowBlur = 36;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.arc(avatarX, avatarY, avatarR + 9, 0, Math.PI * 2);
+    ctx.fillStyle = "#fff8dc";
+    ctx.fill();
+    ctx.restore();
+
+    try {
+      const avatar = await loadMotmAvatarImage(loadImage, member);
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(avatarX, avatarY, avatarR, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(avatar, avatarX - avatarR, avatarY - avatarR, avatarR * 2, avatarR * 2);
+      ctx.restore();
+    } catch (err) {
+      console.log("MOTM AVATAR LOAD ERROR:", err?.message || err);
+      drawMotmAvatarFallback(ctx, member, avatarX, avatarY, avatarR, gold);
+    }
+
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.font = "900 15px Arial";
+    ctx.fillStyle = "#11100b";
+    const ringText = String(cfg.bannerAvatarRingText || "TOP AKTIF").toUpperCase();
+    const tw = ctx.measureText(ringText).width + 38;
+    const pillX = avatarX - tw / 2;
+    canvasRoundRect(ctx, pillX, avatarY + avatarR + 8, tw, 32, 16);
+    ctx.fillStyle = gold;
+    ctx.fill();
+    ctx.fillStyle = "#171006";
+    ctx.fillText(ringText, avatarX, avatarY + avatarR + 30);
+    ctx.restore();
+
+    const nameCardX = 230;
+    const nameCardY = 430;
+    const nameCardW = width - 460;
+    const nameCardH = 104;
+    const cardGrad = ctx.createLinearGradient(nameCardX, nameCardY, nameCardX + nameCardW, nameCardY);
+    cardGrad.addColorStop(0, "rgba(255,255,255,.08)");
+    cardGrad.addColorStop(0.5, "rgba(255,232,163,.18)");
+    cardGrad.addColorStop(1, "rgba(255,255,255,.08)");
+    ctx.fillStyle = cardGrad;
+    canvasRoundRect(ctx, nameCardX, nameCardY, nameCardW, nameCardH, 24);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(246,199,90,.72)";
+    ctx.lineWidth = 2;
+    canvasRoundRect(ctx, nameCardX, nameCardY, nameCardW, nameCardH, 24);
+    ctx.stroke();
+
+    ctx.textAlign = "center";
+    ctx.font = "900 16px Arial";
+    ctx.fillStyle = gold;
+    ctx.fillText(String(cfg.bannerNameLabel || "NAMA MEMBER").toUpperCase(), width / 2, nameCardY + 31);
+    ctx.font = "900 42px Arial";
+    ctx.fillStyle = textColor;
+    ctx.strokeStyle = "rgba(0,0,0,.70)";
+    ctx.lineWidth = 5;
+    ctx.strokeText(canvasFitText(ctx, name, nameCardW - 70), width / 2, nameCardY + 76);
+    ctx.fillText(canvasFitText(ctx, name, nameCardW - 70), width / 2, nameCardY + 76);
+    ctx.font = "800 17px Arial";
+    ctx.fillStyle = "#ffe9a6";
+    ctx.fillText(canvasFitText(ctx, `@${username}`, nameCardW - 90), width / 2, nameCardY + 98);
+
+    if (cfg.bannerShowStats !== false) {
+      const stats = [
+        ["⭐ TOTAL", `${formatNumber(monthly.total)} POIN`],
+        ["💬 CHAT", `${formatNumber(monthly.chat)} POIN`],
+        ["🎙️ VOICE", `${formatNumber(monthly.voice)} POIN`]
+      ];
+      const statY = 548;
+      const statW = 250;
+      const gap = 22;
+      const startX = width / 2 - (statW * 3 + gap * 2) / 2;
+      for (let i = 0; i < stats.length; i++) {
+        const x = startX + i * (statW + gap);
+        ctx.fillStyle = "rgba(0,0,0,.30)";
+        canvasRoundRect(ctx, x, statY, statW, 46, 16);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(246,199,90,.45)";
+        ctx.lineWidth = 1.5;
+        canvasRoundRect(ctx, x, statY, statW, 46, 16);
+        ctx.stroke();
+        ctx.font = "800 12px Arial";
+        ctx.fillStyle = "#ffe9a6";
+        ctx.fillText(stats[i][0], x + statW / 2, statY + 17);
+        ctx.font = "900 15px Arial";
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(stats[i][1], x + statW / 2, statY + 36);
+      }
+    }
+
+    ctx.textAlign = "left";
+    ctx.font = "800 18px Arial";
+    ctx.fillStyle = "#fff0ba";
+    ctx.fillText(`${server} • BULAN ${monthLabel}`, 68, 584);
+    ctx.textAlign = "right";
+    ctx.fillText(String(cfg.bannerFooterText || "DESA TULUS • MEMBER PALING AKTIF"), width - 68, 584);
+
+    const buffer = canvas.toBuffer("image/png");
+    return new AttachmentBuilder(buffer, { name: "orang-tulus-member-of-the-month.png" });
+  } catch (err) {
+    console.log("MOTM CANVAS ERROR:", err.message);
+    return null;
+  }
+}
+
+function buildMotmMessageContent(member, userData, isTest = false) {
+  const cfg = getTopActiveConfig();
+  const monthly = getMonthlyStats(userData);
+  const roleText = isFilledId(cfg.memberOfTheMonthRoleId) ? `<@&${cfg.memberOfTheMonthRoleId}>` : "Member Of The Month";
+  const info = getLevelInfo(userData);
+  const template = config.texts?.motmContentTemplate || "🏆 Selamat {user} Kamu menjadi {role} **TOP AKTIF BULAN INI**!";
+  const prefix = isTest ? (config.texts?.motmTestPrefix || "🧪 TEST • ") : "";
+  return prefix + applyTemplate(template, {
+    user: `${member}`,
+    username: member.user.username,
+    displayName: member.displayName || member.user.username,
+    role: roleText,
+    server: config.serverName || member.guild.name,
+    month: getMonthLabel(monthly.key),
+    total: formatNumber(monthly.total),
+    chat: formatNumber(monthly.chat),
+    voice: formatNumber(monthly.voice),
+    level: info.current.level,
+    rank: info.current.name
+  });
+}
+
+function makeSafeTestLevelData(baseUserData = {}, targetLevel = 10) {
+  const tuning = getLevelTuningConfig();
+  const safeLevel = Math.max(1, Math.min(tuning.maxLevel, Number(targetLevel || 10)));
+  const targetPoints = Math.max(0, (safeLevel - 1) * tuning.pointsPerLevel);
+  return {
+    ...baseUserData,
+    chat: Math.max(Number(baseUserData.chat || 0), targetPoints),
+    voice: Number(baseUserData.voice || 0),
+    level: safeLevel,
+    __bekiwTestOnly: true
+  };
+}
+
+function makeSafeTestMotmData(baseUserData = {}) {
+  const cfg = getTopActiveConfig();
+  const threshold = Number(cfg.pointsThreshold || 10000);
+  const monthKey = getJakartaMonthKey();
+  const cloned = {
+    ...baseUserData,
+    monthly: {
+      ...(baseUserData.monthly || {}),
+      key: monthKey,
+      chat: Math.max(Number(baseUserData.monthly?.chat || 0), threshold),
+      voice: Number(baseUserData.monthly?.voice || 0),
+      bonus: Number(baseUserData.monthly?.bonus || 0),
+      lastActivityAt: Date.now()
+    },
+    __bekiwTestOnly: true
+  };
+  cloned.monthly.total = Number(((cloned.monthly.chat || 0) + (cloned.monthly.voice || 0)).toFixed(1));
+  return cloned;
+}
+
+async function buildMotmSendPayload(member, userData, { isTest = false } = {}) {
+  // Legacy payload fallback. Format utama sekarang pakai sendMotmAnnouncementSeparate():
+  // 1 pesan teks ucapan, lalu 1 pesan gambar tanpa caption/teks.
+  const attachment = await buildMotmBannerAttachment(member, userData);
+  const imageUrl = attachment ? "attachment://orang-tulus-member-of-the-month.png" : "";
+  const embed = buildMemberOfTheMonthEmbed(member, userData, imageUrl);
+  const payload = {
+    content: buildMotmMessageContent(member, userData, isTest),
+    embeds: [embed]
+  };
+  if (attachment) payload.files = [attachment];
+  return payload;
+}
+
+async function sendMotmAnnouncementSeparate(channel, member, userData, { isTest = false } = {}) {
+  if (!channel?.isTextBased?.()) return { textMessage: null, imageMessage: null };
+  const cfg = getTopActiveConfig();
+
+  if (String(cfg.motmSendMode || "separate_text_image") === "combined") {
+    const payload = await buildMotmSendPayload(member, userData, { isTest });
+    const message = await safeSend(channel, payload);
+    return { textMessage: message, imageMessage: message };
+  }
+
+  const mode = String(cfg.motmSendMode || "separate_text_image");
+  const content = mode === "image_only" ? "" : buildMotmMessageContent(member, userData, isTest);
+  const textMessage = content ? await safeSend(channel, { content }) : null;
+
+  let imageMessage = null;
+  if (cfg.bannerEnabled !== false) {
+    if (isMotmManualImageOnlyMode()) {
+      const manualUrl = getManualMotmBannerImageUrl();
+      if (manualUrl) {
+        // Gambar manual dikirim TANPA caption/teks. Embed hanya dipakai sebagai wadah image URL.
+        const imageEmbed = new EmbedBuilder()
+          .setColor(hexColor(cfg.bannerGold || "#F6C75A", 0xf6c75a))
+          .setImage(manualUrl);
+        imageMessage = await safeSend(channel, { embeds: [imageEmbed] });
+      } else {
+        console.log("MOTM MANUAL IMAGE: URL banner manual belum diisi di dashboard, gambar tidak dikirim.");
+      }
+    } else {
+      const attachment = await buildMotmBannerAttachment(member, userData);
+      if (attachment) {
+        // File banner dikirim TANPA content/description/caption.
+        imageMessage = await safeSend(channel, { files: [attachment] });
+      } else {
+        const embed = buildMemberOfTheMonthEmbed(member, userData, "");
+        imageMessage = await safeSend(channel, { embeds: [embed] });
+      }
+    }
+  }
+
+  return { textMessage, imageMessage };
+}
+
+function shouldPostTopActiveBoardAfterMotm() {
+  const cfg = getTopActiveConfig();
+  return cfg.postBoardAfterMotm === true;
+}
+
+async function decorateMotmMessage(message, member) {
+  if (!message) return;
+  const cfg = getTopActiveConfig();
+  const emojis = String(cfg.motmReactionEmojis || "🔥,👏,🏆,🎉,🥳")
+    .split(/[ ,]+/)
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .slice(0, 10);
+
+  for (const emoji of emojis) {
+    await message.react(emoji).catch(() => null);
+  }
+
+  if (typeof message.startThread !== "function") return;
+
+  const text = applyTemplate(config.texts?.motmThreadMessage || "🎉 Selamat untuk {user}! Silakan ucapkan selamat di thread ini ya 🤍", {
+    user: `${member}`,
+    username: member.displayName || member.user.username,
+    server: config.serverName || member.guild.name
+  });
+
+  // Discord hanya mengizinkan 1 thread per pesan.
+  // Kalau pesan MOTM sudah punya thread dari test sebelumnya, jangan buat thread baru lagi.
+  // Pakai thread yang sudah ada supaya Railway tidak spam error: "The message already has a thread".
+  if (message.hasThread) {
+    const existingThread = message.thread || await message.channel?.threads?.fetch(message.id).catch(() => null);
+    if (existingThread && text) await existingThread.send(text).catch(() => null);
+    return;
+  }
+
+  const nameTemplate = config.texts?.motmThreadName || "Ucapkan selamat kepada {username}";
+  const name = applyTemplate(nameTemplate, {
+    user: `${member}`,
+    username: member.displayName || member.user.username,
+    server: config.serverName || member.guild.name
+  }).slice(0, 90);
+
+  const thread = await message.startThread({
+    name,
+    autoArchiveDuration: Number(cfg.motmThreadArchiveMinutes || 1440),
+    reason: "Member Of The Month DESA TULUS"
+  }).catch((err) => {
+    const msg = String(err?.message || "");
+    if (!msg.toLowerCase().includes("already has a thread")) {
+      console.log("MOTM THREAD ERROR:", msg);
+    }
+    return null;
+  });
+
+  if (thread && text) {
+    await thread.send(text).catch(() => null);
+  }
+}
+
+function buildMemberOfTheMonthEmbed(member, userData, imageUrl = "") {
+  const info = getLevelInfo(userData);
+  const monthly = getMonthlyStats(userData);
+  const e = embedCfg("memberOfTheMonth");
+  const data = {
+    user: `${member}`,
+    username: member.user.username,
+    displayName: member.displayName || member.user.username,
+    server: config.serverName || member.guild.name,
+    month: getMonthLabel(monthly.key),
+    total: formatNumber(monthly.total),
+    chat: formatNumber(monthly.chat),
+    voice: formatNumber(monthly.voice),
+    level: info.current.level,
+    rank: info.current.name
+  };
+
+  let fallbackImage = imageUrl;
+
+  if (!fallbackImage && isMotmManualImageOnlyMode()) {
+    fallbackImage = getManualMotmBannerImageUrl();
+  }
+
+  if (!fallbackImage && !isMotmManualImageOnlyMode()) {
+    fallbackImage = buildMotmBannerUrl(member, userData);
+  }
+
+  const embed = new EmbedBuilder()
+    .setColor(hexColor(e.color, 0xf5c542))
+    .setAuthor({ name: `${config.serverName || "DESA TULUS"} • Member Of The Month`, iconURL: member.user.displayAvatarURL({ dynamic: true }) })
+    .setTitle(applyTemplate(e.title || "🏆 MEMBER OF THE MONTH DESA TULUS", data))
+    .setDescription(applyTemplate(e.description || "{user} berhasil mencapai **{total} poin aktif** bulan ini dan mendapatkan role **Member Of The Month**.", data))
+    .addFields(
+      { name: "⭐ Total Poin", value: `**${data.total}** poin`, inline: true },
+      { name: "💬 Top Chat", value: `**${data.chat}** poin`, inline: true },
+      { name: "🎙️ Top Voice", value: `**${data.voice}** poin`, inline: true }
+    )
+    .setFooter({ text: makeOTFooter(applyTemplate(e.footer || "{server} • Member Of The Month", data)) })
+    .setTimestamp();
+
+  if (fallbackImage) embed.setImage(fallbackImage);
+  return embed;
+}
+
+
+async function forceSendMemberOfTheMonthTest(member, userData, fallbackChannel = null, options = {}) {
+  if (member?.guild?.members?.fetch && member?.id) {
+    member = await member.guild.members.fetch({ user: member.id, force: true }).catch(() => member);
+  }
+
+  if (shouldExcludeOwnerFromLevel(member.guild, member.id)) {
+    return { ok: false, reason: "Owner server tidak masuk sistem level, Top Aktif, dan Member Of The Month." };
+  }
+
+  const cfg = getTopActiveConfig();
+  let channel = await getTopActiveChannel(member.guild);
+
+  // Untuk command test, jangan diam kalau Channel Top Aktif belum disimpan di dashboard.
+  // Fallback ke channel tempat admin mengetik command supaya hasil test langsung terlihat.
+  if (!channel && fallbackChannel?.isTextBased?.()) {
+    channel = fallbackChannel;
+  }
+
+  if (!channel) {
+    return { ok: false, reason: "Channel Top Aktif belum benar dan channel fallback tidak bisa dipakai." };
+  }
+
+  let roleGiven = false;
+  // Mode test harus aman: default TIDAK memberi role asli.
+  // Kalau suatu saat mau test role sungguhan, panggil dengan { giveRole: true }.
+  if (options.giveRole === true && isFilledId(cfg.memberOfTheMonthRoleId)) {
+    const role = member.guild.roles.cache.get(cfg.memberOfTheMonthRoleId);
+    if (role) {
+      if (!member.roles.cache.has(role.id)) {
+        await member.roles.add(role).catch((err) => console.log("MOTM TEST ROLE ADD ERROR:", err.message));
+      }
+      roleGiven = true;
+    } else {
+      console.log("MOTM TEST ROLE ERROR: memberOfTheMonthRoleId tidak ditemukan di server.");
+    }
+  }
+
+  const sent = await sendMotmAnnouncementSeparate(channel, member, userData, { isTest: true });
+  await decorateMotmMessage(sent.imageMessage || sent.textMessage, member);
+
+  // Top Aktif tidak otomatis digabung setelah MOTM.
+  // Pakai command `rwposttopaktif` atau `/posttopaktif` kalau mau kirim board.
+  if (shouldPostTopActiveBoardAfterMotm()) {
+    await safeSend(channel, { embeds: [buildTopActiveBoardEmbed(member.guild, "test MOTM")] });
+  }
+
+  return { ok: true, channel, roleGiven };
+}
+
+async function checkMemberOfTheMonthReward(member, userData) {
+  const cfg = getTopActiveConfig();
+  // MOTM sekarang default MANUAL ONLY dari dashboard.
+  // Fungsi ini tidak memberi role/announcement otomatis kalau mode manual aktif.
+  if (cfg.motmAwardMode === "manual_only" || cfg.autoMotmRole !== true) return false;
+  if (!cfg.enabled) return false;
+  if (shouldExcludeOwnerFromLevel(member.guild, member.id)) return false;
+
+  const monthly = ensureMonthlyStats(userData);
+  if (monthly.total < cfg.pointsThreshold) return false;
+
+  userData.memberOfTheMonthMonths = Array.isArray(userData.memberOfTheMonthMonths)
+    ? userData.memberOfTheMonthMonths
+    : [];
+
+  if (userData.memberOfTheMonthMonths.includes(monthly.key)) return false;
+
+  let roleGiven = false;
+  if (isFilledId(cfg.memberOfTheMonthRoleId)) {
+    const role = member.guild.roles.cache.get(cfg.memberOfTheMonthRoleId);
+    if (role) {
+      if (!member.roles.cache.has(role.id)) {
+        await member.roles.add(role).catch((err) => console.log("MOTM ROLE ADD ERROR:", err.message));
+      }
+      roleGiven = true;
+    } else {
+      console.log("MOTM ROLE ERROR: memberOfTheMonthRoleId tidak ditemukan di server.");
+    }
+  }
+
+  userData.memberOfTheMonthMonths.push(monthly.key);
+  userData.memberOfTheMonthRoleGivenAt = Date.now();
+  userData.memberOfTheMonthRoleId = cfg.memberOfTheMonthRoleId || "";
+
+  if (cfg.announceMemberOfTheMonth) {
+    const channel = await getTopActiveChannel(member.guild);
+    if (channel) {
+      const sent = await sendMotmAnnouncementSeparate(channel, member, userData, { isTest: false });
+      await decorateMotmMessage(sent.imageMessage || sent.textMessage, member);
+
+      // Top Aktif tidak otomatis digabung setelah MOTM.
+      // Pakai command `rwposttopaktif` atau `/posttopaktif` untuk board terpisah.
+      if (shouldPostTopActiveBoardAfterMotm()) {
+        await safeSend(channel, { embeds: [buildTopActiveBoardEmbed(member.guild, "member tembus target MOTM")] });
+      }
+    }
+  }
+
+  return true;
+}
+
+async function sendTopActiveLevelNotice(member, userData) {
+  const cfg = getTopActiveConfig();
+  if (!cfg.enabled || !cfg.announceLevelUp) return false;
+  if (shouldExcludeOwnerFromLevel(member.guild, member.id)) return false;
+  if (cfg.useOneChannel) return false;
+  if (cfg.channelId && config.levelChannelId && cfg.channelId === config.levelChannelId) return false;
+
+  const channel = await getTopActiveChannel(member.guild);
+  if (!channel) return false;
+
+  const info = getLevelInfo(userData);
+  const monthly = getMonthlyStats(userData);
+  const embed = new EmbedBuilder()
+    .setColor(hexColor(config.embeds?.levelUp?.color || "#7C5CFF", 0x7c5cff))
+    .setTitle(config.texts?.levelUpTopActiveTitle || "🆙 Warga Naik Level + Masuk Top Aktif")
+    .setDescription([
+      `${member} baru saja naik ke **Level ${info.current.level} — ${info.current.name}**.`,
+      "",
+      `⭐ Poin aktif bulan ini: **${formatNumber(monthly.total)}**`,
+      `💬 Chat: **${formatNumber(monthly.chat)}**`,
+      `🎙️ Voice: **${formatNumber(monthly.voice)}**`,
+      "",
+      "Gunakan `rwtopaktif` untuk melihat papan peringkat lengkap."
+    ].join("\n"))
+    .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
+    .setFooter({ text: makeOTFooter(`${config.serverName} • Top Aktif Warga`) })
+    .setTimestamp();
+
+  await safeSend(channel, { embeds: [embed] });
+  return true;
+}
+
+function escapeSvgText(value = "") {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function renderMotmSvg(query = {}) {
+  const name = escapeSvgText(query.name || "Warga Tulus");
+  const server = escapeSvgText(query.server || config.serverName || "DESA TULUS");
+  const month = escapeSvgText(query.month || getMonthLabel());
+  const total = escapeSvgText(query.total || "10.000");
+  const chat = escapeSvgText(query.chat || "0");
+  const voice = escapeSvgText(query.voice || "0");
+  const title = escapeSvgText(query.title || config.topActive?.bannerTitle || "MEMBER OF THE MONTH");
+  const subtitle = escapeSvgText(query.subtitle || config.topActive?.bannerSubtitle || "TOP CHAT • TOP VOICE • TOP AKTIF");
+  const nameLabel = escapeSvgText(query.nameLabel || config.topActive?.bannerNameLabel || "NAMA MEMBER");
+  const footerText = escapeSvgText(query.footerText || config.topActive?.bannerFooterText || "DESA TULUS • MEMBER PALING AKTIF");
+  const initial = escapeSvgText(String(name).trim().charAt(0).toUpperCase() || "O");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="620" viewBox="0 0 1200 620">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#080704"/>
+      <stop offset="0.45" stop-color="#191006"/>
+      <stop offset="1" stop-color="#03030a"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" x2="1">
+      <stop offset="0" stop-color="#7a4c0a"/>
+      <stop offset="0.25" stop-color="#fff0ad"/>
+      <stop offset="0.56" stop-color="#f6c75a"/>
+      <stop offset="1" stop-color="#8a5510"/>
+    </linearGradient>
+    <radialGradient id="shine" cx="50%" cy="40%" r="55%">
+      <stop offset="0" stop-color="#fff7cf" stop-opacity="0.55"/>
+      <stop offset="0.35" stop-color="#f5c542" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000" flood-opacity="0.55"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="620" rx="42" fill="url(#bg)"/>
+  <circle cx="600" cy="250" r="260" fill="url(#shine)"/>
+  <rect x="28" y="28" width="1144" height="564" rx="36" fill="none" stroke="url(#gold)" stroke-width="5" opacity="0.95"/>
+  <rect x="46" y="46" width="1108" height="528" rx="28" fill="none" stroke="#ffffff" stroke-opacity="0.15" stroke-width="2"/>
+  <g opacity="0.25">
+    <path d="M0 580 L380 60" stroke="#f6c75a"/><path d="M90 620 L470 80" stroke="#f6c75a"/><path d="M1070 0 L760 600" stroke="#f6c75a"/><path d="M1200 60 L880 620" stroke="#f6c75a"/>
+  </g>
+  <text x="600" y="100" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="58" font-weight="900" fill="#f6c75a">${title}</text>
+  <text x="600" y="138" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="800" fill="#fff3c4" letter-spacing="3">${subtitle}</text>
+  <g filter="url(#shadow)">
+    <circle cx="600" cy="282" r="126" fill="url(#gold)"/>
+    <circle cx="600" cy="282" r="116" fill="#fff8dc"/>
+    <circle cx="600" cy="282" r="106" fill="#16100b"/>
+    <text x="600" y="318" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="105" font-weight="900" fill="#f7d879">${initial}</text>
+  </g>
+  <rect x="230" y="430" width="740" height="104" rx="24" fill="#ffffff" fill-opacity="0.08" stroke="#f6c75a" stroke-opacity="0.72" stroke-width="2"/>
+  <text x="600" y="461" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="900" fill="#f6c75a">${nameLabel}</text>
+  <text x="600" y="506" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="42" font-weight="900" fill="#ffffff">${name}</text>
+  <g font-family="Arial, Helvetica, sans-serif" text-anchor="middle">
+    <rect x="205" y="548" width="250" height="46" rx="16" fill="#000000" fill-opacity="0.30" stroke="#f6c75a" stroke-opacity="0.45"/>
+    <rect x="475" y="548" width="250" height="46" rx="16" fill="#000000" fill-opacity="0.30" stroke="#f6c75a" stroke-opacity="0.45"/>
+    <rect x="745" y="548" width="250" height="46" rx="16" fill="#000000" fill-opacity="0.30" stroke="#f6c75a" stroke-opacity="0.45"/>
+    <text x="330" y="566" font-size="12" font-weight="800" fill="#ffe9a6">⭐ TOTAL</text><text x="330" y="585" font-size="15" font-weight="900" fill="#ffffff">${total} POIN</text>
+    <text x="600" y="566" font-size="12" font-weight="800" fill="#ffe9a6">💬 CHAT</text><text x="600" y="585" font-size="15" font-weight="900" fill="#ffffff">${chat} POIN</text>
+    <text x="870" y="566" font-size="12" font-weight="800" fill="#ffe9a6">🎙️ VOICE</text><text x="870" y="585" font-size="15" font-weight="900" fill="#ffffff">${voice} POIN</text>
+  </g>
+  <text x="68" y="584" text-anchor="start" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="800" fill="#fff0ba">${server} • ${month}</text>
+  <text x="1132" y="584" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="800" fill="#fff0ba">${footerText}</text>
+</svg>`;
+}
+
+
+async function grantLevel100Role(member, userData) {
+  if (!member || !member.guild || !isFilledId(config.level100RoleId)) return false;
+
+  const role = member.guild.roles.cache.get(config.level100RoleId);
+  if (!role) {
+    console.log("LEVEL 100 ROLE ERROR: level100RoleId tidak ditemukan di server.");
+    return false;
+  }
+
+  const days = Number(config.level100RoleDurationDays || 30);
+  const durationMs = Math.max(1, days) * 24 * 60 * 60 * 1000;
+
+  if (!userData.level100RoleGivenAt) {
+    userData.level100RoleGivenAt = Date.now();
+    userData.level100RoleExpiresAt = Date.now() + durationMs;
+  }
+
+  if (!member.roles.cache.has(role.id)) {
+    await member.roles.add(role).catch((err) => {
+      console.log("LEVEL 100 ROLE ADD ERROR:", err.message);
+    });
+  }
+
+  return true;
+}
+
+async function removeExpiredLevel100Roles(guild) {
+  try {
+    if (!guild || !isFilledId(config.level100RoleId)) return;
+
+    const role = guild.roles.cache.get(config.level100RoleId);
+    if (!role) return;
+
+    const data = readLevelData();
+    let changed = false;
+    const now = Date.now();
+
+    for (const userData of Object.values(data.users || {})) {
+      if (userData.guildId !== guild.id) continue;
+      if (!userData.level100RoleExpiresAt) continue;
+      if (now < userData.level100RoleExpiresAt) continue;
+
+      const member = await guild.members.fetch(userData.userId).catch(() => null);
+      if (member && member.roles.cache.has(role.id)) {
+        await member.roles.remove(role).catch((err) => {
+          console.log("LEVEL 100 ROLE REMOVE ERROR:", err.message);
+        });
+      }
+
+      userData.level100RoleExpired = true;
+      changed = true;
+    }
+
+    if (changed) writeLevelData(data);
+  } catch (err) {
+    console.log("LEVEL 100 EXPIRE CHECK ERROR:", err.message);
+  }
+}
+
+
+async function sendLevelUp(member, userData, fallbackChannel) {
+  // Alur baru yang lebih jelas:
+  // - Notifikasi naik level SELALU masuk ke channel level (config.levelChannelId).
+  // - Channel Top Aktif hanya untuk board Top Aktif, Top Chat, Top Voice, MOTM, dan banner.
+  // - Bot tidak fallback ke chat biasa supaya channel tidak berantakan.
+  const levelChannel = await getOrCreateLevelChannel(member.guild);
+
+  if (!levelChannel) {
+    console.log("LEVEL UP SKIPPED: levelChannelId belum benar, jadi notifikasi level-up tidak dikirim ke chat biasa.");
+    return;
+  }
+
+  await safeSend(levelChannel, {
+    content: `🆙 Selamat ${member} berhasil naik level!`,
+    embeds: [buildLevelUpEmbed(member, userData)]
+  });
+}
+
+async function addLevelPoints(member, type, amount, fallbackChannel, sourceChannelId = "") {
+  if (!member || member.user.bot || !member.guild) return;
+  if (shouldExcludeOwnerFromLevel(member.guild, member.id)) return;
+
+  const data = readLevelData();
+  const userData = getLevelUser(data, member.guild.id, member.id);
+  const before = getLevelInfo(userData).current.level;
+
+  const baseAmount = normalizeLevelPointAmount(amount);
+  if (!baseAmount || !["chat", "voice"].includes(type)) return;
+
+  const eventSourceChannelId = sourceChannelId || fallbackChannel?.id || member.voice?.channelId || "";
+  const roleBonusCalc = calculateLevelBonus(member, baseAmount);
+  const boostBonusCalc = getBoostPoinBonusInfo(member, type, baseAmount, eventSourceChannelId);
+  const totalBonusAmount = normalizeLevelPointAmount(Number(roleBonusCalc.bonusAmount || 0) + Number(boostBonusCalc.bonusAmount || 0));
+  const finalAmount = normalizeLevelPointAmount(baseAmount + totalBonusAmount);
+  if (!finalAmount) return;
+
+  if (type === "chat") userData.chat = Number(((userData.chat || 0) + finalAmount).toFixed(1));
+  if (type === "voice") userData.voice = Number(((userData.voice || 0) + finalAmount).toFixed(1));
+
+  const monthly = incrementMonthlyStats(userData, type, finalAmount);
+  if (totalBonusAmount > 0) {
+    monthly.bonus = Number(((monthly.bonus || 0) + totalBonusAmount).toFixed(1));
+    userData.bonusExtraPoints = Number(((userData.bonusExtraPoints || 0) + totalBonusAmount).toFixed(1));
+    const sources = [...(roleBonusCalc.sources || [])];
+    if (boostBonusCalc.active) sources.push(`Boost Poin +${boostBonusCalc.percent}%`);
+    userData.lastBonusInfo = {
+      type,
+      percent: Number(roleBonusCalc.percent || 0) + (boostBonusCalc.active ? Number(boostBonusCalc.percent || 0) : 0),
+      sources,
+      sourceText: sources.length ? sources.join(" + ") : "Tidak ada bonus",
+      baseAmount,
+      roleBonusAmount: Number(roleBonusCalc.bonusAmount || 0),
+      boostBonusAmount: Number(boostBonusCalc.bonusAmount || 0),
+      bonusAmount: totalBonusAmount,
+      totalAmount: finalAmount,
+      eventChannelId: eventSourceChannelId,
+      at: Date.now()
+    };
+  }
+
+  const afterInfo = getLevelInfo(userData);
+  userData.level = afterInfo.current.level;
+
+  if (afterInfo.current.level >= 100 && before < 100) {
+    await grantLevel100Role(member, userData);
+  }
+
+  await checkMemberOfTheMonthReward(member, userData);
+
+  writeLevelData(data);
+
+  if (afterInfo.current.level > before) {
+    await sendLevelUp(member, userData, fallbackChannel);
+    await sendTopActiveLevelNotice(member, userData);
+  }
+}
+
+function getLevelChatCooldownMs() {
+  const raw = config.level?.chatCooldownMs ?? config.ai?.cooldownMs ?? 60000;
+  const ms = Number(raw);
+  return Math.max(10000, Math.min(120000, Number.isFinite(ms) ? ms : 60000));
+}
+
+function getLevelChatPointPerMessage() {
+  const raw = config.topActive?.chatPointPerMessage ?? 5;
+  const point = Number(raw);
+  return Math.max(0.1, Number.isFinite(point) ? point : 5);
+}
+
+function getLevelVoicePointPerMinute() {
+  const raw = config.topActive?.voicePointPerMinute ?? 5;
+  const point = Number(raw);
+  return Math.max(0.1, Number.isFinite(point) ? point : 5);
+}
+
+function normalizeLevelPointAmount(amount) {
+  const n = Number(amount);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Number(n.toFixed(1));
+}
+
+async function handleChatLevel(message) {
+  if (!message.guild || message.author.bot) return;
+  if (!message.member) return;
+  if (shouldExcludeOwnerFromLevel(message.guild, message.author.id)) return;
+
+  const prefix = config.prefix || "!";
+  const content = String(message.content || "");
+  if (!content.trim()) return;
+  if (content.startsWith(prefix)) return;
+
+  const key = `${message.guild.id}:${message.author.id}:chat`;
+  const now = Date.now();
+  const last = levelCooldown.get(key) || 0;
+  const cooldownMs = getLevelChatCooldownMs();
+
+  if (now - last < cooldownMs) return;
+  levelCooldown.set(key, now);
+
+  const chatPoint = getLevelChatPointPerMessage();
+  await addLevelPoints(message.member, "chat", chatPoint, message.channel, message.channel.id);
+}
+
+
+
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
+  ]
+});
+
+
+function hexColor(value, fallback = 0xffffff) {
+  const raw = String(value || "").replace("#", "");
+  const parsed = Number.parseInt(raw, 16);
+  return Number.isNaN(parsed) ? fallback : parsed;
+}
+
+function applyTemplate(text = "", data = {}) {
+  const now = new Date();
+  const guild = client?.guilds?.cache?.first?.() || null;
+
+  const defaults = {
+    server: config.serverName || guild?.name || "",
+    serverName: config.serverName || guild?.name || "",
+    serverId: guild?.id || "",
+    owner: config.ownerName || "",
+    ownerName: config.ownerName || "",
+    prefix: config.prefix || "!",
+    bot: client?.user ? `<@${client.user.id}>` : "Pak RW",
+    botTag: client?.user?.tag || "Pak RW",
+    botName: client?.user?.username || "Pak RW",
+    botId: client?.user?.id || "",
+    memberCount: guild?.memberCount || "",
+    guildCount: client?.guilds?.cache?.size || "",
+    activityText: config.activityText || "",
+    aiChannelId: config.aiChannelId || "",
+    curhatChannelId: config.curhatChannelId || "",
+    anonymousCurhatChannelId: config.anonymousCurhatChannelId || "",
+    suggestionChannelId: config.suggestionChannelId || "",
+    chatWargaChannelId: config.chatWargaChannelId || "",
+    levelChannelId: config.levelChannelId || "",
+    ticketChannelId: config.ticketChannelId || "",
+    boostChannelId: config.juragan?.boostChannelId || "",
+    donaturRoleId: config.donaturRoleId || "",
+    juraganRoleId: config.juragan?.roleId || "",
+    level100RoleId: config.level100RoleId || "",
+    roleId: config.donaturRoleId || "",
+    roleName: "Donatur",
+    date: now.toLocaleDateString("id-ID", { timeZone: "Asia/Jakarta" }),
+    time: now.toLocaleTimeString("id-ID", { timeZone: "Asia/Jakarta", hour: "2-digit", minute: "2-digit" }),
+    datetime: now.toLocaleString("id-ID", { timeZone: "Asia/Jakarta" }),
+    year: String(now.getFullYear()),
+    month: String(now.getMonth() + 1).padStart(2, "0"),
+    day: String(now.getDate()).padStart(2, "0"),
+    newline: "\n",
+    br: "\n",
+    separator: "────────────────"
+  };
+
+  return String(text || "").replace(/\{(\w+)\}/g, (_, key) => {
+    return data[key] ?? defaults[key] ?? `{${key}}`;
+  });
+}
+
+function embedCfg(name) {
+  return config.embeds?.[name] || {};
+}
+
+
+function color() {
+  const raw = String(config.embedColor || "#FFFFFF").replace("#", "");
+  const parsed = Number.parseInt(raw, 16);
+  return Number.isNaN(parsed) ? 0xffffff : parsed;
+}
+
+function isFilledId(id) {
+  return Boolean(id && !String(id).includes("ISI_") && !String(id).includes("ID_"));
+}
+
+
+function mentionFeatureConfig() {
+  return config.mentions || {};
+}
+
+function normalizeMentionLookup(value = "") {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function escapeRegExp(value = "") {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function discordMentionUserIds(text = "") {
+  return [...new Set([...String(text || "").matchAll(/<@!?(\d{15,25})>/g)].map((m) => m[1]))];
+}
+
+function smartDiscordMentions(text = "", guild = null) {
+  const mcfg = mentionFeatureConfig();
+  if (mcfg.enabled === false || !guild) return { text: String(text || ""), userIds: [] };
+
+  let out = String(text || "")
+    .replace(/@everyone/gi, "everyone")
+    .replace(/@here/gi, "here");
+
+  const userIds = new Set(discordMentionUserIds(out));
+
+  if (mcfg.realChannelMentions !== false && guild.channels?.cache) {
+    const maxChannels = Math.max(1, Number(mcfg.maxChannelMentionsPerReply || 20));
+    let changedChannels = 0;
+    const allowedTypes = [ChannelType.GuildText, ChannelType.GuildVoice, ChannelType.GuildAnnouncement, ChannelType.GuildForum, ChannelType.GuildStageVoice];
+    const channels = guild.channels.cache
+      .filter((ch) => ch?.id && ch?.name && allowedTypes.includes(ch.type))
+      .sort((a, b) => String(b.name).length - String(a.name).length);
+
+    for (const ch of channels.values()) {
+      if (changedChannels >= maxChannels) break;
+      if (out.includes(`<#${ch.id}>`)) continue;
+      const rawName = String(ch.name || "").trim();
+      const simpleName = normalizeMentionLookup(rawName).replace(/\s+/g, "-");
+      const spaceName = normalizeMentionLookup(rawName);
+      const aliases = [...new Set([rawName, simpleName, spaceName].filter((x) => x && x.length >= 2))]
+        .sort((a, b) => b.length - a.length);
+
+      for (const alias of aliases) {
+        if (changedChannels >= maxChannels) break;
+        const escaped = escapeRegExp(alias).replace(/\\\s\\\+/g, "\\s+");
+        const hashRe = new RegExp(`(^|[\\s:>\\(\\[])(?:#|＃)\\s*${escaped}(?=$|[\\s.,!?:;\\)\\]])`, "giu");
+        const before = out;
+        out = out.replace(hashRe, `$1<#${ch.id}>`);
+        if (out !== before) { changedChannels += 1; break; }
+
+        const labelRe = new RegExp(`(Channel|channel|Voice|voice|Voice Channel|voice channel|Text Channel|text channel)\\s*:\\s*${escaped}(?=$|[\\s.,!?:;\\)\\]])`, "giu");
+        const before2 = out;
+        out = out.replace(labelRe, `$1: <#${ch.id}>`);
+        if (out !== before2) { changedChannels += 1; break; }
+      }
+    }
+  }
+
+  if (mcfg.realUserMentions !== false && guild.members?.cache) {
+    const maxUsers = Math.max(1, Number(mcfg.maxUserMentionsPerReply || 5));
+    let changedUsers = 0;
+    const members = guild.members.cache
+      .filter((m) => !m.user?.bot && m.id)
+      .sort((a, b) => String(b.displayName || b.user?.username || "").length - String(a.displayName || a.user?.username || "").length);
+
+    for (const member of members.values()) {
+      if (changedUsers >= maxUsers) break;
+      if (out.includes(`<@${member.id}>`) || out.includes(`<@!${member.id}>`)) continue;
+      const names = [member.displayName, member.user?.username, member.user?.globalName]
+        .filter(Boolean)
+        .map((x) => String(x).trim())
+        .filter((x) => x.length >= 2 && !["everyone", "here"].includes(x.toLowerCase()));
+      const aliases = [...new Set(names)].sort((a, b) => b.length - a.length);
+
+      for (const alias of aliases) {
+        if (changedUsers >= maxUsers) break;
+        const escaped = escapeRegExp(alias).replace(/\\\s\\\+/g, "\\s+");
+        const re = new RegExp(`(^|[\\s:>\\(\\[])(?:@|＠)\\s*${escaped}(?=$|[\\s.,!?:;\\)\\]])`, "giu");
+        const before = out;
+        out = out.replace(re, `$1<@${member.id}>`);
+        if (out !== before) {
+          userIds.add(member.id);
+          changedUsers += 1;
+          break;
+        }
+      }
+    }
+  }
+
+  return { text: out, userIds: [...userIds].slice(0, Math.max(1, Number(mcfg.maxUserMentionsPerReply || 5))) };
+}
+
+function applyMentionPayload(payload, guild = null) {
+  if (!guild) return payload;
+  if (typeof payload === "string") {
+    const rendered = smartDiscordMentions(payload, guild);
+    return {
+      content: rendered.text,
+      allowedMentions: { users: rendered.userIds, roles: [], repliedUser: false }
+    };
+  }
+  if (!payload || typeof payload !== "object") return payload;
+  const next = { ...payload };
+  if (typeof next.content === "string") {
+    const rendered = smartDiscordMentions(next.content, guild);
+    next.content = rendered.text;
+    next.allowedMentions = next.allowedMentions || { users: rendered.userIds, roles: [], repliedUser: false };
+  } else if (!next.allowedMentions) {
+    next.allowedMentions = { users: [], roles: [], repliedUser: false };
+  }
+  return next;
+}
+
+function getTextChannel(guild, id) {
+  if (!guild || !isFilledId(id)) return null;
+  return guild.channels.cache.get(id) || null;
+}
+
+function trimReply(text) {
+  const max = config.ai?.maxMessageLength || 1900;
+  if (!text) return "Pak RW belum nemu jawaban yang pas 😭";
+  if (text.length <= max) return text;
+  return `${text.slice(0, max - 25)}\n\n...(dipendekin biar muat)`;
+}
+
+async function safeReply(message, payload) {
+  const finalPayload = applyMentionPayload(payload, message?.guild || null);
+  try {
+    return await message.reply(finalPayload);
+  } catch {
+    try {
+      return await message.channel.send(finalPayload);
+    } catch (err) {
+      console.log("SAFE REPLY ERROR:", err.message);
+    }
+  }
+}
+
+async function safeSend(channel, payload) {
+  try {
+    if (!channel) return null;
+    const finalPayload = applyMentionPayload(payload, channel?.guild || null);
+    return await channel.send(finalPayload);
+  } catch (err) {
+    console.log("SAFE SEND ERROR:", err.message);
+    return null;
+  }
+}
+
+
+function resolvePersistentDataFile(fileName) {
+  const candidates = [
+    process.env.PAK_RW_DATA_DIR,
+    process.env.DATA_DIR,
+    "/data",
+    path.join(__dirname, "data")
+  ].filter(Boolean);
+
+  for (const dir of candidates) {
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.accessSync(dir, fs.constants.W_OK);
+      return path.join(dir, fileName);
+    } catch {
+      // coba folder berikutnya
+    }
+  }
+
+  return path.join(__dirname, "data", fileName);
+}
+
+
+
+
+
+function anonimPanelRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("curhat_anonim_open")
+      .setLabel("Curhat ka Pak RW")
+      .setEmoji("☁️")
+      .setStyle(ButtonStyle.Secondary)
+  );
+}
+
+function anonimPostRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("curhat_anonim_open")
+      .setLabel("Curhat ka Pak RW")
+      .setEmoji("☁️")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId("curhat_anonim_reply")
+      .setLabel("Balas")
+      .setEmoji("💬")
+      .setStyle(ButtonStyle.Primary)
+  );
+}
+
+async function sendAnonimPanel(channel) {
+  if (!channel) return;
+
+  try {
+    const recent = await channel.messages.fetch({ limit: 20 }).catch(() => null);
+    const alreadyHasPanel = recent?.some((msg) =>
+      msg.author?.id === client.user.id &&
+      msg.embeds?.[0]?.footer?.text?.includes("PANEL_CURHAT_ANONIM")
+    );
+
+    if (alreadyHasPanel) return;
+
+    const panelEmbedCfg = embedCfg("anonimPanel");
+    const embed = new EmbedBuilder()
+      .setColor(hexColor(panelEmbedCfg.color, color()))
+      .setTitle(panelEmbedCfg.title || "☁️ Curhat Anonim DESA TULUS")
+      .setDescription(panelEmbedCfg.description || "Punya sesuatu yang ingin kamu ceritakan tanpa menampilkan identitas?\n\nKlik tombol **☁️ Curhat ka Pak RW** di bawah ini. Curhatan kamu akan dikirim sebagai **Anonymous** dan warga bisa membalas lewat thread diskusi 🤍")
+      .setFooter({ text: makeOTFooter(panelEmbedCfg.footer || "Pak RW • PANEL_CURHAT_ANONIM") })
+      .setTimestamp();
+
+    await safeSend(channel, {
+      embeds: [embed],
+      components: [anonimPanelRow()]
+    });
+  } catch (err) {
+    console.log("SEND ANONIM PANEL ERROR:", err.message);
+  }
+}
+
+
+
+
+async function safeShowModal(interaction, modal) {
+  try {
+    if (!interaction || interaction.replied || interaction.deferred) return false;
+    await interaction.showModal(modal);
+    return true;
+  } catch (err) {
+    console.log("SHOW MODAL ERROR:", err.code || err.message);
+
+    // 10062 = Unknown interaction, biasanya tombol sudah kedaluwarsa / telat diproses.
+    // Jangan throw lagi supaya bot tidak crash.
+    return false;
+  }
+}
+
+function suggestionRow(yes = 0, no = 0) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("vote_yes")
+      .setLabel(`Setuju (${yes})`)
+      .setEmoji("✅")
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId("vote_no")
+      .setLabel(`Tidak Setuju (${no})`)
+      .setEmoji("❌")
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId("open_suggestion")
+      .setLabel("Kasih Saran")
+      .setEmoji("💡")
+      .setStyle(ButtonStyle.Secondary)
+  );
+}
+
+
+async function setupJuraganChannels(guild) {
+  // Auto-create channel/category Juragan dimatikan.
+  // Bot tidak akan membuat category "💎｜OBROLAN JURAGAN" atau "🔊｜VOICE JURAGAN" lagi.
+  // Role Juragan, embed boost, dan fitur lainnya tetap berjalan.
+  if (!guild) return;
+  console.log(`ℹ️ Auto setup channel Juragan nonaktif di server ${guild.name}`);
+}
+
+
+
+async function registerPakRwSlashCommands(guild) {
+  try {
+    if (!guild) return;
+
+    const adminPerms = PermissionsBitField.Flags.Administrator.toString();
+    const commandPayloads = [
+      { name: "fitur", description: "Lihat alur semua fitur Pak RW yang rapi", dmPermission: false },
+      { name: "premium", description: "Lihat ringkasan Pak RW Ultra Premium Suite", dmPermission: false },
+      {
+        name: "donatur",
+        description: "Berikan role Donatur sementara berdasarkan nominal donasi",
+        defaultMemberPermissions: adminPerms,
+        dmPermission: false,
+        options: [
+          { type: 6, name: "user", description: "Member yang menerima role Donatur", required: true },
+          { type: 3, name: "nominal", description: "Nominal donasi, contoh: 100k, 200k, 500k, 1jt", required: true }
+        ]
+      },
+      { name: "donaturku", description: "Menu khusus member yang punya role Donatur", dmPermission: false },
+      {
+        name: "cekpoin",
+        description: "Cek poin, level, rank, dan bonus member",
+        dmPermission: false,
+        options: [{ type: 6, name: "user", description: "Member yang mau dicek", required: false }]
+      },
+      {
+        name: "cekbonus",
+        description: "Cek bonus ekstra poin Booster/Juragan/Donatur",
+        dmPermission: false,
+        options: [{ type: 6, name: "user", description: "Member yang mau dicek", required: false }]
+      },
+      { name: "topaktif", description: "Lihat board Top Aktif Warga bulan ini", dmPermission: false },
+      { name: "topchat", description: "Lihat leaderboard Top Chat bulan ini", dmPermission: false },
+      { name: "topvoice", description: "Lihat leaderboard Top Voice bulan ini", dmPermission: false },
+      { name: "levelrule", description: "Lihat rumus level Pak RW yang sedang aktif", dmPermission: false },
+      {
+        name: "posttopaktif",
+        description: "Owner: kirim board Top Aktif ke channel Top Aktif",
+        defaultMemberPermissions: adminPerms,
+        dmPermission: false
+      },
+      {
+        name: "posttop",
+        description: "Owner: kirim board Top Aktif gaya rapi ke channel Top Aktif",
+        defaultMemberPermissions: adminPerms,
+        dmPermission: false
+      },
+      {
+        name: "testmotm",
+        description: "Owner: test banner Member Of The Month untuk member",
+        defaultMemberPermissions: adminPerms,
+        dmPermission: false,
+        options: [{ type: 6, name: "user", description: "Member yang dites jadi MOTM", required: false }]
+      },
+      {
+        name: "fixlevel",
+        description: "Owner: sinkronkan level semua member supaya sesuai total poin",
+        defaultMemberPermissions: adminPerms,
+        dmPermission: false
+      },
+      {
+        name: "givepoin",
+        description: "Owner: tambah poin member atau diri sendiri",
+        defaultMemberPermissions: adminPerms,
+        dmPermission: false,
+        options: [
+          { type: 10, name: "jumlah", description: "Jumlah poin yang ditambah", required: true },
+          { type: 3, name: "jenis", description: "Jenis poin", required: true, choices: [
+            { name: "chat", value: "chat" },
+            { name: "voice", value: "voice" },
+            { name: "all/aktif", value: "all" }
+          ]},
+          { type: 6, name: "user", description: "Kosongkan untuk diri sendiri", required: false }
+        ]
+      },
+      {
+        name: "kurangpoin",
+        description: "Owner: kurangi poin member atau diri sendiri",
+        defaultMemberPermissions: adminPerms,
+        dmPermission: false,
+        options: [
+          { type: 10, name: "jumlah", description: "Jumlah poin yang dikurangi", required: true },
+          { type: 3, name: "jenis", description: "Jenis poin", required: true, choices: [
+            { name: "chat", value: "chat" },
+            { name: "voice", value: "voice" },
+            { name: "all/aktif", value: "all" }
+          ]},
+          { type: 6, name: "user", description: "Kosongkan untuk diri sendiri", required: false }
+        ]
+      },
+      {
+        name: "setpoin",
+        description: "Owner: set poin member atau diri sendiri",
+        defaultMemberPermissions: adminPerms,
+        dmPermission: false,
+        options: [
+          { type: 10, name: "jumlah", description: "Jumlah poin final", required: true },
+          { type: 3, name: "jenis", description: "Jenis poin", required: true, choices: [
+            { name: "chat", value: "chat" },
+            { name: "voice", value: "voice" },
+            { name: "all/aktif", value: "all" }
+          ]},
+          { type: 6, name: "user", description: "Kosongkan untuk diri sendiri", required: false }
+        ]
+      },
+      {
+        name: "resetpoin",
+        description: "Owner: reset poin member",
+        defaultMemberPermissions: adminPerms,
+        dmPermission: false,
+        options: [{ type: 6, name: "user", description: "Member yang poinnya direset", required: true }]
+      },
+      {
+        name: "ownerstatus",
+        description: "Owner: cek status lengkap Pak RW",
+        defaultMemberPermissions: adminPerms,
+        dmPermission: false
+      },
+      {
+        name: "ownerhelp",
+        description: "Owner: lihat bantuan command Pak RW",
+        defaultMemberPermissions: adminPerms,
+        dmPermission: false
+      }
+    ];
+
+    const existingCommands = await guild.commands.fetch().catch(() => null);
+    for (const payload of commandPayloads) {
+      const existing = existingCommands?.find((cmd) => cmd.name === payload.name);
+      if (existing) {
+        await guild.commands.edit(existing.id, payload);
+      } else {
+        await guild.commands.create(payload);
+      }
+    }
+
+    console.log(`✅ ${commandPayloads.length} slash command Pak RW siap di server ${guild.name}`);
+  } catch (err) {
+    console.log("REGISTER SLASH COMMANDS ERROR:", err.message);
+  }
+}
+
+
+client.once(Events.ClientReady, async () => {
+  console.log(`🤍 ${client.user.tag} ONLINE sebagai Pak RW`);
+
+  console.log(`💾 Level data file: ${levelFile || "level system belum aktif"}`);
+  if (typeof tempRoleFile !== "undefined") console.log(`💾 Temp role data file: ${tempRoleFile}`);
+  console.log(`🗄️ Database mode: ${isMongoActive() ? "MongoDB" : "Local JSON fallback"}`);
+
+
+
+  client.user.setPresence({
+    activities: [{
+      name: config.activityText || "DESA TULUS 🤍",
+      type: ActivityType.Watching
+    }],
+    status: "online"
+  });
+
+
+  for (const guild of client.guilds.cache.values()) {
+    removeOwnerLevelData(guild);
+    await setupJuraganChannels(guild);
+    await registerPakRwSlashCommands(guild);
+    await snapshotGuildMembers(guild);
+  }
+
+
+  for (const guild of client.guilds.cache.values()) {
+    await removeExpiredTempRoles(guild);
+  }
+
+  setInterval(async () => {
+    for (const guild of client.guilds.cache.values()) {
+      await removeExpiredTempRoles(guild);
+    }
+  }, 60 * 60 * 1000);
+
+
+  const anonimChannel = client.channels.cache.get(config.anonymousCurhatChannelId);
+  if (anonimChannel) {
+    await sendAnonimPanel(anonimChannel);
+  }
+
+  for (const guild of client.guilds.cache.values()) {
+    await getOrCreateLevelChannel(guild);
+  }
+
+  await seedActiveVoiceSessions();
+  startVoiceLevelAutoFlush();
+  await seedActiveVoiceRoles();
+
+  startTopActiveDailyPoster();
+
+  if (config.panels?.sendSuggestionPanelOnReady && isFilledId(config.suggestionChannelId)) {
+    const channel = client.channels.cache.get(config.suggestionChannelId);
+    if (channel) {
+      const embed = new EmbedBuilder()
+        .setColor(color())
+        .setTitle(config.suggestion?.title || "💡 DESA TULUS • Kritik & Saran")
+        .setDescription(config.suggestion?.description || "Klik tombol di bawah untuk mengirim saran.")
+        .setFooter({ text: makeOTFooter("Pak RW • Sistem Saran") })
+        .setTimestamp();
+
+      await safeSend(channel, {
+        embeds: [embed],
+        components: [
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId("open_suggestion")
+              .setLabel("Kasih Saran")
+              .setEmoji("💡")
+              .setStyle(ButtonStyle.Secondary)
+          )
+        ]
+      });
+    }
+  }
+});
+
+// ================= WELCOME MEMBER =================
+client.on(Events.GuildMemberAdd, async (member) => {
+  try {
+    await saveMemberSnapshot(member, { leftAt: null });
+
+    if (!config.welcome?.enabled) return;
+
+    const targetId = config.welcome.sendToChatWarga
+      ? config.chatWargaChannelId
+      : config.welcomeChannelId;
+
+    const channel = getTextChannel(member.guild, targetId);
+    if (!channel) {
+      console.log("WELCOME: channel belum diisi atau tidak ditemukan.");
+      return;
+    }
+
+    const description = String(config.welcome.message || "Halo {user}, wilujeung sumping di **{server} 🤍**")
+      .replaceAll("{user}", `${member}`)
+      .replaceAll("{server}", config.serverName)
+      .replaceAll("{memberCount}", `${member.guild.memberCount}`);
+
+    const embed = new EmbedBuilder()
+      .setColor(color())
+      .setAuthor({
+        name: `${config.serverName} • Warga Baru`,
+        iconURL: member.user.displayAvatarURL({ dynamic: true })
+      })
+      .setTitle(config.welcome.title || "👋 Warga Baru Datang!")
+      .setDescription(description)
+      .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 512 }))
+      .setFooter({ text: makeOTFooter("DESA TULUS • Tempat warga baik berkumpul") })
+      .setTimestamp();
+
+    await safeSend(channel, {
+      content: `🤍 Sambut warga baru kita ${member}!`,
+      embeds: [embed]
+    });
+
+  } catch (err) {
+    console.log("WELCOME ERROR:", err);
+  }
+});
+
+
+function juraganEmbed(member) {
+  const e = embedCfg("juragan");
+  const data = {
+    user: `${member}`,
+    username: member.user.username,
+    displayName: member.displayName || member.user.username,
+    server: config.serverName
+  };
+
+  const embed = new EmbedBuilder()
+    .setColor(hexColor(e.color, 0xff4fd8))
+    .setAuthor({
+      name: `${config.serverName} • Juragan Baru`,
+      iconURL: member.user.displayAvatarURL({ dynamic: true })
+    })
+    .setTitle(applyTemplate(e.title || "💎 WILUJEUNG SUMPING JURAGAN! 💎", data))
+    .setDescription(applyTemplate(e.description || "Terima kasih sudah mendukung server ini {user}.", data))
+    .setFooter({ text: makeOTFooter(applyTemplate(e.footer || "{server} • Juragan System", data)) })
+    .setTimestamp();
+
+  if (!e.thumbnail || e.thumbnail === "avatar") {
+    embed.setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 512 }));
+  } else if (e.thumbnail) {
+    embed.setThumbnail(e.thumbnail);
+  }
+
+  if (e.image) embed.setImage(e.image);
+
+  return embed;
+}
+
+async function sendJuraganWelcome(member) {
+  const boostChannel = getTextChannel(member.guild, config.juragan?.boostChannelId);
+
+  if (!boostChannel) {
+    console.log("BOOST CHANNEL ERROR: boostChannelId belum valid atau bot tidak bisa akses channel.");
+    return false;
+  }
+
+  const e = embedCfg("juragan");
+  await safeSend(boostChannel, {
+    content: applyTemplate(e.content || "💎 {user} baru saja menjadi **Juragan Desa**!", {
+      user: `${member}`,
+      username: member.user.username,
+      displayName: member.displayName || member.user.username,
+      server: config.serverName
+    }),
+    embeds: [juraganEmbed(member)]
+  });
+
+  return true;
+}
+
+
+
+// ================= MONGODB MEMBER SNAPSHOT =================
+client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
+  try {
+    await saveMemberSnapshot(newMember, { leftAt: null });
+  } catch (err) {
+    console.log("MEMBER SNAPSHOT UPDATE ERROR:", err?.message || err);
+  }
+});
+
+client.on(Events.GuildMemberRemove, async (member) => {
+  try {
+    await markMemberLeft(member);
+  } catch (err) {
+    console.log("MEMBER SNAPSHOT LEAVE ERROR:", err?.message || err);
+  }
+});
+
+// ================= AUTO BOOST / JURAGAN =================
+client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
+  try {
+    if (!config.juragan?.enabled) return;
+
+    const baruBoost = !oldMember.premiumSince && newMember.premiumSince;
+    if (!baruBoost) return;
+
+    const role = isFilledId(config.juragan.roleId)
+      ? newMember.guild.roles.cache.get(config.juragan.roleId)
+      : null;
+
+    if (role) {
+      await newMember.roles.add(role).catch((err) => {
+        console.log("ROLE JURAGAN ERROR:", err.message);
+      });
+    }
+
+    await sendJuraganWelcome(newMember);
+
+    let category = newMember.guild.channels.cache.find(
+      (c) => c.name === config.juragan.categoryName &&
+      c.type === ChannelType.GuildCategory
+    );
+
+    if (!category) {
+      category = await newMember.guild.channels.create({
+        name: config.juragan.categoryName || "💎｜JURAGAN OT",
+        type: ChannelType.GuildCategory
+      });
+    }
+
+    const textExists = newMember.guild.channels.cache.find(
+      (c) => c.name === "💬・chat-juragan" && c.type === ChannelType.GuildText
+    );
+
+    if (!textExists) {
+      await newMember.guild.channels.create({
+        name: "💬・chat-juragan",
+        type: ChannelType.GuildText,
+        parent: category.id,
+        topic: "Ruang ngobrol khusus Juragan DESA TULUS.",
+        permissionOverwrites: [
+          {
+            id: newMember.guild.id,
+            deny: [PermissionsBitField.Flags.ViewChannel]
+          },
+          {
+            id: config.juragan.roleId,
+            allow: [
+              PermissionsBitField.Flags.ViewChannel,
+              PermissionsBitField.Flags.SendMessages,
+              PermissionsBitField.Flags.ReadMessageHistory,
+              PermissionsBitField.Flags.AttachFiles,
+              PermissionsBitField.Flags.EmbedLinks,
+              PermissionsBitField.Flags.AddReactions
+            ]
+          }
+        ]
+      });
+    }
+
+
+    const aiJuraganExists = newMember.guild.channels.cache.find(
+      (c) => c.name === (config.juragan.aiChannelName || "🤖・ai-juragan") && c.type === ChannelType.GuildText
+    );
+
+    if (!aiJuraganExists) {
+      await newMember.guild.channels.create({
+        name: config.juragan.aiChannelName || "🤖・ai-juragan",
+        type: ChannelType.GuildText,
+        parent: category.id,
+        topic: "AI premium khusus Juragan DESA TULUS.",
+        permissionOverwrites: [
+          {
+            id: newMember.guild.id,
+            deny: [PermissionsBitField.Flags.ViewChannel]
+          },
+          {
+            id: config.juragan.roleId,
+            allow: [
+              PermissionsBitField.Flags.ViewChannel,
+              PermissionsBitField.Flags.SendMessages,
+              PermissionsBitField.Flags.ReadMessageHistory,
+              PermissionsBitField.Flags.AttachFiles,
+              PermissionsBitField.Flags.EmbedLinks,
+              PermissionsBitField.Flags.AddReactions
+            ]
+          }
+        ]
+      });
+    }
+
+    const voiceExists = newMember.guild.channels.cache.find(
+      (c) => c.name === "🔊・Voice Juragan" && c.type === ChannelType.GuildVoice
+    );
+
+    if (!voiceExists) {
+      await newMember.guild.channels.create({
+        name: "🔊・Voice Juragan",
+        type: ChannelType.GuildVoice,
+        parent: category.id,
+        bitrate: Math.min(newMember.guild.maximumBitrate || 96000, 96000),
+        userLimit: 10,
+        permissionOverwrites: [
+          {
+            id: newMember.guild.id,
+            deny: [PermissionsBitField.Flags.ViewChannel]
+          },
+          {
+            id: config.juragan.roleId,
+            allow: [
+              PermissionsBitField.Flags.ViewChannel,
+              PermissionsBitField.Flags.Connect,
+              PermissionsBitField.Flags.Speak,
+              PermissionsBitField.Flags.Stream,
+              PermissionsBitField.Flags.UseVAD
+            ]
+          }
+        ]
+      });
+    }
+
+  } catch (err) {
+    console.log("BOOST ERROR:", err);
+  }
+});
+
+function getVoiceSessionKey(member) {
+  return `${member.guild.id}:${member.id}`;
+}
+
+function getVoiceAwardIntervalMs() {
+  const raw = config.level?.voiceAwardIntervalMs ?? 60000;
+  const ms = Number(raw);
+  return Math.max(60000, Math.min(10 * 60 * 1000, Number.isFinite(ms) ? ms : 60000));
+}
+
+function normalizeVoiceSession(raw, channelId = "") {
+  const now = Date.now();
+  if (typeof raw === "number") {
+    return { startedAt: raw, lastAwardAt: raw, channelId, totalMinutesAwarded: 0 };
+  }
+  return {
+    startedAt: Number(raw?.startedAt || now),
+    lastAwardAt: Number(raw?.lastAwardAt || raw?.startedAt || now),
+    channelId: raw?.channelId || channelId || "",
+    totalMinutesAwarded: Number(raw?.totalMinutesAwarded || 0)
+  };
+}
+
+function isVoiceTrackableChannel(channel) {
+  if (!channel) return false;
+  return channel.type === ChannelType.GuildVoice || channel.type === ChannelType.GuildStageVoice;
+}
+
+function isVoiceTrackableMember(member) {
+  if (!member || member.user?.bot || !member.guild) return false;
+  if (shouldExcludeOwnerFromLevel(member.guild, member.id)) return false;
+  return true;
+}
+
+function startVoiceLevelSession(member, channelId = "") {
+  if (!isVoiceTrackableMember(member)) return false;
+  const key = getVoiceSessionKey(member);
+  const now = Date.now();
+  const existing = voiceSessions.get(key);
+  if (existing) {
+    const normalized = normalizeVoiceSession(existing, channelId);
+    normalized.channelId = channelId || normalized.channelId;
+    voiceSessions.set(key, normalized);
+    return false;
+  }
+  voiceSessions.set(key, { startedAt: now, lastAwardAt: now, channelId, totalMinutesAwarded: 0 });
+  return true;
+}
+
+async function flushVoiceLevelSession(member, reason = "voice_tick", deleteAfter = false) {
+  if (!isVoiceTrackableMember(member)) return false;
+  const key = getVoiceSessionKey(member);
+  const raw = voiceSessions.get(key);
+  if (!raw) return false;
+
+  const session = normalizeVoiceSession(raw, member.voice?.channelId || "");
+  const now = Date.now();
+  const elapsedMs = Math.max(0, now - session.lastAwardAt);
+  const minMs = reason === "leave" || reason === "switch" ? 15000 : getVoiceAwardIntervalMs();
+
+  if (elapsedMs < minMs) {
+    if (deleteAfter) voiceSessions.delete(key);
+    else voiceSessions.set(key, session);
+    return false;
+  }
+
+  // Maksimal 60 menit per flush agar kalau Railway pause lama, poin tidak meloncat tidak wajar.
+  // Kalau member masih di voice, interval berikutnya akan lanjut otomatis.
+  const minutes = Math.min(60, elapsedMs / 60000);
+  const points = normalizeLevelPointAmount(minutes * getLevelVoicePointPerMinute());
+
+  session.lastAwardAt = now;
+  session.totalMinutesAwarded = Number((Number(session.totalMinutesAwarded || 0) + minutes).toFixed(2));
+
+  if (deleteAfter) voiceSessions.delete(key);
+  else voiceSessions.set(key, session);
+
+  if (points <= 0) return false;
+  await addLevelPoints(member, "voice", points, null, session.channelId || member.voice?.channelId || "");
+  return true;
+}
+
+async function seedActiveVoiceSessions() {
+  try {
+    let total = 0;
+    for (const guild of client.guilds.cache.values()) {
+      await guild.members.fetch().catch(() => null);
+      for (const member of guild.members.cache.values()) {
+        if (!isVoiceTrackableMember(member)) continue;
+        const channel = member.voice?.channel;
+        if (!isVoiceTrackableChannel(channel)) continue;
+        startVoiceLevelSession(member, channel.id);
+        total++;
+      }
+    }
+    console.log(`🎙️ Voice level tracker siap: ${total} sesi voice aktif terbaca.`);
+  } catch (err) {
+    console.log("VOICE SESSION SEED ERROR:", err.message);
+  }
+}
+
+function startVoiceLevelAutoFlush() {
+  const intervalMs = getVoiceAwardIntervalMs();
+  console.log(`🎙️ Voice level auto flush aktif setiap ${Math.round(intervalMs / 1000)} detik.`);
+  setInterval(async () => {
+    for (const key of [...voiceSessions.keys()]) {
+      const [guildId, userId] = String(key).split(":");
+      const guild = client.guilds.cache.get(guildId);
+      if (!guild) {
+        voiceSessions.delete(key);
+        continue;
+      }
+      const member = await guild.members.fetch(userId).catch(() => null);
+      if (!member || !isVoiceTrackableChannel(member.voice?.channel)) {
+        if (member) await flushVoiceLevelSession(member, "leave", true);
+        else voiceSessions.delete(key);
+        continue;
+      }
+      await flushVoiceLevelSession(member, "tick", false);
+    }
+  }, intervalMs);
+}
+
+
+// ================= ACTIVE VOICE ROLE =================
+function getActiveVoiceRoleConfig() {
+  const cfg = config.activeVoiceRole || {};
+  return {
+    enabled: cfg.enabled !== false,
+    roleId: String(cfg.roleId || "").trim(),
+    roleName: String(cfg.roleName || "Member Aktif").trim() || "Member Aktif",
+    removeOnLeave: cfg.removeOnLeave !== false,
+    includeStage: cfg.includeStage !== false,
+    sendNotice: cfg.sendNotice === true,
+    logToConsole: cfg.logToConsole !== false
+  };
+}
+
+function isActiveVoiceRoleChannel(channel) {
+  const cfg = getActiveVoiceRoleConfig();
+  if (!channel) return false;
+  if (channel.type === ChannelType.GuildVoice) return true;
+  if (cfg.includeStage && channel.type === ChannelType.GuildStageVoice) return true;
+  return false;
+}
+
+function resolveActiveVoiceRole(guild) {
+  const cfg = getActiveVoiceRoleConfig();
+  if (!guild || !cfg.enabled) return null;
+  if (isFilledId(cfg.roleId)) return guild.roles.cache.get(cfg.roleId) || null;
+  const target = cfg.roleName.toLowerCase();
+  return guild.roles.cache.find((role) => role.name.toLowerCase() === target) || null;
+}
+
+function canManageTargetRole(guild, role) {
+  try {
+    const me = guild.members.me;
+    if (!me || !role) return false;
+    if (!me.permissions.has(PermissionsBitField.Flags.ManageRoles)) return false;
+    return me.roles.highest.comparePositionTo(role) > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function applyActiveVoiceRole(member, shouldHaveRole, reason = "voice_update") {
+  const cfg = getActiveVoiceRoleConfig();
+  if (!cfg.enabled || !member || member.user?.bot || !member.guild) return false;
+
+  const role = resolveActiveVoiceRole(member.guild);
+  if (!role) {
+    if (cfg.logToConsole) console.log(`🎙️ ACTIVE VOICE ROLE SKIP: role '${cfg.roleName}' belum ditemukan / roleId kosong.`);
+    return false;
+  }
+
+  if (!canManageTargetRole(member.guild, role)) {
+    if (cfg.logToConsole) console.log(`🎙️ ACTIVE VOICE ROLE SKIP: bot tidak bisa manage role ${role.name}. Naikkan posisi role bot dan aktifkan Manage Roles.`);
+    return false;
+  }
+
+  try {
+    if (shouldHaveRole) {
+      if (member.roles.cache.has(role.id)) return false;
+      await member.roles.add(role, `Pak RW active voice role: ${reason}`);
+      if (cfg.logToConsole) console.log(`🎙️ ACTIVE VOICE ROLE ADD: ${member.user.tag} -> ${role.name}`);
+      if (cfg.sendNotice && member.voice?.channel) {
+        await member.voice.channel.send({ content: `🎙️ ${member} mendapatkan role **${role.name}** karena sedang aktif di voice.` }).catch(() => null);
+      }
+      return true;
+    }
+
+    if (!cfg.removeOnLeave) return false;
+    if (!member.roles.cache.has(role.id)) return false;
+    await member.roles.remove(role, `Pak RW active voice role removed: ${reason}`);
+    if (cfg.logToConsole) console.log(`🎙️ ACTIVE VOICE ROLE REMOVE: ${member.user.tag} -> ${role.name}`);
+    return true;
+  } catch (err) {
+    console.log("ACTIVE VOICE ROLE ERROR:", err?.message || err);
+    return false;
+  }
+}
+
+async function syncActiveVoiceRoleForMember(member, reason = "sync") {
+  if (!member || member.user?.bot || !member.guild) return false;
+  const shouldHave = isActiveVoiceRoleChannel(member.voice?.channel);
+  return applyActiveVoiceRole(member, shouldHave, reason);
+}
+
+async function seedActiveVoiceRoles() {
+  const cfg = getActiveVoiceRoleConfig();
+  if (!cfg.enabled) {
+    console.log("🎙️ Active Voice Role nonaktif.");
+    return;
+  }
+
+  let addedOrChecked = 0;
+  try {
+    for (const guild of client.guilds.cache.values()) {
+      await guild.members.fetch().catch(() => null);
+      const role = resolveActiveVoiceRole(guild);
+      if (!role) {
+        if (cfg.logToConsole) console.log(`🎙️ Active Voice Role: role '${cfg.roleName}' belum ditemukan di ${guild.name}.`);
+        continue;
+      }
+      for (const member of guild.members.cache.values()) {
+        if (member.user?.bot) continue;
+        if (!isActiveVoiceRoleChannel(member.voice?.channel)) continue;
+        await applyActiveVoiceRole(member, true, "startup_seed");
+        addedOrChecked++;
+      }
+    }
+    console.log(`🎙️ Active Voice Role siap: ${addedOrChecked} member voice dicek.`);
+  } catch (err) {
+    console.log("ACTIVE VOICE ROLE SEED ERROR:", err?.message || err);
+  }
+}
+
+// ================= LEVEL VOICE TRACKER =================
+client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
+  try {
+    const member = newState.member || oldState.member;
+    if (!isVoiceTrackableMember(member)) return;
+
+    const oldChannel = oldState.channel;
+    const newChannel = newState.channel;
+    const wasInVoice = isVoiceTrackableChannel(oldChannel);
+    const isInVoice = isVoiceTrackableChannel(newChannel);
+
+    if (!wasInVoice && isInVoice) {
+      startVoiceLevelSession(member, newChannel.id);
+      return;
+    }
+
+    if (wasInVoice && isInVoice && oldState.channelId !== newState.channelId) {
+      await flushVoiceLevelSession(member, "switch", false);
+      const key = getVoiceSessionKey(member);
+      const session = normalizeVoiceSession(voiceSessions.get(key), newChannel.id);
+      session.channelId = newChannel.id;
+      voiceSessions.set(key, session);
+      return;
+    }
+
+    if (wasInVoice && !isInVoice) {
+      await flushVoiceLevelSession(member, "leave", true);
+    }
+  } catch (err) {
+    console.log("VOICE LEVEL ERROR:", err.message);
+  }
+});
+
+
+
+// Role otomatis untuk member yang sedang berada di voice mana pun.
+// Fitur ini terpisah dari Level/Voice Poin supaya tidak mengubah data poin sama sekali.
+client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
+  try {
+    const member = newState.member || oldState.member;
+    if (!member || member.user?.bot) return;
+
+    const oldInVoice = isActiveVoiceRoleChannel(oldState.channel);
+    const newInVoice = isActiveVoiceRoleChannel(newState.channel);
+
+    if (!oldInVoice && newInVoice) {
+      await applyActiveVoiceRole(member, true, "voice_join");
+      return;
+    }
+
+    if (oldInVoice && !newInVoice) {
+      await applyActiveVoiceRole(member, false, "voice_leave");
+      return;
+    }
+
+    if (oldInVoice && newInVoice && oldState.channelId !== newState.channelId) {
+      await applyActiveVoiceRole(member, true, "voice_switch");
+    }
+  } catch (err) {
+    console.log("ACTIVE VOICE ROLE VOICESTATE ERROR:", err?.message || err);
+  }
+});
+
+
+function canUseVoiceCommand(member) {
+  if (!member) return false;
+  if (member.id === member.guild.ownerId) return true;
+
+  const isAdmin = member.permissions.has(PermissionsBitField.Flags.Administrator);
+  const isDonatur = isFilledId(config.donaturRoleId) && member.roles.cache.has(config.donaturRoleId);
+
+  return isAdmin || isDonatur;
+}
+
+async function handleKiwVoiceCommand(message) {
+  const raw = message.content.trim();
+  const args = raw.split(/\s+/);
+  const cmd = (args.shift() || "").toLowerCase();
+
+  if (!["rwtarik", "rwusir", "kiwtarik", "kiwusir"].includes(cmd)) return false;
+
+  if (!canUseVoiceCommand(message.member)) {
+    await safeReply(message, "❌ Command ini khusus **Owner**, **Admin**, dan member dengan role **Donatur**.");
+    return true;
+  }
+
+  const target = message.mentions.members.first();
+
+  if (!target) {
+    await safeReply(message, [
+      "❌ Tag member yang mau diatur voice-nya.",
+      "",
+      "Contoh:",
+      "`rwtarik @user` — tarik member ke voice kamu",
+      "`rwusir @user` — keluarkan member dari voice"
+    ].join("\n"));
+    return true;
+  }
+
+  if (target.id === message.guild.ownerId && message.author.id !== message.guild.ownerId) {
+    await safeReply(message, "❌ Kamu tidak bisa mengatur voice owner server.");
+    return true;
+  }
+
+  if (cmd === "rwtarik" || cmd === "kiwtarik") {
+    const authorVoice = message.member.voice.channel;
+    const targetVoice = target.voice.channel;
+
+    if (!authorVoice) {
+      await safeReply(message, "❌ Kamu harus masuk voice dulu sebelum memakai `rwtarik`.");
+      return true;
+    }
+
+    if (!targetVoice) {
+      await safeReply(message, `❌ ${target} sedang tidak berada di voice.`);
+      return true;
+    }
+
+    await target.voice.setChannel(authorVoice).catch(async (err) => {
+      console.log("KIWTARIK ERROR:", err.message);
+      await safeReply(message, "❌ Gagal menarik member. Pastikan bot punya permission **Move Members** dan role bot berada cukup tinggi.");
+    });
+
+    await safeReply(message, `✅ ${target} berhasil ditarik ke voice **${authorVoice.name}**.`);
+    return true;
+  }
+
+  if (cmd === "rwusir" || cmd === "kiwusir") {
+    const targetVoice = target.voice.channel;
+
+    if (!targetVoice) {
+      await safeReply(message, `❌ ${target} sedang tidak berada di voice.`);
+      return true;
+    }
+
+    await target.voice.disconnect("Diusir dari voice lewat command rwusir").catch(async (err) => {
+      console.log("KIWUSIR ERROR:", err.message);
+      await safeReply(message, "❌ Gagal mengusir member dari voice. Pastikan bot punya permission **Move Members** dan role bot berada cukup tinggi.");
+    });
+
+    await safeReply(message, `✅ ${target} berhasil dikeluarkan dari voice **${targetVoice.name}**.`);
+    return true;
+  }
+
+  return false;
+}
+
+
+
+async function handleKiwTanyaCommand(message) {
+  const raw = message.content.trim();
+  const lowerRaw = raw.toLowerCase();
+
+  const pakRwTanyaCmd = lowerRaw.startsWith("rwtanya") ? "rwtanya" : (lowerRaw.startsWith("kiwtanya") ? "kiwtanya" : null);
+  if (!pakRwTanyaCmd) return false;
+
+  if (!isFilledId(config.donaturRoleId)) {
+    await safeReply(message, "❌ `donaturRoleId` belum diisi di config.json. Hubungi admin/owner.");
+    return true;
+  }
+
+  const isDonatur = message.member.roles.cache.has(config.donaturRoleId);
+
+  if (!isDonatur) {
+    await safeReply(message, "❌ Command `rwtanya` khusus untuk role **Donatur**. Hubungi admin/owner kalau ingin membuka akses ini 🤍");
+    return true;
+  }
+
+  const question = raw.slice(pakRwTanyaCmd.length).trim();
+
+  if (!question) {
+    await safeReply(message, [
+      "💎 **KIWTANYA • Donatur Desa**",
+      "",
+      "Cara pakai:",
+      "`rwtanya pertanyaan kamu`",
+      "",
+      "Contoh:",
+      "`rwtanya cara bikin channel khusus juragan gimana?`",
+      "",
+      "Kalau akses kamu belum aktif, hubungi admin/owner 🤍"
+    ].join("\n"));
+    return true;
+  }
+
+  const cooldownMs = config.ai?.cooldownMs || 4500;
+  const key = `${pakRwTanyaCmd}:${message.author.id}`;
+
+  if (isCooldown(key, cooldownMs)) {
+    const sisa = getRemaining(key);
+    await safeReply(message, `⏳ Tunggu **${sisa} detik** dulu sebelum pakai rwtanya lagi ya.`);
+    return true;
+  }
+
+  await message.channel.sendTyping();
+
+  const displayName = message.member?.displayName || message.author.username;
+  const username = message.author.username;
+
+  const personalizedQuestion = [
+    `Nama member yang bertanya adalah ${displayName}.`,
+    `Username Discord-nya adalah ${username}.`,
+    "Saat menjawab, panggil dia dengan nama tersebut secara natural jika cocok.",
+    "",
+    `Pertanyaan: ${question}`
+  ].join("\n");
+
+  const answer = await askAI(personalizedQuestion, "juragan");
+
+  const embed = new EmbedBuilder()
+    .setColor(0x2f6bff)
+    .setTitle(`💎 Jawaban Pak RW untuk ${displayName}`)
+    .setDescription(trimReply(answer))
+    .setFooter({ text: makeOTFooter(`${config.serverName} • KIWTANYA Donatur`) })
+    .setTimestamp();
+
+  await safeReply(message, {
+    content: `${message.author}`,
+    embeds: [embed]
+  });
+
+  return true;
+}
+
+
+
+
+function buildPakRwBigBotEmbed(message) {
+  const guild = message.guild;
+  const p = config.prefix || "rw";
+  const big = config.desaTulusBigBot || {};
+  const textChannels = guild.channels.cache.filter((ch) => ch.type === ChannelType.GuildText).size;
+  const voiceChannels = guild.channels.cache.filter((ch) => ch.type === ChannelType.GuildVoice || ch.type === ChannelType.GuildStageVoice).size;
+  const modules = Array.isArray(big.coreModules) && big.coreModules.length
+    ? big.coreModules.slice(0, 12).map((m) => `• ${m}`).join("\n")
+    : [
+        "• AI Pak RW",
+        "• Curhat Warga & Curhat Anonim",
+        "• Kotak Saran Warga",
+        "• Wilujeung Sumping",
+        "• Level & Poin Warga",
+        "• Top Aktif & Member Of The Month",
+        "• Donatur Desa & Juragan Desa",
+        "• Voice Warga & Boost Poin"
+      ].join("\n");
+
+  return new EmbedBuilder()
+    .setColor(color())
+    .setTitle("🌾 Pak RW Big Bot DESA TULUS")
+    .setDescription([
+      "Pak RW ayeuna janten **bot besar balai warga digital** pikeun DESA TULUS.",
+      "Tugasna ngayomi warga, ngabantosan staff, ngatur alur server, ngadangu curhat, sareng ngajaga sistem poin/level tetep rapih.",
+      "",
+      "**🏡 Identitas Desa**",
+      `Server: **${config.serverName || guild.name || "DESA TULUS"}**`,
+      `Peran bot: **${config.ownerName || "Pak RW"}**`,
+      `Prefix warga: \`${p}\``,
+      `Member: **${formatNumber(guild.memberCount || 0)}** warga`,
+      `Channel: **${textChannels}** text • **${voiceChannels}** voice`,
+      "",
+      "**📦 Modul Besar Pak RW**",
+      modules,
+      "",
+      "**🧭 Command Cepat**",
+      `\`${p}help\` • bantuan warga`,
+      `\`${p}besar\` • ringkasan bot besar`,
+      `\`${p}fitur\` • semua fitur`,
+      `\`${p}saran\` • panel kotak saran`,
+      `\`${p}anonim\` • panel curhat anonim`,
+      `\`${p}cekpoin\` • cek poin warga`,
+      `\`${p}topaktif\` • papan warga aktif`
+    ].join("\n"))
+    .setFooter({ text: makeOTFooter(`${config.serverName || "DESA TULUS"} • Balai Warga Digital`) })
+    .setTimestamp();
+}
+
+async function handleKiwLevelCommand(message) {
+  const raw = message.content.trim().toLowerCase();
+
+  if (!["rwcekpoin", "rwlevel", "rwrank", "rwtoplevel", "rwtopaktif", "kiwcekpoin", "kiwlevel", "kiwrank", "kiwtoplevel", "kiwtopaktif"].some((cmd) => raw === cmd || raw.startsWith(`${cmd} `))) {
+    return false;
+  }
+
+  const parts = message.content.trim().split(/\s+/);
+  const cmd = (parts.shift() || "").toLowerCase();
+
+  if (["rwtoplevel", "rwtopaktif", "kiwtoplevel", "kiwtopaktif"].includes(cmd)) {
+    const data = readLevelData();
+    const rows = Object.values(data.users || {})
+      .filter((u) => u.guildId === message.guild.id)
+      .filter((u) => !shouldExcludeOwnerFromLeaderboard(message.guild.ownerId, u.userId))
+      .sort((a, b) => getTotalLevelPoints(b) - getTotalLevelPoints(a))
+      .slice(0, 10);
+
+    const desc = rows.length
+      ? rows.map((u, i) => {
+          const info = getLevelInfo(u);
+          return `**${i + 1}.** <@${u.userId}> — **${info.current.name} (Lvl. ${info.current.level})**\n⭐ ${formatNumber(getTotalLevelPoints(u))} | 💬 ${formatNumber(u.chat || 0)} | 🎙️ ${formatNumber(u.voice || 0)}`;
+        }).join("\n\n")
+      : "Belum ada data level warga.";
+
+    const embed = new EmbedBuilder()
+      .setColor(0x7c5cff)
+      .setTitle("🏆 Top Level Warga DESA TULUS")
+      .setDescription(desc)
+      .setFooter({ text: makeOTFooter(`${config.serverName} • Level Leaderboard`) })
+      .setTimestamp();
+
+    await safeReply(message, { embeds: [embed] });
+    return true;
+  }
+
+  const target = message.mentions.members.first() || message.member;
+  if (shouldExcludeOwnerFromLevel(message.guild, target.id)) {
+    await safeReply(message, "👑 Owner server tidak dihitung di sistem level dan tidak muncul di leaderboard keaktifan.");
+    return true;
+  }
+  const data = readLevelData();
+  const userData = getLevelUser(data, message.guild.id, target.id);
+
+  await sendLevelProfileMessage(message, target, userData);
+
+  return true;
+}
+
+
+
+// ================= UTILITY COMMANDS =================
+function formatPermissionName(name = "") {
+  return String(name)
+    .replace(/([A-Z])/g, " $1")
+    .replace(/^./, (s) => s.toUpperCase())
+    .trim();
+}
+
+function buildServerInfoEmbed(guild) {
+  const ownerText = guild.ownerId ? `<@${guild.ownerId}>` : "Tidak terbaca";
+  const created = Math.floor(guild.createdTimestamp / 1000);
+
+  return new EmbedBuilder()
+    .setColor(color())
+    .setTitle(`🏠 Info Server ${guild.name}`)
+    .setThumbnail(guild.iconURL({ size: 256 }) || null)
+    .setDescription([
+      `**Nama Server:** ${guild.name}`,
+      `**Server ID:** \`${guild.id}\``,
+      `**Owner:** ${ownerText}`,
+      `**Member:** **${formatNumber(guild.memberCount || 0)}**`,
+      `**Roles:** **${guild.roles.cache.size}**`,
+      `**Channels:** **${guild.channels.cache.size}**`,
+      `**Dibuat:** <t:${created}:F>`,
+      "",
+      `🤍 ${config.serverName || "DESA TULUS"}`
+    ].join("\n"))
+    .setFooter({ text: makeOTFooter(`${config.serverName} • Server Info`) })
+    .setTimestamp();
+}
+
+function buildUserInfoEmbed(member) {
+  const user = member.user;
+  const joined = member.joinedTimestamp ? Math.floor(member.joinedTimestamp / 1000) : null;
+  const created = Math.floor(user.createdTimestamp / 1000);
+
+  const roles = member.roles.cache
+    .filter((role) => role.name !== "@everyone")
+    .sort((a, b) => b.position - a.position)
+    .first(10)
+    .map((role) => `<@&${role.id}>`)
+    .join(" ") || "Tidak ada role khusus.";
+
+  return new EmbedBuilder()
+    .setColor(color())
+    .setTitle(`👤 Info User ${member.displayName}`)
+    .setThumbnail(user.displayAvatarURL({ size: 256 }))
+    .setDescription([
+      `**User:** ${user}`,
+      `**Username:** \`${user.tag}\``,
+      `**User ID:** \`${user.id}\``,
+      `**Akun dibuat:** <t:${created}:F>`,
+      joined ? `**Join server:** <t:${joined}:F>` : "**Join server:** Tidak terbaca",
+      "",
+      `**Role utama:**`,
+      roles
+    ].join("\n"))
+    .setFooter({ text: makeOTFooter(`${config.serverName} • User Info`) })
+    .setTimestamp();
+}
+
+function buildChannelInfoEmbed(channel) {
+  const created = channel.createdTimestamp ? Math.floor(channel.createdTimestamp / 1000) : null;
+
+  return new EmbedBuilder()
+    .setColor(color())
+    .setTitle(`📌 Info Channel #${channel.name}`)
+    .setDescription([
+      `**Channel:** <#${channel.id}>`,
+      `**Channel ID:** \`${channel.id}\``,
+      `**Nama:** \`${channel.name}\``,
+      `**Type:** \`${channel.type}\``,
+      created ? `**Dibuat:** <t:${created}:F>` : "**Dibuat:** Tidak terbaca",
+      channel.parent ? `**Category:** ${channel.parent.name}` : "**Category:** Tidak ada"
+    ].join("\n"))
+    .setFooter({ text: makeOTFooter(`${config.serverName} • Channel Info`) })
+    .setTimestamp();
+}
+
+function buildRoleListEmbed(guild) {
+  const roles = guild.roles.cache
+    .filter((role) => role.name !== "@everyone")
+    .sort((a, b) => b.position - a.position)
+    .first(25);
+
+  const desc = roles.length
+    ? roles.map((role, index) => `**${index + 1}.** <@&${role.id}> — \`${role.id}\``).join("\n")
+    : "Belum ada role yang terbaca.";
+
+  return new EmbedBuilder()
+    .setColor(color())
+    .setTitle("🎭 Daftar Role Server")
+    .setDescription(desc)
+    .setFooter({ text: makeOTFooter(`${config.serverName} • Menampilkan maksimal 25 role`) })
+    .setTimestamp();
+}
+
+function buildIdHelperEmbed(message) {
+  const targetUser = message.mentions.users.first() || message.author;
+  const targetChannel = message.mentions.channels.first() || message.channel;
+  const targetRole = message.mentions.roles.first();
+
+  return new EmbedBuilder()
+    .setColor(color())
+    .setTitle("🆔 ID Helper Pak RW")
+    .setDescription([
+      `**User ID:** \`${targetUser.id}\``,
+      `**Channel ID:** \`${targetChannel.id}\``,
+      targetRole ? `**Role ID:** \`${targetRole.id}\`` : "**Role ID:** tag role untuk melihat ID role.",
+      "",
+      "**Contoh config:**",
+      `\`"levelChannelId": "${config.levelChannelId || targetChannel.id}"\``,
+      `\`"donaturRoleId": "${config.donaturRoleId || "ISI_ROLE_ID"}"\``
+    ].join("\n"))
+    .setFooter({ text: makeOTFooter(`${config.serverName} • ID Helper`) })
+    .setTimestamp();
+}
+
+async function handleUtilityCommand(message, cmd, args) {
+  if (cmd === "serverinfo" || cmd === "server" || cmd === "infoserver") {
+    return safeReply(message, { embeds: [buildServerInfoEmbed(message.guild)] });
+  }
+
+  if (cmd === "userinfo" || cmd === "user" || cmd === "infouser") {
+    const target = message.mentions.members.first() || message.member;
+    return safeReply(message, { embeds: [buildUserInfoEmbed(target)] });
+  }
+
+  if (cmd === "avatar" || cmd === "pp") {
+    const target = message.mentions.users.first() || message.author;
+    const embed = new EmbedBuilder()
+      .setColor(color())
+      .setTitle(`🖼️ Avatar ${target.username}`)
+      .setImage(target.displayAvatarURL({ size: 1024 }))
+      .setFooter({ text: makeOTFooter(`${config.serverName} • Avatar`) })
+      .setTimestamp();
+
+    return safeReply(message, { embeds: [embed] });
+  }
+
+  if (cmd === "channelinfo" || cmd === "channel" || cmd === "infochannel") {
+    const target = message.mentions.channels.first() || message.channel;
+    return safeReply(message, { embeds: [buildChannelInfoEmbed(target)] });
+  }
+
+  if (cmd === "roles" || cmd === "rolelist" || cmd === "daftarrole") {
+    return safeReply(message, { embeds: [buildRoleListEmbed(message.guild)] });
+  }
+
+  if (cmd === "id" || cmd === "ids" || cmd === "cekid") {
+    return safeReply(message, { embeds: [buildIdHelperEmbed(message)] });
+  }
+
+  if (cmd === "configcek" || cmd === "cekconfig") {
+    const embed = new EmbedBuilder()
+      .setColor(color())
+      .setTitle("⚙️ Cek Config Pak RW")
+      .setDescription([
+        `**Prefix:** \`${config.prefix || "rw"}\``,
+        `**AI Channel:** ${isFilledId(config.aiChannelId) ? `<#${config.aiChannelId}>` : "belum diisi"}`,
+        `**Level Channel:** ${isFilledId(config.levelChannelId) ? `<#${config.levelChannelId}>` : "belum diisi"}`,
+        `**Juragan Role:** ${isFilledId(config.juragan?.roleId) ? `<@&${config.juragan.roleId}>` : "belum diisi"}`,
+        `**Donatur Role:** ${isFilledId(config.donaturRoleId) ? `<@&${config.donaturRoleId}>` : "belum diisi"}`,
+        `**Auto Channel Juragan:** ${config.juragan?.autoSetupChannels ? "aktif" : "nonaktif"}`,
+        `**AI Model:** \`${config.ai?.openRouterModel || "-"}\``
+      ].join("\n"))
+      .setFooter({ text: makeOTFooter(`${config.serverName} • Config Check`) })
+      .setTimestamp();
+
+    return safeReply(message, { embeds: [embed] });
+  }
+
+  if (cmd === "say" || cmd === "kirim") {
+    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+      return safeReply(message, "❌ Command ini khusus admin.");
+    }
+
+    const targetChannel = message.mentions.channels.first() || message.channel;
+    const content = args.join(" ").replace(/<#[0-9]+>/g, "").trim();
+
+    if (!content) {
+      return safeReply(message, `❌ Tulis pesan yang mau dikirim. Contoh: \`${config.prefix || "rw"}say #channel Halo warga!\``);
+    }
+
+    await targetChannel.send(content);
+    return safeReply(message, `✅ Pesan berhasil dikirim ke ${targetChannel}.`);
+  }
+
+  return false;
+}
+
+
+
+// ================= OwO AUTO ROLE PREFIX W =================
+// Fitur ini hanya memberi role berdasarkan command OwO prefix w di channel yang diatur.
+// Tidak mengubah fitur lain dan tidak mengirim notice jika sendNotice=false.
+function getOwoAutoRoleConfig() {
+  const raw = config.owoAutoRole || {};
+  const list = (value) => Array.isArray(value)
+    ? value.map((x) => String(x || "").trim()).filter((x) => x && !x.includes("ISI_ID"))
+    : [];
+  return {
+    enabled: raw.enabled !== false,
+    prefix: String(raw.prefix || "w").trim().toLowerCase() || "w",
+    playerRoleId: String(raw.playerRoleId || "").trim(),
+    squadRoleId: String(raw.squadRoleId || "").trim(),
+    playerChannelIds: list(raw.playerChannelIds),
+    squadChannelIds: list(raw.squadChannelIds),
+    logToConsole: raw.logToConsole !== false,
+    sendNotice: raw.sendNotice === true
+  };
+}
+
+function isOwoCommandPrefixW(content = "") {
+  const text = String(content || "").trim().toLowerCase().replace(/\s+/g, " ");
+  if (!text) return false;
+  if (text === "w") return true;
+  if (text.startsWith("w ")) {
+    const allowed = new Set(["h", "hunt", "b", "battle", "zoo", "inv", "inventory", "daily", "quest", "quests", "top", "profile", "cash", "wallet", "shop", "pray", "curse", "team", "squad", "open", "crate", "sell", "buy", "cowoncy", "owo"]);
+    const first = text.slice(2).split(" ")[0];
+    return allowed.has(first);
+  }
+  if (text === "wh" || text.startsWith("wh ")) return true;
+  if (text === "wb" || text.startsWith("wb ")) return true;
+  return false;
+}
+
+async function tryGiveOwoRole(message, roleId, label) {
+  try {
+    if (!roleId || roleId.includes("ISI_ID")) return false;
+    const guild = message.guild;
+    const member = message.member;
+    if (!guild || !member) return false;
+    if (member.roles.cache.has(roleId)) return false;
+
+    const role = guild.roles.cache.get(roleId);
+    if (!role) {
+      if (getOwoAutoRoleConfig().logToConsole) console.log(`[OwO Auto Role] Role ${label} tidak ditemukan: ${roleId}`);
+      return false;
+    }
+
+    const botMember = guild.members.me || await guild.members.fetchMe().catch(() => null);
+    if (!botMember?.permissions?.has(PermissionsBitField.Flags.ManageRoles)) {
+      if (getOwoAutoRoleConfig().logToConsole) console.log("[OwO Auto Role] Bot belum punya permission Manage Roles.");
+      return false;
+    }
+
+    if (botMember.roles.highest.position <= role.position) {
+      if (getOwoAutoRoleConfig().logToConsole) console.log(`[OwO Auto Role] Posisi role bot harus lebih tinggi dari role ${role.name}.`);
+      return false;
+    }
+
+    await member.roles.add(role, `Pak RW OwO Auto Role ${label}`).catch((err) => {
+      if (getOwoAutoRoleConfig().logToConsole) console.log(`[OwO Auto Role] Gagal memberi role ${label}:`, err.message);
+      return null;
+    });
+
+    if (getOwoAutoRoleConfig().logToConsole) console.log(`[OwO Auto Role] ${member.user.tag} mendapat role ${role.name} (${label}).`);
+    return true;
+  } catch (err) {
+    console.log("[OwO Auto Role] ERROR:", err.message);
+    return false;
+  }
+}
+
+async function handleOwoAutoRole(message) {
+  try {
+    if (!message?.guild || !message?.member || message.author?.bot) return false;
+    const cfg = getOwoAutoRoleConfig();
+    if (!cfg.enabled) return false;
+    if (!isOwoCommandPrefixW(message.content)) return false;
+
+    const channelId = message.channel?.id;
+    if (!channelId) return false;
+
+    let changed = false;
+    if (cfg.playerChannelIds.includes(channelId)) {
+      changed = await tryGiveOwoRole(message, cfg.playerRoleId, "OwO Player") || changed;
+    }
+    if (cfg.squadChannelIds.includes(channelId)) {
+      changed = await tryGiveOwoRole(message, cfg.squadRoleId, "OwO Squad") || changed;
+    }
+
+    if (changed && cfg.sendNotice) {
+      await message.react("✅").catch(() => null);
+    }
+
+    return changed;
+  } catch (err) {
+    console.log("[OwO Auto Role] HANDLER ERROR:", err.message);
+    return false;
+  }
+}
+
+// ================= MESSAGE COMMAND + AI =================
+
+function isImageAttachment(attachment) {
+  const type = String(attachment?.contentType || "").toLowerCase();
+  const name = String(attachment?.name || attachment?.url || "").toLowerCase();
+  return type.startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(name);
+}
+
+function messageHasRealImage(message) {
+  const hasAttachmentImage = message.attachments?.some?.((attachment) => isImageAttachment(attachment));
+  if (hasAttachmentImage) return true;
+
+  const hasEmbedImage = message.embeds?.some?.((embed) => Boolean(embed?.image?.url));
+  return Boolean(hasEmbedImage);
+}
+
+function buildImageThreadName(message) {
+  const cfg = getTopActiveConfig();
+  const username = message.member?.displayName || message.author?.username || "Warga";
+  const server = config.serverName || message.guild?.name || "DESA TULUS";
+  const base = applyTemplate(cfg.autoImageThreadName || "🖼️ Diskusi Gambar • {username}", {
+    user: `${message.author}`,
+    username,
+    displayName: username,
+    server
+  });
+
+  return String(base || "🖼️ Diskusi Gambar")
+    .replace(/[\n\r]/g, " ")
+    .slice(0, 95);
+}
+
+async function handleAutoImageThread(message) {
+  try {
+    if (!message?.guild || !message?.channel) return false;
+
+    const cfg = getTopActiveConfig();
+    if (!cfg.enabled || !cfg.autoImageThreadEnabled) return false;
+
+    const channelId = cfg.channelId || config.levelChannelId || "";
+    if (!isFilledId(channelId) || message.channel.id !== channelId) return false;
+
+    if (message.channel.isThread?.()) return false;
+    if (message.hasThread) return false;
+    if (!messageHasRealImage(message)) return false;
+    if (typeof message.startThread !== "function") return false;
+
+    const archive = Number(cfg.autoImageThreadArchiveMinutes || 1440);
+    const thread = await message.startThread({
+      name: buildImageThreadName(message),
+      autoArchiveDuration: [60, 1440, 4320, 10080].includes(archive) ? archive : 1440,
+      reason: "Pak RW auto image thread"
+    }).catch((err) => {
+      console.log("AUTO IMAGE THREAD CREATE ERROR:", err.message);
+      return null;
+    });
+
+    if (!thread) return false;
+
+    const openMessage = applyTemplate(cfg.autoImageThreadMessage || "🖼️ Thread otomatis dibuat buat diskusi gambar ini. Silakan ngobrol di sini ya 🤍", {
+      user: `${message.author}`,
+      username: message.member?.displayName || message.author?.username || "Warga",
+      displayName: message.member?.displayName || message.author?.username || "Warga",
+      server: config.serverName || message.guild.name
+    });
+
+    if (openMessage) {
+      await thread.send(openMessage).catch((err) => console.log("AUTO IMAGE THREAD SEND ERROR:", err.message));
+    }
+
+    return true;
+  } catch (err) {
+    console.log("AUTO IMAGE THREAD ERROR:", err.message);
+    return false;
+  }
+}
+
+client.on(Events.MessageCreate, async (message) => {
+  await handleAutoImageThread(message);
+});
+
+
+
+// ================= PAK RW COMMAND CENTER v10.10.54 =================
+// Update ini sengaja tidak menyentuh logic Level, Top Aktif/MOTM, dan Cek Poin.
+const COMMAND_THEME_COLOR = 0x7c6dff;
+const COMMAND_SAFE_FEATURES = ["ai", "curhat", "anonim", "saran", "welcome", "juragan", "donatur", "mabar"];
+const COMMAND_PROTECTED_FEATURES = ["level", "topaktif", "topactive", "motm", "cekpoin", "poin", "rank", "toplevel", "posttop"];
+
+function commandCenterConfig() {
+  if (!config.commandPermissions || typeof config.commandPermissions !== "object") config.commandPermissions = {};
+  const raw = config.commandPermissions;
+  const list = (value) => Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+  return {
+    enabled: raw.enabled !== false,
+    staffRoleIds: list(raw.staffRoleIds),
+    adminRoleIds: list(raw.adminRoleIds),
+    panelRoleIds: list(raw.panelRoleIds),
+    allowStaffSendPanel: raw.allowStaffSendPanel !== false,
+    hideOwnerCommandsFromMembers: raw.hideOwnerCommandsFromMembers !== false,
+    memberCommandsEnabled: raw.memberCommandsEnabled !== false,
+    staffCommandsEnabled: raw.staffCommandsEnabled !== false,
+    ownerCommandsEnabled: raw.ownerCommandsEnabled !== false,
+    safeMode: raw.safeMode !== false
+  };
+}
+
+function envOwnerIds() {
+  return String(process.env.OWNER_ID || process.env.OWNER_IDS || process.env.BOT_OWNER_ID || "")
+    .split(/[;,\s]+/g)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+function isPakRwOwner(message) {
+  if (!message?.guild || !message?.author) return false;
+  if (message.author.id === message.guild.ownerId) return true;
+  const ids = [
+    ...envOwnerIds(),
+    ...(config.ownerCommands?.allowedUserIds || []),
+    ...(config.commandPermissions?.ownerUserIds || [])
+  ].map(String);
+  return ids.includes(message.author.id);
+}
+
+function memberHasAnyRole(member, roleIds = []) {
+  if (!member?.roles?.cache) return false;
+  return roleIds.map(String).some((id) => member.roles.cache.has(id));
+}
+
+function isPakRwStaff(message) {
+  if (isPakRwOwner(message)) return true;
+  const member = message.member;
+  if (!member) return false;
+  const cfg = commandCenterConfig();
+  if (member.permissions?.has(PermissionsBitField.Flags.Administrator)) return true;
+  if (memberHasAnyRole(member, cfg.adminRoleIds)) return true;
+  if (memberHasAnyRole(member, cfg.staffRoleIds)) return true;
+  return false;
+}
+
+function canPakRwSendPanel(message) {
+  if (isPakRwOwner(message)) return true;
+  const cfg = commandCenterConfig();
+  if (!cfg.allowStaffSendPanel) return false;
+  if (isPakRwStaff(message)) return true;
+  if (memberHasAnyRole(message.member, cfg.panelRoleIds)) return true;
+  return false;
+}
+
+function isProtectedCommandFeature(feature = "") {
+  const value = String(feature || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  return COMMAND_PROTECTED_FEATURES.some((name) => value.includes(name));
+}
+
+function commandEmbed(title, description, options = {}) {
+  return new EmbedBuilder()
+    .setColor(options.color ?? COMMAND_THEME_COLOR)
+    .setTitle(title)
+    .setDescription(Array.isArray(description) ? description.join("\n") : String(description || ""))
+    .setFooter({ text: makeOTFooter(options.footer || `${config.serverName || "DESA TULUS"} • Pak RW Command Center`) })
+    .setTimestamp();
+}
+
+function denyOwnerText() { return "❌ Command ini khusus owner Pak RW."; }
+function denyStaffText() { return "❌ Command ini khusus staff/admin yang diizinkan."; }
+
+function uptimeText() {
+  const total = Math.floor(process.uptime());
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return `${h}j ${m}m ${s}d`;
+}
+
+function featureEnabledStatus(feature) {
+  const f = String(feature || "").toLowerCase();
+  if (f === "ai") return Boolean(config.aiChannelId && config.ai?.openRouterModel);
+  if (f === "curhat") return Boolean(config.curhatChannelId);
+  if (f === "anonim") return Boolean(config.anonymousCurhatChannelId);
+  if (f === "saran") return config.suggestion?.enabled !== false;
+  if (f === "welcome") return config.welcome?.enabled !== false;
+  if (f === "juragan") return config.juragan?.enabled !== false;
+  if (f === "donatur") return Boolean(config.donaturRoleId);
+  if (f === "mabar") return config.mabar?.enabled !== false;
+  return false;
+}
+
+function commandFeatureRows() {
+  const labels = {
+    ai: "🤖 AI Pak RW",
+    curhat: "☁️ Curhat",
+    anonim: "🌙 Curhat Anonim",
+    saran: "💡 Saran & Voting",
+    welcome: "👋 Welcome",
+    juragan: "💎 Juragan / Booster",
+    donatur: "💸 Donatur",
+    mabar: "🎮 Cari Mabar"
+  };
+  return COMMAND_SAFE_FEATURES.map((key) => `${labels[key] || key}: **${featureEnabledStatus(key) ? "Aktif ✅" : "Butuh setting ⚠️"}**`).join("\n");
+}
+
+function ownerCommandHelpEmbed(message) {
+  const p = config.prefix || "rw";
+  return commandEmbed("👑 Owner Command Pak RW", [
+    "Command penting hanya untuk owner. Member biasa tidak bisa mengubah setting bot/server.",
+    "",
+    "**Owner utama**",
+    `\`${p}status\` • status lengkap bot, AI, database, dashboard`,
+    `\`${p}reload\` • reload config tanpa restart`,
+    `\`${p}backup\` • backup config aman tanpa token/env`,
+    `\`${p}panel saran|anonim|mabar|juragan|donatur\` • kirim panel yang sudah disediakan`,
+    `\`${p}setchannel ai|curhat|anonim|saran|welcome|juragan|donatur|mabar #channel\``,
+    `\`${p}setrole juragan|donatur|staff @role\``,
+    `\`${p}fitur ai|curhat|anonim|saran|welcome|juragan|donatur|mabar on/off\``,
+    `\`${p}ai status|model|cooldown|max|channel|style ...\``,
+    `\`${p}maintenance on/off [alasan]\``,
+    `\`${p}test ai|curhat|saran|juragan|donatur|mabar|welcome\``,
+    "",
+    "**Aman:** command ini tidak menyediakan edit Level, Top Aktif/MOTM, atau Cek Poin."
+  ]);
+}
+
+function staffCommandHelpEmbed(message) {
+  const p = config.prefix || "rw";
+  return commandEmbed("🛡️ Staff Command Pak RW", [
+    "Staff hanya dapat command operasional yang aman. Setting inti tetap khusus owner.",
+    "",
+    `\`${p}staff\` • menu staff`,
+    `\`${p}cekfitur\` • cek status fitur`,
+    `\`${p}kirimpanel saran|anonim|mabar\` • kirim panel kalau diizinkan owner`,
+    `\`${p}ping\` • cek ping bot`,
+    `\`${p}info\` • info ringan bot/server`,
+    "",
+    "Staff tidak bisa mengubah config, role, channel, dashboard, AI setting, Juragan/Donatur, ataupun data penting."
+  ]);
+}
+
+function memberCommandHelpEmbed(message) {
+  const p = config.prefix || "rw";
+  return commandEmbed("🤍 Bantuan Pak RW", [
+    "Ini command umum yang aman untuk warga DESA TULUS.",
+    "",
+    `\`${p}help\` • lihat bantuan`,
+    `\`${p}ping\` • cek bot hidup atau tidak`,
+    `\`${p}info\` • info ringan Pak RW`,
+    `\`${p}tanya <pesan>\` • tanya Pak RW`,
+    `\`${p}curhat <cerita>\` • curhat ke Pak RW`,
+    `\`${p}saran\` • buka panel saran`,
+    `\`${p}mabar\` • buat ajakan cari mabar`,
+    "",
+    "Command setting penting disembunyikan supaya member tidak bingung dan server tetap aman."
+  ]);
+}
+
+function smartHelpEmbed(message) {
+  if (isPakRwOwner(message)) return ownerCommandHelpEmbed(message);
+  if (isPakRwStaff(message)) return staffCommandHelpEmbed(message);
+  return memberCommandHelpEmbed(message);
+}
+
+function getPakRwFeatureConfig(feature) {
+  config.features = config.features || {};
+  config.features[feature] = config.features[feature] || {};
+  return config.features[feature];
+}
+
+function setFeatureEnabled(feature, value) {
+  const safe = String(feature || "").toLowerCase();
+  if (!COMMAND_SAFE_FEATURES.includes(safe)) return false;
+  const fcfg = getPakRwFeatureConfig(safe);
+  fcfg.enabled = Boolean(value);
+  if (safe === "saran") {
+    config.suggestion = config.suggestion || {};
+    config.suggestion.enabled = Boolean(value);
+  } else if (safe === "welcome") {
+    config.welcome = config.welcome || {};
+    config.welcome.enabled = Boolean(value);
+  } else if (safe === "juragan") {
+    config.juragan = config.juragan || {};
+    config.juragan.enabled = Boolean(value);
+  } else if (safe === "mabar") {
+    config.mabar = config.mabar || {};
+    config.mabar.enabled = Boolean(value);
+  }
+  return true;
+}
+
+function featureChannelKey(feature) {
+  return {
+    ai: "aiChannelId",
+    curhat: "curhatChannelId",
+    anonim: "anonymousCurhatChannelId",
+    saran: "suggestionChannelId",
+    welcome: "chatWargaChannelId"
+  }[feature] || null;
+}
+
+async function sendSuggestionPanelCommand(channel) {
+  const embed = new EmbedBuilder()
+    .setColor(hexColor(config.suggestion?.color || config.embedColor || "#FFFFFF", color()))
+    .setTitle(config.suggestion?.title || "💡 DESA TULUS • Kritik & Saran")
+    .setDescription(config.suggestion?.description || "Punya ide, kritik, saran, atau masukan buat server? Klik tombol di bawah dan tulis dengan jelas ya 🤍")
+    .setFooter({ text: makeOTFooter(`${config.serverName || "DESA TULUS"} • Kritik & Saran`) })
+    .setTimestamp();
+  await channel.send({
+    embeds: [embed],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("open_suggestion").setLabel("Kasih Saran").setEmoji("💡").setStyle(ButtonStyle.Secondary)
+    )]
+  });
+}
+
+async function sendMabarPanelCommand(channel, author) {
+  const cfg = config.mabar || {};
+  const e = config.embeds?.cariMabar || {};
+  const embed = new EmbedBuilder()
+    .setColor(hexColor(e.color || "#5865F2", 0x5865f2))
+    .setTitle(e.title || "🎮 CARI MABAR DESA TULUS")
+    .setDescription(e.description || "Ada yang mau mabar? Tulis game, mode, slot, dan jam main biar warga gampang ikut.")
+    .setFooter({ text: makeOTFooter(e.footer || `${config.serverName || "DESA TULUS"} • Cari Mabar`) })
+    .setTimestamp();
+  if (isHttpUrl(e.image)) embed.setImage(e.image);
+  if (isHttpUrl(e.thumbnail)) embed.setThumbnail(e.thumbnail);
+  await channel.send({ content: e.content || "", embeds: [embed] });
+}
+
+async function sendEmbedKeyToChannel(embedKey, channel, data = {}) {
+  const embed = config.embeds?.[embedKey];
+  if (!embed || typeof embed !== "object") return false;
+  const payload = buildDashboardEmbedPayload(embed, { server: config.serverName || "DESA TULUS", user: data.user || "", ...data });
+  if (!payload.content && !payload.embeds) return false;
+  await channel.send(payload);
+  return true;
+}
+
+async function sendKnownPanel(message, type, targetChannel = null) {
+  const panel = String(type || "").toLowerCase().trim();
+  const channel = targetChannel || message.channel;
+  if (!channel?.send) return { ok: false, reason: "Channel tidak valid." };
+
+  try {
+    if (panel === "saran" || panel === "suggestion") {
+      await sendSuggestionPanelCommand(channel);
+      return { ok: true, label: "Panel Saran" };
+    }
+    if (panel === "anonim" || panel === "anonymous" || panel === "curhat") {
+      await sendAnonimPanel(channel);
+      return { ok: true, label: "Panel Curhat Anonim" };
+    }
+    if (panel === "mabar") {
+      await sendMabarPanelCommand(channel, message.author);
+      return { ok: true, label: "Panel Cari Mabar" };
+    }
+    if (panel === "juragan") {
+      const ok = await sendEmbedKeyToChannel("juragan", channel, { user: `${message.author}` });
+      return { ok, label: "Embed Juragan", reason: ok ? "" : "Embed Juragan belum valid." };
+    }
+    if (panel === "donatur") {
+      const ok = await sendEmbedKeyToChannel("donatur", channel, { user: `${message.author}`, expiredText: "Mode preview dashboard/command." });
+      return { ok, label: "Embed Donatur", reason: ok ? "" : "Embed Donatur belum valid." };
+    }
+    return { ok: false, reason: "Panel tidak dikenal. Pilihan: saran, anonim, mabar, juragan, donatur." };
+  } catch (err) {
+    console.log("COMMAND PANEL SEND ERROR:", err.message);
+    return { ok: false, reason: err.message };
+  }
+}
+
+async function handlePakRwCommandCenterPrefix(message, cmd, args = []) {
+  const p = config.prefix || "rw";
+  const cleanCmd = String(cmd || "").toLowerCase();
+  if (!cleanCmd) return false;
+
+  // Command yang dilindungi sengaja dilewatkan ke handler lama agar Level/Top/Cek Poin tidak tersentuh.
+  if (["level", "rank", "cekpoin", "bonuslevel", "cekbonus", "bonuspoin", "toplevel", "topaktif", "topwarga", "topchat", "topvoice", "motm", "posttopaktif", "posttop", "testmotm", "testmemberofthemonth", "testlevel", "testlevel100"].includes(cleanCmd)) return false;
+
+  if (["help", "bantuan", "commands", "menu"].includes(cleanCmd)) {
+    await safeReply(message, { embeds: [smartHelpEmbed(message)] });
+    return true;
+  }
+
+  if (["ping"].includes(cleanCmd)) {
+    await safeReply(message, { embeds: [commandEmbed("🏓 Pong Pak RW", [`Ping bot: **${client.ws.ping}ms**`, `Status: **${client.user?.tag ? "Online" : "Offline"}**`], { color: 0x22d3ee })] });
+    return true;
+  }
+
+  if (["info", "botinfo"].includes(cleanCmd)) {
+    await safeReply(message, { embeds: [commandEmbed("🤍 Info Pak RW", [
+      `Server: **${config.serverName || message.guild.name}**`,
+      `Owner: **${config.ownerName || "PAK RW"}**`,
+      `Prefix: \`${p}\``,
+      "Pak RW membantu AI, curhat, saran, welcome, Juragan, Donatur, Mabar, dan dashboard server.",
+      "Command setting penting hanya untuk owner supaya server tetap aman."
+    ])] });
+    return true;
+  }
+
+  if (["status"].includes(cleanCmd)) {
+    if (!isPakRwOwner(message)) return safeReply(message, denyOwnerText()), true;
+    const dbStatus = await getMongoStatus(message.guild.id).catch(() => null);
+    const activeCount = COMMAND_SAFE_FEATURES.filter(featureEnabledStatus).length;
+    await safeReply(message, { embeds: [commandEmbed("👑 Status Bot Pak RW", [
+      `Bot: **${client.user?.tag || "Belum ready"}**`,
+      `Ping: **${client.ws.ping}ms**`,
+      `Uptime: **${uptimeText()}**`,
+      `Versi: **${config.dashboard?.releaseVersion || "10.10.35"}**`,
+      `Database: **${dbStatus?.active ? "MongoDB aktif ✅" : "Fallback/Belum aktif ⚠️"}**`,
+      `AI: **${config.ai?.openRouterModel || "belum diatur"}**`,
+      `Dashboard: **Aktif di web server dashboard ✅**`,
+      `Fitur aktif: **${activeCount}/${COMMAND_SAFE_FEATURES.length}**`,
+      "",
+      "Sistem Level, Top Aktif/MOTM, dan Cek Poin dikunci aman dan tidak diubah oleh Command Center."
+    ], { color: 0xf5c542 })] });
+    return true;
+  }
+
+  if (["reload", "reloadconfig"].includes(cleanCmd)) {
+    if (!isPakRwOwner(message)) return safeReply(message, denyOwnerText()), true;
+    const fresh = readConfigFile();
+    syncLiveConfig(fresh);
+    await safeReply(message, "✅ Config berhasil di-reload dari file/dashboard. Data lama aman dan database tidak direset.");
+    return true;
+  }
+
+  if (["backup", "backupconfig"].includes(cleanCmd)) {
+    if (!isPakRwOwner(message)) return safeReply(message, denyOwnerText()), true;
+    const safeConfig = JSON.parse(JSON.stringify(config));
+    delete safeConfig.token;
+    delete safeConfig.DISCORD_TOKEN;
+    const buffer = Buffer.from(JSON.stringify(safeConfig, null, 2), "utf8");
+    const file = new AttachmentBuilder(buffer, { name: `pak-rw-config-safe-backup-${Date.now()}.json` });
+    await safeReply(message, { content: "✅ Backup config aman. Token/env tidak ikut dikirim.", files: [file] });
+    return true;
+  }
+
+  if (["staff"].includes(cleanCmd)) {
+    if (!isPakRwStaff(message)) return safeReply(message, denyStaffText()), true;
+    await safeReply(message, { embeds: [staffCommandHelpEmbed(message)] });
+    return true;
+  }
+
+  if (["cekfitur", "fiturstatus"].includes(cleanCmd)) {
+    if (!isPakRwStaff(message)) return safeReply(message, denyStaffText()), true;
+    await safeReply(message, { embeds: [commandEmbed("🧩 Status Fitur Pak RW", [commandFeatureRows(), "", "Status ini hanya membaca fitur aman. Level, Top Aktif/MOTM, dan Cek Poin tidak diubah." ])] });
+    return true;
+  }
+
+  if (["panel", "kirimpanel"].includes(cleanCmd)) {
+    const type = args[0];
+    if (!type) return safeReply(message, `⚠️ Format kurang tepat. Contoh: \`${p}${cleanCmd} saran\`, \`${p}${cleanCmd} anonim\`, \`${p}${cleanCmd} mabar\``), true;
+    const ownerOnlyPanels = ["juragan", "donatur"];
+    if (ownerOnlyPanels.includes(String(type).toLowerCase()) && !isPakRwOwner(message)) return safeReply(message, denyOwnerText()), true;
+    if (!canPakRwSendPanel(message)) return safeReply(message, denyStaffText()), true;
+    const result = await sendKnownPanel(message, type);
+    await safeReply(message, result.ok ? `✅ ${result.label || "Panel"} berhasil dikirim.` : `❌ Gagal kirim panel: ${result.reason || "tidak diketahui"}`);
+    return true;
+  }
+
+  if (["setchannel"].includes(cleanCmd)) {
+    if (!isPakRwOwner(message)) return safeReply(message, denyOwnerText()), true;
+    const feature = String(args[0] || "").toLowerCase();
+    if (!feature || isProtectedCommandFeature(feature)) return safeReply(message, `⚠️ Format kurang tepat atau fitur dilindungi. Contoh: \`${p}setchannel ai #nanya-pak-rw\`. Fitur Level/Top Aktif/Cek Poin tidak bisa diubah dari command ini.`), true;
+    const channel = resolveTextChannelArg(message, args[1]);
+    if (!channel) return safeReply(message, `❌ Channel tidak ditemukan. Contoh: \`${p}setchannel ${feature || "ai"} #channel\``), true;
+    const rootKey = featureChannelKey(feature);
+    if (rootKey) config[rootKey] = channel.id;
+    else {
+      config[feature] = config[feature] || {};
+      config[feature].channelId = channel.id;
+    }
+    await saveLiveConfigFromOwner(message, `Channel **${feature}** berhasil diganti ke ${channel}`);
+    return true;
+  }
+
+  if (["setrole"].includes(cleanCmd)) {
+    if (!isPakRwOwner(message)) return safeReply(message, denyOwnerText()), true;
+    const feature = String(args[0] || "").toLowerCase();
+    if (!feature || isProtectedCommandFeature(feature)) return safeReply(message, `⚠️ Format kurang tepat atau fitur dilindungi. Contoh: \`${p}setrole juragan @role\`. Role Level/MOTM/Cek Poin tidak bisa diubah dari command ini.`), true;
+    const role = resolveRoleArg(message, args[1]);
+    if (!role) return safeReply(message, `❌ Role tidak ditemukan. Contoh: \`${p}setrole ${feature || "juragan"} @role\``), true;
+    if (feature === "juragan") { config.juragan = config.juragan || {}; config.juragan.roleId = role.id; }
+    else if (feature === "donatur") config.donaturRoleId = role.id;
+    else if (feature === "staff") { config.commandPermissions = config.commandPermissions || {}; config.commandPermissions.staffRoleIds = [role.id]; }
+    else { config[feature] = config[feature] || {}; config[feature].roleId = role.id; }
+    await saveLiveConfigFromOwner(message, `Role **${feature}** berhasil diganti ke ${role}`);
+    return true;
+  }
+
+  if (["fitur"].includes(cleanCmd)) {
+    const feature = String(args[0] || "").toLowerCase();
+    const value = normalizeOnOff(args[1], null);
+    if (!feature) {
+      await safeReply(message, { embeds: [commandEmbed("🧭 Fitur Aman Pak RW", [commandFeatureRows(), "", isPakRwOwner(message) ? `Owner bisa pakai: \`${p}fitur ai on/off\`` : "Setting fitur hanya untuk owner."]) ] });
+      return true;
+    }
+    if (!isPakRwOwner(message)) return safeReply(message, denyOwnerText()), true;
+    if (isProtectedCommandFeature(feature)) return safeReply(message, "❌ Fitur Level, Top Aktif/MOTM, dan Cek Poin dikunci aman. Tidak bisa diubah dari command ini."), true;
+    if (value === null) return safeReply(message, `⚠️ Format kurang tepat. Contoh: \`${p}fitur ai on\` atau \`${p}fitur mabar off\``), true;
+    if (!setFeatureEnabled(feature, value)) return safeReply(message, "❌ Fitur tidak dikenal. Pilihan: ai, curhat, anonim, saran, welcome, juragan, donatur, mabar."), true;
+    await saveLiveConfigFromOwner(message, `Fitur **${feature}** sekarang **${value ? "Aktif" : "Nonaktif"}**`);
+    return true;
+  }
+
+  if (["embed"].includes(cleanCmd)) {
+    if (!isPakRwOwner(message)) return safeReply(message, denyOwnerText()), true;
+    const key = String(args[0] || "").trim();
+    if (!key) return safeReply(message, `⚠️ Format kurang tepat. Contoh: \`${p}embed juragan\`. Edit lengkap tersedia di dashboard /embeds.`), true;
+    if (isProtectedCommandFeature(key)) return safeReply(message, "❌ Embed Level, Top Aktif/MOTM, dan Cek Poin dikunci. Edit dari command ini tidak diizinkan."), true;
+    const embed = config.embeds?.[key];
+    await safeReply(message, { embeds: [commandEmbed("🎨 Embed Editor Command", [
+      `Embed: **${key}**`,
+      embed ? "Status: **Ditemukan ✅**" : "Status: **Belum ada ⚠️**",
+      "Untuk edit rapi gunakan dashboard: **/embeds**.",
+      "Command ini hanya sebagai pintasan aman supaya tidak mengubah embed penting dari chat."
+    ])] });
+    return true;
+  }
+
+  if (["ai", "aiatur", "setai", "rwai", "kiwai"].includes(cleanCmd)) {
+    if (!isPakRwOwner(message)) return safeReply(message, denyOwnerText()), true;
+    const sub = String(args[0] || "status").toLowerCase();
+    config.ai = config.ai || {};
+    if (sub === "status") {
+      await safeReply(message, { embeds: [commandEmbed("🤖 Status AI Pak RW", [
+        `Model: \`${config.ai.openRouterModel || "belum diatur"}\``,
+        `Channel: ${isFilledId(config.aiChannelId) ? `<#${config.aiChannelId}>` : "belum diatur"}`,
+        `Cooldown: **${config.ai.cooldownMs || 4500}ms**`,
+        `Max reply: **${config.ai.maxMessageLength || 1900} karakter**`,
+        `Style: **${config.ai.styleMode || "auto"}**`
+      ])] });
+      return true;
+    }
+    if (sub === "model") config.ai.openRouterModel = args[1] || config.ai.openRouterModel;
+    else if (sub === "cooldown") config.ai.cooldownMs = Math.max(1000, parseNumberInput(args[1], config.ai.cooldownMs || 4500));
+    else if (sub === "max") config.ai.maxMessageLength = Math.max(500, Math.min(2000, parseNumberInput(args[1], config.ai.maxMessageLength || 1900)));
+    else if (sub === "style") config.ai.styleMode = args[1] || "auto_mirror_safe";
+    else if (sub === "channel") {
+      const ch = resolveTextChannelArg(message, args[1]);
+      if (!ch) return safeReply(message, `❌ Channel AI tidak ditemukan. Contoh: \`${p}ai channel #nanya-pak-rw\``), true;
+      config.aiChannelId = ch.id;
+    } else return safeReply(message, `⚠️ Contoh: \`${p}ai status\`, \`${p}ai model openai/gpt-4o-mini\`, \`${p}ai cooldown 4500\`, \`${p}ai max 1900\`, \`${p}ai channel #channel\`, \`${p}ai style auto\``), true;
+    await saveLiveConfigFromOwner(message, "Setting AI Pak RW berhasil diperbarui");
+    return true;
+  }
+
+  if (["maintenance"].includes(cleanCmd)) {
+    if (!isPakRwOwner(message)) return safeReply(message, denyOwnerText()), true;
+    const value = normalizeOnOff(args[0], null);
+    if (value === null) return safeReply(message, `⚠️ Format kurang tepat. Contoh: \`${p}maintenance on update dashboard\` atau \`${p}maintenance off\``), true;
+    config.maintenance = config.maintenance || {};
+    config.maintenance.enabled = value;
+    config.maintenance.reason = args.slice(1).join(" ") || (value ? "Pak RW sedang maintenance sebentar." : "");
+    await saveLiveConfigFromOwner(message, value ? `Maintenance aktif: ${config.maintenance.reason}` : "Maintenance dimatikan");
+    return true;
+  }
+
+  if (["test"].includes(cleanCmd)) {
+    if (!isPakRwOwner(message) && !isPakRwStaff(message)) return safeReply(message, denyStaffText()), true;
+    const type = String(args[0] || "").toLowerCase();
+    if (!type) return safeReply(message, `⚠️ Format kurang tepat. Contoh: \`${p}test ai\`, \`${p}test saran\`, \`${p}test mabar\``), true;
+    if (isProtectedCommandFeature(type)) return false;
+    if (type === "ai") return safeReply(message, "✅ AI test aman: gunakan channel AI atau `rwtanya halo Pak RW`."), true;
+    if (type === "curhat") return safeReply(message, "✅ Curhat test aman: kirim cerita di channel curhat yang sudah diatur."), true;
+    if (["saran", "anonim", "mabar", "juragan", "donatur"].includes(type)) {
+      const result = await sendKnownPanel(message, type);
+      return safeReply(message, result.ok ? `✅ Test ${result.label} berhasil dikirim. Ini tidak mengubah data level/top/cek poin.` : `❌ Test gagal: ${result.reason}`), true;
+    }
+    if (type === "welcome") return safeReply(message, "✅ Preview welcome tersedia di dashboard. Test join asli mengikuti event Discord."), true;
+    return safeReply(message, "❌ Fitur test tidak dikenal. Pilihan aman: ai, curhat, saran, anonim, juragan, donatur, mabar, welcome."), true;
+  }
+
+  if (["tanya"].includes(cleanCmd)) {
+    // Biarkan handleKiwTanyaCommand menangani rwtanya/kiwtanya yang sudah ada.
+    return false;
+  }
+
+  if (["curhat"].includes(cleanCmd)) {
+    const text = args.join(" ").trim();
+    if (!text) return safeReply(message, `☁️ Tulis curhatan kamu setelah command. Contoh: \`${p}curhat aku lagi kepikiran...\``), true;
+    if (isCooldown(message.author.id, config.ai?.cooldownMs || 4500)) return safeReply(message, `⏳ Tunggu **${getRemaining(message.author.id)} detik** dulu ya.`), true;
+    await message.channel.sendTyping().catch(() => null);
+    try {
+      const reply = await askAI(text, "curhat", message.author.username);
+      const embedCfg = config.embeds?.curhatReply || {};
+      const embed = new EmbedBuilder()
+        .setColor(hexColor(embedCfg.color || "#FFFFFF", color()))
+        .setTitle(embedCfg.title || "🤍 Balasan Pak RW")
+        .setDescription(compactReply(reply || "Aku baca ceritamu. Pelan-pelan ya, kamu tidak harus menyelesaikan semuanya sendirian." ).slice(0, 1900))
+        .setFooter({ text: makeOTFooter(embedCfg.footer || `${config.serverName || "DESA TULUS"} • Curhat System`) })
+        .setTimestamp();
+      return safeReply(message, { embeds: [embed] }), true;
+    } catch (err) {
+      console.log("COMMAND CURHAT AI ERROR:", err.message);
+      return safeReply(message, "🤍 Maaf, Pak RW lagi kurang stabil. Curhat kamu tetap valid; coba lagi sebentar ya."), true;
+    }
+  }
+
+  if (["mabar"].includes(cleanCmd)) {
+    if (config.mabar?.enabled === false) return safeReply(message, "🎮 Fitur Cari Mabar sedang nonaktif."), true;
+    const note = args.join(" ").trim();
+    const e = config.embeds?.cariMabar || {};
+    const embed = new EmbedBuilder()
+      .setColor(hexColor(e.color || "#5865F2", 0x5865f2))
+      .setTitle(e.title || "🎮 CARI MABAR DESA TULUS")
+      .setDescription([
+        note || e.description || "Ada yang mau mabar? Tulis game, mode, slot, dan jam main biar warga gampang ikut.",
+        "",
+        `Pengirim: ${message.member?.displayName || message.author.username}`,
+        "Balas pesan ini kalau mau ikut mabar."
+      ].join("\n"))
+      .setFooter({ text: makeOTFooter(e.footer || `${config.serverName || "DESA TULUS"} • Cari Mabar`) })
+      .setTimestamp();
+    return safeReply(message, { embeds: [embed] }), true;
+  }
+
+  // saran/anonim dibiarkan ke handler lama agar tombol/modal lama tetap aman.
+  return false;
+}
+
+
+function ownerCommandConfig() {
+  if (!config.ownerCommands || typeof config.ownerCommands !== "object") {
+    config.ownerCommands = {};
+  }
+
+  return {
+    enabled: config.ownerCommands.enabled !== false,
+    prefix: String(config.ownerCommands.prefix || "/").trim() || "/",
+    allowedUserIds: Array.isArray(config.ownerCommands.allowedUserIds) ? config.ownerCommands.allowedUserIds.map(String) : []
+  };
+}
+
+function isOwnerCommandUser(message) {
+  if (!message?.guild || !message?.author) return false;
+  const cfg = ownerCommandConfig();
+  if (message.author.id === message.guild.ownerId) return true;
+  return cfg.allowedUserIds.includes(message.author.id);
+}
+
+function normalizeOnOff(value, fallback = null) {
+  const raw = String(value || "").toLowerCase().trim();
+  if (["on", "aktif", "true", "yes", "y", "1", "nyala"].includes(raw)) return true;
+  if (["off", "mati", "false", "no", "n", "0", "nonaktif"].includes(raw)) return false;
+  return fallback;
+}
+
+function parseNumberInput(raw, fallback = 0) {
+  if (raw === undefined || raw === null) return fallback;
+  const clean = String(raw).replaceAll(".", "").replaceAll(",", ".").replace(/[^0-9.\-]/g, "");
+  const n = Number(clean);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function parseOwnerDurationMs(raw, fallbackMs = 10 * 60 * 1000) {
+  const value = String(raw || "").toLowerCase().trim();
+  const match = value.match(/^(\d+(?:\.\d+)?)(s|m|h|d)?$/);
+  if (!match) return fallbackMs;
+  const num = Number(match[1]);
+  const unit = match[2] || "m";
+  const mult = unit === "s" ? 1000 : unit === "h" ? 60 * 60 * 1000 : unit === "d" ? 24 * 60 * 60 * 1000 : 60 * 1000;
+  return Math.max(1000, Math.min(28 * 24 * 60 * 60 * 1000, Math.floor(num * mult)));
+}
+
+function resolveTextChannelArg(message, raw) {
+  if (!message?.guild || !raw) return null;
+  const id = String(raw).replace(/[<#>]/g, "");
+  return message.guild.channels.cache.get(id)
+    || message.mentions.channels.first()
+    || message.guild.channels.cache.find((ch) => ch.name?.toLowerCase() === String(raw).replace(/^#/, "").toLowerCase())
+    || null;
+}
+
+function resolveRoleArg(message, raw) {
+  if (!message?.guild || !raw) return null;
+  const id = String(raw).replace(/[<@&>]/g, "");
+  return message.guild.roles.cache.get(id)
+    || message.mentions.roles.first()
+    || message.guild.roles.cache.find((role) => role.name?.toLowerCase() === String(raw).replace(/^@/, "").toLowerCase())
+    || null;
+}
+
+function resolveMemberArg(message, raw) {
+  if (!message?.guild || !raw) return null;
+  const id = String(raw).replace(/[<@!>]/g, "");
+  return message.guild.members.cache.get(id)
+    || message.mentions.members.first()
+    || message.guild.members.cache.find((member) => member.user.username?.toLowerCase() === String(raw).replace(/^@/, "").toLowerCase())
+    || null;
+}
+
+function saveLiveConfigFromOwner(message, note = "Config disimpan") {
+  try {
+    writeConfigFile(JSON.parse(JSON.stringify(config)));
+    return safeReply(message, `✅ ${note}. Perubahan langsung aktif dan tersimpan ke config.`);
+  } catch (err) {
+    console.log("OWNER SAVE CONFIG ERROR:", err.message);
+    return safeReply(message, `❌ Gagal simpan config: ${err.message}`);
+  }
+}
+
+
+function ownerPointType(raw = "chat") {
+  const value = String(raw || "chat").toLowerCase().trim();
+  if (["voice", "vc", "v", "topvoice"].includes(value)) return "voice";
+  if (["all", "total", "aktif", "active", "semua", "topaktif"].includes(value)) return "all";
+  return "chat";
+}
+
+function resolveOwnerPointTarget(message, args = []) {
+  const first = String(args[0] || "").toLowerCase().trim();
+
+  if (!args[0]) return { member: message.member, amountIndex: 0 };
+
+  if (["me", "self", "aku", "saya", "diri", "sendiri"].includes(first)) {
+    return { member: message.member, amountIndex: 1 };
+  }
+
+  const mentioned = resolveMemberArg(message, args[0]);
+  if (mentioned) return { member: mentioned, amountIndex: 1 };
+
+  const maybeAmount = parseNumberInput(args[0], NaN);
+  if (Number.isFinite(maybeAmount)) return { member: message.member, amountIndex: 0 };
+
+  return { member: null, amountIndex: 1 };
+}
+
+function ensureMonthlyForOwnerEdit(userData) {
+  const monthly = ensureMonthlyStats(userData);
+  monthly.chat = Number(monthly.chat || 0);
+  monthly.voice = Number(monthly.voice || 0);
+  monthly.bonus = Number(monthly.bonus || 0);
+  monthly.total = Number(((monthly.chat || 0) + (monthly.voice || 0)).toFixed(1));
+  return monthly;
+}
+
+function subtractOwnerPoints(userData, amount, type = "chat") {
+  const value = Math.max(0, Number(amount || 0));
+  const monthly = ensureMonthlyForOwnerEdit(userData);
+  const before = {
+    chat: Number(userData.chat || 0),
+    voice: Number(userData.voice || 0),
+    monthlyChat: Number(monthly.chat || 0),
+    monthlyVoice: Number(monthly.voice || 0)
+  };
+
+  if (type === "voice") {
+    userData.voice = Math.max(0, Number(((userData.voice || 0) - value).toFixed(1)));
+    monthly.voice = Math.max(0, Number(((monthly.voice || 0) - value).toFixed(1)));
+  } else if (type === "all") {
+    let remaining = value;
+    const fromChat = Math.min(Number(userData.chat || 0), remaining);
+    userData.chat = Math.max(0, Number(((userData.chat || 0) - fromChat).toFixed(1)));
+    remaining = Number((remaining - fromChat).toFixed(1));
+    const fromVoice = Math.min(Number(userData.voice || 0), remaining);
+    userData.voice = Math.max(0, Number(((userData.voice || 0) - fromVoice).toFixed(1)));
+
+    let monthlyRemaining = value;
+    const monthlyFromChat = Math.min(Number(monthly.chat || 0), monthlyRemaining);
+    monthly.chat = Math.max(0, Number(((monthly.chat || 0) - monthlyFromChat).toFixed(1)));
+    monthlyRemaining = Number((monthlyRemaining - monthlyFromChat).toFixed(1));
+    const monthlyFromVoice = Math.min(Number(monthly.voice || 0), monthlyRemaining);
+    monthly.voice = Math.max(0, Number(((monthly.voice || 0) - monthlyFromVoice).toFixed(1)));
+  } else {
+    userData.chat = Math.max(0, Number(((userData.chat || 0) - value).toFixed(1)));
+    monthly.chat = Math.max(0, Number(((monthly.chat || 0) - value).toFixed(1)));
+  }
+
+  monthly.total = Number(((monthly.chat || 0) + (monthly.voice || 0)).toFixed(1));
+  monthly.lastActivityAt = Date.now();
+  userData.lastActivityAt = Date.now();
+  userData.level = getLevelInfo(userData).current.level;
+
+  return {
+    before,
+    after: {
+      chat: Number(userData.chat || 0),
+      voice: Number(userData.voice || 0),
+      monthlyChat: Number(monthly.chat || 0),
+      monthlyVoice: Number(monthly.voice || 0),
+      monthlyTotal: Number(monthly.total || 0),
+      level: Number(userData.level || 1)
+    }
+  };
+}
+
+function setOwnerPoints(userData, amount, type = "chat") {
+  const value = Math.max(0, Number(amount || 0));
+  const monthly = ensureMonthlyForOwnerEdit(userData);
+
+  if (type === "voice") {
+    userData.voice = Number(value.toFixed(1));
+    monthly.voice = Number(value.toFixed(1));
+  } else if (type === "all") {
+    userData.chat = Number(value.toFixed(1));
+    userData.voice = 0;
+    monthly.chat = Number(value.toFixed(1));
+    monthly.voice = 0;
+  } else {
+    userData.chat = Number(value.toFixed(1));
+    monthly.chat = Number(value.toFixed(1));
+  }
+
+  monthly.total = Number(((monthly.chat || 0) + (monthly.voice || 0)).toFixed(1));
+  monthly.lastActivityAt = Date.now();
+  userData.lastActivityAt = Date.now();
+  userData.level = getLevelInfo(userData).current.level;
+
+  return {
+    chat: Number(userData.chat || 0),
+    voice: Number(userData.voice || 0),
+    monthlyChat: Number(monthly.chat || 0),
+    monthlyVoice: Number(monthly.voice || 0),
+    monthlyTotal: Number(monthly.total || 0),
+    level: Number(userData.level || 1)
+  };
+}
+
+function buildOwnerPointEditEmbed(member, action, amount, type, result) {
+  const after = result?.after || result || {};
+  const actionTitle = action === "set" ? "Poin Diset" : "Poin Dikurangi";
+  const actionText = action === "set" ? "diset menjadi" : "dikurangi";
+
+  return new EmbedBuilder()
+    .setColor(action === "set" ? 0x70a7ff : 0xffb84d)
+    .setTitle(`👑 ${actionTitle} Owner`)
+    .setDescription([
+      `Member: ${member}`,
+      `Aksi: **${actionText} ${formatNumber(amount)} poin ${type}**`,
+      "",
+      `💬 Chat sekarang: **${formatNumber(after.chat || 0)} poin**`,
+      `🎙️ Voice sekarang: **${formatNumber(after.voice || 0)} poin**`,
+      `🏆 Total bulan ini: **${formatNumber(after.monthlyTotal || 0)} poin**`,
+      `🏷️ Level sekarang: **${formatNumber(after.level || 1)}**`,
+      "",
+      "Perubahan ini khusus Owner dan langsung tersimpan ke data level/Top Aktif."
+    ].join("\n"))
+    .setFooter({ text: makeOTFooter(`${config.serverName || "DESA TULUS"} • Owner Point Control`) })
+    .setTimestamp();
+}
+
+function ownerHelpEmbed(message) {
+  const p = ownerCommandConfig().prefix;
+  return new EmbedBuilder()
+    .setColor(0xf5c542)
+    .setTitle("👑 Owner Control Pak RW")
+    .setDescription([
+      `Prefix owner khusus: **\`${p}\`**`,
+      "Command ini hanya bisa dipakai oleh **Owner Server** atau ID yang dimasukkan ke `ownerCommands.allowedUserIds`.",
+      "",
+      "**🧠 Bot & Config**",
+      `\`${p}status\` • status lengkap bot`,
+      `\`${p}ping\` • cek ping bot`,
+      `\`${p}reloadconfig\` • reload config dari file`,
+      `\`${p}backupconfig\` • download backup config.json`,
+      `\`${p}setprefix kiw\` • ganti prefix publik`,
+      `\`${p}setactivity DESA TULUS 🤍\` • ganti activity bot`,
+      `\`${p}setai openai/gpt-4o-mini\` • ganti model AI`,
+      "",
+      "**🏆 Top Aktif / Level / MOTM**",
+      `\`${p}settopchannel #channel\` • ganti channel Top Aktif`,
+      `\`${p}setmotmrole @role\` • ganti role Member Of The Month`,
+      `\`${p}setmotmtarget 10000\` • ganti target poin MOTM`,
+      `\`${p}setbonus 15\` • ganti bonus Booster/Juragan/Donatur`,
+      `\`${p}hideownerlevel on\` • owner tidak masuk level/leaderboard`,
+      `\`${p}fixlevel\` • sinkronkan level agar sesuai total poin`,
+      `\`${p}levelrule\` • lihat rumus level yang aktif`,
+      `\`${p}givepoin @user 500 chat\` • tambah poin chat/voice`,
+      `\`${p}kurangpoin @user 100 chat\` • kurangi poin member`,
+      `\`${p}kurangpoin 100 chat\` • kurangi poin diri sendiri`,
+      `\`${p}setpoin @user 10000 chat\` • set poin chat/voice`,
+      `\`${p}resetpoin @user\` • reset poin member`,
+      `\`${p}rank @user\` • cek level member`,
+      `\`${p}posttopaktif\` • kirim board Top Aktif`,
+      `\`${p}testmotm @user\` • test MOTM ke channel Top Aktif`,
+      "",
+      "**💬 Kirim Pesan & Embed**",
+      `\`${p}say #channel pesan\` • kirim pesan lewat bot`,
+      `\`${p}embed #channel | Judul | Deskripsi | #F5C542\` • kirim embed cepat`,
+      `\`${p}dm @user pesan\` • kirim DM lewat bot`,
+      "",
+      "**🛡️ Moderasi & Server**",
+      `\`${p}purge 20\` • hapus pesan`,
+      `\`${p}lock #channel\` / \`${p}unlock #channel\` • kunci/buka channel`,
+      `\`${p}slowmode #channel 10\` • atur slowmode`,
+      `\`${p}roleadd @user @role\` / \`${p}roleremove @user @role\` • atur role`,
+      `\`${p}nick @user Nama Baru\` • ganti nickname`,
+      `\`${p}timeout @user 10m alasan\` / \`${p}untimeout @user\` • timeout member`,
+      `\`${p}kick @user alasan\` • keluarkan member`,
+      `\`${p}ban @user alasan\` / \`${p}unban userId alasan\` • ban/unban member`,
+      "",
+      "**💎 Juragan / Donatur**",
+      `\`${p}donatur @user 100k\` • kasih Donatur sesuai nominal`,
+      `\`${p}hapusdonatur @user\` • cabut Donatur`,
+      `\`${p}testboost @user\` • test Juragan/boost untuk user`
+    ].join("\n"))
+    .setFooter({ text: makeOTFooter(`${config.serverName || "DESA TULUS"} • Owner Commands`) })
+    .setTimestamp();
+}
+
+async function handleOwnerPrefixCommand(message) {
+  if (message.author.bot || !message.guild) return false;
+  const ownerCfg = ownerCommandConfig();
+  if (!ownerCfg.enabled) return false;
+  const p = ownerCfg.prefix;
+  if (!message.content.startsWith(p)) return false;
+
+  if (!isOwnerCommandUser(message)) {
+    await safeReply(message, `❌ Command \`${p}\` ini khusus Owner server.`);
+    return true;
+  }
+
+  const raw = message.content.slice(p.length).trim();
+  if (!raw) {
+    await safeReply(message, { embeds: [ownerHelpEmbed(message)] });
+    return true;
+  }
+
+  const parts = raw.split(/\s+/);
+  const cmd = (parts.shift() || "").toLowerCase();
+  const args = parts;
+  const rest = raw.slice(cmd.length).trim();
+
+  if (["help", "ownerhelp", "commands", "menu"].includes(cmd)) {
+    await safeReply(message, { embeds: [ownerHelpEmbed(message)] });
+    return true;
+  }
+
+  if (cmd === "ping") {
+    await safeReply(message, `🏓 Pong owner! Ping bot: **${client.ws.ping}ms**`);
+    return true;
+  }
+
+  if (cmd === "status") {
+    const dbStatus = await getMongoStatus(message.guild.id).catch(() => null);
+    const cfg = getTopActiveConfig();
+    const embed = new EmbedBuilder()
+      .setColor(0xf5c542)
+      .setTitle("👑 Status Owner Pak RW")
+      .setDescription([
+        `**Bot:** ${client.user?.tag || "belum ready"}`,
+        `**Server:** ${message.guild.name}`,
+        `**Ping:** ${client.ws.ping}ms`,
+        `**Prefix publik:** \`${config.prefix || "rw"}\``,
+        `**Prefix owner:** \`${ownerCfg.prefix}\``,
+        `**AI Model:** \`${config.ai?.openRouterModel || "openai/gpt-4o-mini"}\``,
+        `**MongoDB:** ${dbStatus?.active ? "Aktif ✅" : "Fallback/Belum aktif ⚠️"}`,
+        `**Top Aktif:** ${cfg.enabled ? "Aktif" : "Nonaktif"} • <#${cfg.channelId || "0"}>`,
+        `**MOTM Target:** ${formatNumber(cfg.pointsThreshold || 10000)} poin`,
+        `**Bonus:** ${cfg.bonusEnabled ? `+${cfg.bonusPercent || 15}% aktif` : "Nonaktif"}`,
+        `**Owner di Level/Leaderboard:** ${cfg.excludeOwnerFromLevel !== false && cfg.excludeOwnerFromLeaderboard !== false ? "Disembunyikan ✅" : "Masih bisa tampil ⚠️"}`,
+        `**Uptime:** ${Math.floor(process.uptime() / 60)} menit`
+      ].join("\n"))
+      .setFooter({ text: makeOTFooter(`${config.serverName || "DESA TULUS"} • Owner Status`) })
+      .setTimestamp();
+    await safeReply(message, { embeds: [embed] });
+    return true;
+  }
+
+  if (cmd === "reloadconfig") {
+    const fresh = readConfigFile();
+    syncLiveConfig(fresh);
+    await safeReply(message, "✅ Config berhasil di-reload dari file/dashboard.");
+    return true;
+  }
+
+  if (cmd === "backupconfig") {
+    const buffer = Buffer.from(JSON.stringify(config, null, 2), "utf8");
+    const file = new AttachmentBuilder(buffer, { name: `pak-rw-config-backup-${Date.now()}.json` });
+    await safeReply(message, { content: "✅ Backup config Pak RW.", files: [file] });
+    return true;
+  }
+
+  if (cmd === "setprefix") {
+    if (!args[0]) return safeReply(message, `❌ Contoh: \`${p}setprefix kiw\``), true;
+    config.prefix = args[0];
+    await saveLiveConfigFromOwner(message, `Prefix publik diganti jadi \`${config.prefix}\``);
+    return true;
+  }
+
+  if (cmd === "setactivity") {
+    if (!rest) return safeReply(message, `❌ Contoh: \`${p}setactivity DESA TULUS 🤍\``), true;
+    config.activityText = rest;
+    await client.user?.setActivity(config.activityText, { type: ActivityType.Watching }).catch(() => null);
+    await saveLiveConfigFromOwner(message, `Activity bot diganti jadi **${config.activityText}**`);
+    return true;
+  }
+
+  if (cmd === "setai" || cmd === "setmodel") {
+    if (!args[0]) return safeReply(message, `❌ Contoh: \`${p}setai openai/gpt-4o-mini\``), true;
+    config.ai = config.ai || {};
+    config.ai.openRouterModel = args[0];
+    await saveLiveConfigFromOwner(message, `Model AI diganti jadi \`${config.ai.openRouterModel}\``);
+    return true;
+  }
+
+  const channelSetMap = {
+    setaichannel: "aiChannelId",
+    setai: "aiChannelId_unused",
+    setcurhat: "curhatChannelId",
+    setanonim: "anonymousCurhatChannelId",
+    setsaran: "suggestionChannelId",
+    setchatwarga: "chatWargaChannelId",
+    setlevelchannel: "levelChannelId"
+  };
+
+  if (["setaichannel", "setcurhat", "setanonim", "setsaran", "setchatwarga", "setlevelchannel"].includes(cmd)) {
+    const channel = resolveTextChannelArg(message, args[0]);
+    if (!channel) return safeReply(message, `❌ Channel tidak ditemukan. Contoh: \`${p}${cmd} #channel\``), true;
+    const key = channelSetMap[cmd];
+    config[key] = channel.id;
+    await saveLiveConfigFromOwner(message, `${key} diganti ke ${channel}`);
+    return true;
+  }
+
+  if (cmd === "settopchannel") {
+    const channel = resolveTextChannelArg(message, args[0]);
+    if (!channel) return safeReply(message, `❌ Channel Top Aktif tidak ditemukan. Contoh: \`${p}settopchannel #top-aktif\``), true;
+    config.topActive = config.topActive || {};
+    config.topActive.channelId = channel.id;
+    config.topActive.useOneChannel = true;
+    await saveLiveConfigFromOwner(message, `Channel Top Aktif diganti ke ${channel}`);
+    return true;
+  }
+
+  if (cmd === "setmotmrole") {
+    const role = resolveRoleArg(message, args[0]);
+    if (!role) return safeReply(message, `❌ Role MOTM tidak ditemukan. Contoh: \`${p}setmotmrole @Member Of The Month\``), true;
+    config.topActive = config.topActive || {};
+    config.topActive.memberOfTheMonthRoleId = role.id;
+    await saveLiveConfigFromOwner(message, `Role Member Of The Month diganti ke ${role}`);
+    return true;
+  }
+
+  if (cmd === "setmotmtarget" || cmd === "settargetmotm") {
+    const value = parseNumberInput(args[0], 0);
+    if (!value || value < 1) return safeReply(message, `❌ Contoh: \`${p}setmotmtarget 10000\``), true;
+    config.topActive = config.topActive || {};
+    config.topActive.pointsThreshold = Math.round(value);
+    await saveLiveConfigFromOwner(message, `Target MOTM diganti jadi **${formatNumber(config.topActive.pointsThreshold)} poin**`);
+    return true;
+  }
+
+  if (cmd === "setbonus") {
+    const value = normalizeOnOff(args[0], null);
+    config.topActive = config.topActive || {};
+    if (value !== null) {
+      config.topActive.bonusEnabled = value;
+      await saveLiveConfigFromOwner(message, `Bonus poin ${value ? "diaktifkan" : "dimatikan"}`);
+      return true;
+    }
+    const percent = parseNumberInput(args[0], 15);
+    if (percent < 0 || percent > 500) return safeReply(message, "❌ Bonus harus angka 0 sampai 500."), true;
+    config.topActive.bonusEnabled = true;
+    config.topActive.bonusPercent = percent;
+    await saveLiveConfigFromOwner(message, `Bonus Booster/Juragan/Donatur diganti jadi **+${percent}%**`);
+    return true;
+  }
+
+
+  if (["hideownerlevel", "ownerhide", "excludeowner", "ownerlevel"].includes(cmd)) {
+    const value = normalizeOnOff(args[0], true);
+    config.topActive = config.topActive || {};
+    config.level = config.level || {};
+    config.topActive.excludeOwnerFromLevel = value;
+    config.topActive.excludeOwnerFromLeaderboard = value;
+    config.level.excludeOwnerFromLevel = value;
+    if (value) removeOwnerLevelData(message.guild);
+    await saveLiveConfigFromOwner(message, value ? "Owner sekarang tidak dihitung di level dan tidak muncul di leaderboard" : "Owner sekarang boleh ikut level dan leaderboard");
+    return true;
+  }
+
+  if (cmd === "toggle") {
+    const feature = String(args[0] || "").toLowerCase();
+    const value = normalizeOnOff(args[1], null);
+    if (!feature || value === null) return safeReply(message, `❌ Contoh: \`${p}toggle topaktif on\`, \`${p}toggle imagethread off\``), true;
+    const map = {
+      welcome: () => { config.welcome = config.welcome || {}; config.welcome.enabled = value; },
+      saran: () => { config.suggestion = config.suggestion || {}; config.suggestion.enabled = value; },
+      suggestion: () => { config.suggestion = config.suggestion || {}; config.suggestion.enabled = value; },
+      juragan: () => { config.juragan = config.juragan || {}; config.juragan.enabled = value; },
+      topaktif: () => { config.topActive = config.topActive || {}; config.topActive.enabled = value; },
+      motm: () => { config.topActive = config.topActive || {}; config.topActive.announceMemberOfTheMonth = value; config.topActive.motmAwardMode = value ? "auto" : "manual_only"; config.topActive.autoMotmRole = value === true; },
+      banner: () => { config.topActive = config.topActive || {}; config.topActive.bannerEnabled = value; },
+      bonus: () => { config.topActive = config.topActive || {}; config.topActive.bonusEnabled = value; },
+      imagethread: () => { config.topActive = config.topActive || {}; config.topActive.autoImageThreadEnabled = value; }
+    };
+    if (!map[feature]) return safeReply(message, "❌ Fitur tidak dikenal. Pilihan: welcome, saran, juragan, topaktif, motm, banner, bonus, imagethread."), true;
+    map[feature]();
+    await saveLiveConfigFromOwner(message, `Fitur **${feature}** sekarang **${value ? "Aktif" : "Nonaktif"}**`);
+    return true;
+  }
+
+  if (["fixlevel", "synclevel", "relevel"].includes(cmd)) {
+    const result = syncAllLevelsWithPoints(message.guild);
+    await safeReply(message, [
+      "✅ Level sudah disinkronkan ulang berdasarkan total poin.",
+      `Data dicek: **${formatNumber(result.total)}** user`,
+      `Level yang diperbaiki: **${formatNumber(result.changed)}** user`,
+      "Rumus aktif: **Total Poin / Poin per Level**."
+    ].join("\n"));
+    return true;
+  }
+
+  if (["levelrule", "rumuslevel", "aturanlevel"].includes(cmd)) {
+    const tuning = getLevelTuningConfig();
+    await safeReply(message, [
+      "📌 **Rumus Level Pak RW**",
+      `Mode: **${tuning.mode}**`,
+      `Total Poin = **Poin Chat + Poin Voice**`,
+      `Setiap **${formatNumber(tuning.pointsPerLevel)} poin total** naik **1 level**.`,
+      `Level maksimal: **${formatNumber(tuning.maxLevel)}**`,
+      "Contoh: 0-499 poin = Level 1, 500 poin = Level 2, 10.000 poin = Level 21."
+    ].join("\n"));
+    return true;
+  }
+
+  if (cmd === "posttopaktif" || cmd === "posttop") {
+    const channel = resolveTextChannelArg(message, args[0]) || getTextChannel(message.guild, getTopActiveConfig().channelId) || message.channel;
+    await channel.send({ embeds: [buildTopActiveBoardEmbed(message.guild, "owner command")] });
+    await safeReply(message, `✅ Board Top Aktif gaya DESA TULUS dikirim ke ${channel}.`);
+    return true;
+  }
+
+  if (cmd === "testmotm") {
+    const target = resolveMemberArg(message, args[0]) || message.member;
+    if (shouldExcludeOwnerFromLevel(message.guild, target.id)) {
+      removeOwnerLevelData(message.guild);
+      return safeReply(message, "👑 Owner server tidak masuk Member Of The Month / Top Aktif. Tag member lain untuk test MOTM."), true;
+    }
+    const data = readLevelData();
+    const realUserData = getLevelUser(data, message.guild.id, target.id);
+    const testUserData = makeSafeTestMotmData(realUserData);
+    const result = await forceSendMemberOfTheMonthTest(target, testUserData, message.channel, { giveRole: false });
+    await safeReply(message, result.ok ? `✅ Test MOTM dikirim untuk ${target} ke ${result.channel}. Data asli tidak diubah: poin, level, dan role tidak ditambah.` : `❌ Test MOTM gagal: ${result.reason || "unknown"}`);
+    return true;
+  }
+
+  if (cmd === "givepoin" || cmd === "addpoin" || cmd === "tambahpoin") {
+    const parsed = resolveOwnerPointTarget(message, args);
+    const target = parsed.member;
+    const amount = parseNumberInput(args[parsed.amountIndex], 0);
+    const type = ownerPointType(args[parsed.amountIndex + 1] || "chat");
+    if (!target || !amount || amount < 0) {
+      return safeReply(message, `❌ Contoh: \`${p}givepoin @user 500 chat\`, \`${p}givepoin @user 30 voice\`, atau \`${p}givepoin 100 chat\` untuk diri sendiri.`), true;
+    }
+
+    if (shouldExcludeOwnerFromLevel(message.guild, target.id)) {
+      removeOwnerLevelData(message.guild);
+      return safeReply(message, "👑 Owner server tidak dihitung di level/Top Aktif. Data owner dibersihkan dan tidak ditambah poin."), true;
+    }
+
+    const data = readLevelData();
+    const userData = getLevelUser(data, message.guild.id, target.id);
+    const beforeLevel = getLevelInfo(userData).current.level;
+    const monthly = ensureMonthlyForOwnerEdit(userData);
+
+    if (type === "voice") {
+      userData.voice = Number(((userData.voice || 0) + amount).toFixed(1));
+      monthly.voice = Number(((monthly.voice || 0) + amount).toFixed(1));
+    } else if (type === "all") {
+      userData.chat = Number(((userData.chat || 0) + amount).toFixed(1));
+      monthly.chat = Number(((monthly.chat || 0) + amount).toFixed(1));
+    } else {
+      userData.chat = Number(((userData.chat || 0) + amount).toFixed(1));
+      monthly.chat = Number(((monthly.chat || 0) + amount).toFixed(1));
+    }
+
+    monthly.total = Number(((monthly.chat || 0) + (monthly.voice || 0)).toFixed(1));
+    userData.level = getLevelInfo(userData).current.level;
+    userData.lastActivityAt = Date.now();
+    const afterLevel = userData.level;
+    writeLevelData(data);
+    if (afterLevel > beforeLevel) {
+      await sendLevelUp(target, userData, message.channel);
+    }
+    await safeReply(message, { content: `✅ ${target} mendapat **${formatNumber(amount)} poin ${type}**.${afterLevel > beforeLevel ? " Level-up juga dikirim ke channel level." : ""}`, embeds: [buildLevelProfileEmbed(target, userData)] });
+    return true;
+  }
+
+  if (["kurangpoin", "kurangpoint", "minuspoin", "minuspoint", "takepoin", "removepoin", "hapuspoint", "potongpoin"].includes(cmd)) {
+    const parsed = resolveOwnerPointTarget(message, args);
+    const target = parsed.member;
+    const amount = parseNumberInput(args[parsed.amountIndex], 0);
+    const type = ownerPointType(args[parsed.amountIndex + 1] || "chat");
+
+    if (!target || !amount || amount < 0) {
+      return safeReply(message, [
+        `❌ Contoh kurangi poin member: \`${p}kurangpoin @user 100 chat\``,
+        `❌ Contoh kurangi poin voice: \`${p}kurangpoin @user 50 voice\``,
+        `❌ Contoh kurangi poin diri sendiri: \`${p}kurangpoin 100 chat\` atau \`${p}kurangpoin me 100 chat\``
+      ].join("\n")), true;
+    }
+
+    if (shouldExcludeOwnerFromLevel(message.guild, target.id)) {
+      removeOwnerLevelData(message.guild);
+      return safeReply(message, "✅ Data level owner sudah dibersihkan. Owner tetap tidak masuk level dan leaderboard."), true;
+    }
+
+    const data = readLevelData();
+    const userData = getLevelUser(data, message.guild.id, target.id);
+    const result = subtractOwnerPoints(userData, amount, type);
+    writeLevelData(data);
+
+    await safeReply(message, {
+      content: `✅ Poin ${target} berhasil dikurangi **${formatNumber(amount)} poin ${type}**.`,
+      embeds: [buildOwnerPointEditEmbed(target, "minus", amount, type, result)]
+    });
+    return true;
+  }
+
+  if (["setpoin", "setpoint", "aturpoin", "setpoints"].includes(cmd)) {
+    const parsed = resolveOwnerPointTarget(message, args);
+    const target = parsed.member;
+    const amount = parseNumberInput(args[parsed.amountIndex], -1);
+    const type = ownerPointType(args[parsed.amountIndex + 1] || "chat");
+
+    if (!target || amount < 0) {
+      return safeReply(message, `❌ Contoh: \`${p}setpoin @user 10000 chat\`, \`${p}setpoin @user 500 voice\`, atau \`${p}setpoin 10000 chat\` untuk diri sendiri.`), true;
+    }
+
+    if (shouldExcludeOwnerFromLevel(message.guild, target.id)) {
+      removeOwnerLevelData(message.guild);
+      return safeReply(message, "👑 Owner server tidak dihitung di level/Top Aktif. Data owner dibersihkan dan tidak bisa diset poin."), true;
+    }
+
+    const data = readLevelData();
+    const userData = getLevelUser(data, message.guild.id, target.id);
+    const beforeLevel = getLevelInfo(userData).current.level;
+    const result = setOwnerPoints(userData, amount, type);
+    const afterLevel = Number(result.level || getLevelInfo(userData).current.level);
+    writeLevelData(data);
+    if (afterLevel > beforeLevel) {
+      await sendLevelUp(target, userData, message.channel);
+    }
+
+    await safeReply(message, {
+      content: `✅ Poin ${target} berhasil diset ke **${formatNumber(amount)} poin ${type}**.${afterLevel > beforeLevel ? " Level-up juga dikirim ke channel level." : ""}`,
+      embeds: [buildOwnerPointEditEmbed(target, "set", amount, type, result)]
+    });
+    return true;
+  }
+
+  if (cmd === "resetpoin") {
+    const target = resolveMemberArg(message, args[0]);
+    if (!target) return safeReply(message, `❌ Contoh: \`${p}resetpoin @user\``), true;
+    if (shouldExcludeOwnerFromLevel(message.guild, target.id)) {
+      removeOwnerLevelData(message.guild);
+      return safeReply(message, "✅ Data level owner sudah dibersihkan. Owner tetap tidak masuk level dan leaderboard."), true;
+    }
+
+    const data = readLevelData();
+    const userData = getLevelUser(data, message.guild.id, target.id);
+    userData.chat = 0;
+    userData.voice = 0;
+    userData.level = 1;
+    userData.lastActivityAt = Date.now();
+    writeLevelData(data);
+    await safeReply(message, `✅ Poin ${target} sudah direset.`);
+    return true;
+  }
+
+  if (cmd === "rank" || cmd === "cekpoin") {
+    const target = resolveMemberArg(message, args[0]) || message.member;
+    if (shouldExcludeOwnerFromLevel(message.guild, target.id)) {
+      removeOwnerLevelData(message.guild);
+      return safeReply(message, "👑 Owner server tidak dihitung di sistem level dan tidak muncul di leaderboard keaktifan."), true;
+    }
+    const data = readLevelData();
+    const userData = getLevelUser(data, message.guild.id, target.id);
+    await sendLevelProfileMessage(message, target, userData);
+    return true;
+  }
+
+  if (cmd === "say") {
+    const channel = resolveTextChannelArg(message, args[0]);
+    const content = rest.slice((args[0] || "").length).trim();
+    if (!channel || !content) return safeReply(message, `❌ Contoh: \`${p}say #channel Halo warga DESA TULUS\``), true;
+    await channel.send(content);
+    await safeReply(message, `✅ Pesan dikirim ke ${channel}.`);
+    return true;
+  }
+
+  if (cmd === "embed") {
+    const channel = resolveTextChannelArg(message, args[0]);
+    const content = rest.slice((args[0] || "").length).trim();
+    const [titleRaw, descRaw, colorRaw] = content.split("|").map((x) => x?.trim());
+    if (!channel || !titleRaw || !descRaw) return safeReply(message, `❌ Contoh: \`${p}embed #channel | Judul | Deskripsi | #F5C542\``), true;
+    const embedColor = Number.parseInt(String(colorRaw || "#F5C542").replace("#", ""), 16);
+    const embed = new EmbedBuilder()
+      .setColor(Number.isNaN(embedColor) ? 0xf5c542 : embedColor)
+      .setTitle(titleRaw)
+      .setDescription(descRaw.replaceAll("\\n", "\n"))
+      .setFooter({ text: makeOTFooter(`${config.serverName || "DESA TULUS"} • Owner Embed`) })
+      .setTimestamp();
+    await channel.send({ embeds: [embed] });
+    await safeReply(message, `✅ Embed dikirim ke ${channel}.`);
+    return true;
+  }
+
+  if (cmd === "dm") {
+    const target = resolveMemberArg(message, args[0]);
+    const content = rest.slice((args[0] || "").length).trim();
+    if (!target || !content) return safeReply(message, `❌ Contoh: \`${p}dm @user Halo dari DESA TULUS\``), true;
+    await target.send(content).catch((err) => safeReply(message, `❌ DM gagal: ${err.message}`));
+    await safeReply(message, `✅ DM dicoba dikirim ke ${target}.`);
+    return true;
+  }
+
+  if (cmd === "purge" || cmd === "clear") {
+    const amount = Math.max(1, Math.min(100, Math.floor(parseNumberInput(args[0], 0))));
+    if (!amount) return safeReply(message, `❌ Contoh: \`${p}purge 20\``), true;
+    const deleted = await message.channel.bulkDelete(amount, true).catch((err) => null);
+    await safeSend(message.channel, `✅ Owner membersihkan **${deleted?.size || 0}** pesan.`);
+    return true;
+  }
+
+  if (cmd === "lock" || cmd === "unlock") {
+    const channel = resolveTextChannelArg(message, args[0]) || message.channel;
+    const deny = cmd === "lock";
+    await channel.permissionOverwrites.edit(message.guild.roles.everyone, {
+      SendMessages: deny ? false : null
+    }).catch((err) => safeReply(message, `❌ Gagal update permission: ${err.message}`));
+    await safeReply(message, deny ? `🔒 ${channel} dikunci.` : `🔓 ${channel} dibuka lagi.`);
+    return true;
+  }
+
+  if (cmd === "slowmode") {
+    const channel = resolveTextChannelArg(message, args[0]) || message.channel;
+    const secondsRaw = channel.id === (resolveTextChannelArg(message, args[0])?.id || "") ? args[1] : args[0];
+    const seconds = Math.max(0, Math.min(21600, Math.floor(parseNumberInput(secondsRaw, 0))));
+    await channel.setRateLimitPerUser(seconds).catch((err) => safeReply(message, `❌ Gagal set slowmode: ${err.message}`));
+    await safeReply(message, `✅ Slowmode ${channel} jadi **${seconds} detik**.`);
+    return true;
+  }
+
+  if (cmd === "roleadd" || cmd === "addrole" || cmd === "roleremove" || cmd === "removerole") {
+    const target = resolveMemberArg(message, args[0]);
+    const role = resolveRoleArg(message, args[1]);
+    if (!target || !role) return safeReply(message, `❌ Contoh: \`${p}roleadd @user @role\` atau \`${p}roleremove @user @role\``), true;
+    const add = ["roleadd", "addrole"].includes(cmd);
+    await (add ? target.roles.add(role) : target.roles.remove(role)).catch((err) => safeReply(message, `❌ Gagal atur role: ${err.message}`));
+    await safeReply(message, add ? `✅ ${role} diberikan ke ${target}.` : `✅ ${role} dicabut dari ${target}.`);
+    return true;
+  }
+
+  if (cmd === "nick" || cmd === "nickname") {
+    const target = resolveMemberArg(message, args[0]);
+    const nickname = rest.slice((args[0] || "").length).trim();
+    if (!target || !nickname) return safeReply(message, `❌ Contoh: \`${p}nick @user Nama Baru\``), true;
+    await target.setNickname(nickname).catch((err) => safeReply(message, `❌ Gagal ganti nickname: ${err.message}`));
+    await safeReply(message, `✅ Nickname ${target} diganti jadi **${nickname}**.`);
+    return true;
+  }
+
+  if (cmd === "timeout") {
+    const target = resolveMemberArg(message, args[0]);
+    const ms = parseOwnerDurationMs(args[1], 10 * 60 * 1000);
+    const reason = rest.split(/\s+/).slice(2).join(" ") || `Timeout oleh owner ${message.author.tag}`;
+    if (!target) return safeReply(message, `❌ Contoh: \`${p}timeout @user 10m spam\``), true;
+    await target.timeout(ms, reason).catch((err) => safeReply(message, `❌ Gagal timeout: ${err.message}`));
+    await safeReply(message, `✅ ${target} di-timeout selama **${Math.ceil(ms / 60000)} menit**.`);
+    return true;
+  }
+
+  if (cmd === "untimeout") {
+    const target = resolveMemberArg(message, args[0]);
+    if (!target) return safeReply(message, `❌ Contoh: \`${p}untimeout @user\``), true;
+    await target.timeout(null, `Untimeout oleh owner ${message.author.tag}`).catch((err) => safeReply(message, `❌ Gagal hapus timeout: ${err.message}`));
+    await safeReply(message, `✅ Timeout ${target} sudah dihapus.`);
+    return true;
+  }
+
+  if (cmd === "kick") {
+    const target = resolveMemberArg(message, args[0]);
+    const reason = rest.slice((args[0] || "").length).trim() || `Kick oleh owner ${message.author.tag}`;
+    if (!target) return safeReply(message, `❌ Contoh: \`${p}kick @user alasan\``), true;
+    if (target.id === message.guild.ownerId) return safeReply(message, "❌ Tidak bisa kick owner server."), true;
+    await target.kick(reason).catch((err) => safeReply(message, `❌ Gagal kick: ${err.message}`));
+    await safeReply(message, `✅ ${target.user.tag} sudah dikeluarkan dari server.`);
+    return true;
+  }
+
+  if (cmd === "ban") {
+    const target = resolveMemberArg(message, args[0]);
+    const reason = rest.slice((args[0] || "").length).trim() || `Ban oleh owner ${message.author.tag}`;
+    if (!target) return safeReply(message, `❌ Contoh: \`${p}ban @user alasan\``), true;
+    if (target.id === message.guild.ownerId) return safeReply(message, "❌ Tidak bisa ban owner server."), true;
+    await target.ban({ reason }).catch((err) => safeReply(message, `❌ Gagal ban: ${err.message}`));
+    await safeReply(message, `✅ ${target.user.tag} sudah diban.`);
+    return true;
+  }
+
+  if (cmd === "unban") {
+    const userId = String(args[0] || "").replace(/[^0-9]/g, "");
+    const reason = rest.slice((args[0] || "").length).trim() || `Unban oleh owner ${message.author.tag}`;
+    if (!userId) return safeReply(message, `❌ Contoh: \`${p}unban 123456789 alasan\``), true;
+    await message.guild.members.unban(userId, reason).catch((err) => safeReply(message, `❌ Gagal unban: ${err.message}`));
+    await safeReply(message, `✅ User ID **${userId}** sudah di-unban.`);
+    return true;
+  }
+
+  if (cmd === "donatur") {
+    const target = resolveMemberArg(message, args[0]);
+    const amount = parseDonationAmount(args[1]);
+    if (!target || !amount) return safeReply(message, `❌ Contoh: \`${p}donatur @user 100k\``), true;
+    const days = donationDays(amount);
+    await grantDonaturRole(target, days, message.member, message.channel, amount);
+    return true;
+  }
+
+  if (cmd === "hapusdonatur") {
+    const target = resolveMemberArg(message, args[0]);
+    if (!target) return safeReply(message, `❌ Contoh: \`${p}hapusdonatur @user\``), true;
+    await removeDonaturRole(target, message.channel);
+    return true;
+  }
+
+  if (cmd === "testboost") {
+    const target = resolveMemberArg(message, args[0]) || message.member;
+    const role = isFilledId(config.juragan?.roleId) ? message.guild.roles.cache.get(config.juragan.roleId) : null;
+    if (role && !target.roles.cache.has(role.id)) await target.roles.add(role).catch((err) => console.log("OWNER TESTBOOST ROLE ERROR:", err.message));
+    await sendJuraganWelcome(target);
+    await safeReply(message, `✅ Test Juragan/boost dikirim untuk ${target}.`);
+    return true;
+  }
+
+  await safeReply(message, `❌ Command owner tidak dikenal. Ketik \`${p}help\` untuk lihat daftar command.`);
+  return true;
+}
+
+client.on(Events.MessageCreate, async (message) => {
+  try {
+    if (message.author.bot || !message.guild) return;
+
+    await handleOwoAutoRole(message);
+
+    if (await handleOwnerPrefixCommand(message)) return;
+
+    const prefix = config.prefix || "!";
+    const lower = message.content.toLowerCase();
+
+    if (await handleKiwLevelCommand(message)) return;
+
+    if (await handleKiwTanyaCommand(message)) return;
+
+    if (await handleKiwVoiceCommand(message)) return;
+
+    await handleChatLevel(message);
+
+    if (message.content.startsWith(prefix)) {
+      const args = message.content.slice(prefix.length).trim().split(/\s+/);
+      const cmd = (args.shift() || "").toLowerCase();
+
+      const commandCenterHandled = await handlePakRwCommandCenterPrefix(message, cmd, args);
+      if (commandCenterHandled) return;
+
+      const utilityHandled = await handleUtilityCommand(message, cmd, args);
+      if (utilityHandled) return;
+
+      if (cmd === "ping") {
+        return safeReply(message, `🏓 Pong! Ping bot: **${client.ws.ping}ms**`);
+      }
+
+      if (cmd === "status") {
+        const embed = new EmbedBuilder()
+          .setColor(color())
+          .setTitle("🤖 Pak RW Status")
+          .setDescription(
+            `✅ Bot online dan stabil\n` +
+            `🏠 Server: **${message.guild.name}**\n` +
+            `👥 Member: **${message.guild.memberCount}**\n` +
+            `⚡ Ping: **${client.ws.ping}ms**\n` +
+            `💬 AI Channel: ${isFilledId(config.aiChannelId) ? `<#${config.aiChannelId}>` : "belum diisi"}\n` +
+            `💡 Saran: ${config.suggestion?.enabled ? "aktif" : "mati"}\n` +
+            `💎 Juragan: ${config.juragan?.enabled ? "aktif" : "mati"}`
+          )
+          .setFooter({ text: makeOTFooter("Pak RW • DESA TULUS") })
+          .setTimestamp();
+
+        return safeReply(message, { embeds: [embed] });
+      }
+
+
+
+      if (["besar", "bigbot", "botbesar", "desa", "pakrw", "balai", "peta"].includes(cmd)) {
+        return safeReply(message, { embeds: [buildPakRwBigBotEmbed(message)] });
+      }
+
+      if (cmd === "mongodb" || cmd === "mongo" || cmd === "db") {
+        const dbStatus = await getMongoStatus(message.guild.id);
+        const embed = new EmbedBuilder()
+          .setColor(dbStatus.active ? 0x48e6a6 : 0xffd166)
+          .setTitle("🗄️ Status Database Pak RW")
+          .setDescription([
+            `**Mode:** ${dbStatus.active ? "MongoDB aktif ✅" : "Local JSON fallback ⚠️"}`,
+            `**MONGODB_URI:** ${dbStatus.uriSet ? "terisi" : "belum diisi"}`,
+            `**Level users:** ${dbStatus.levelUsers}`,
+            `**Temp roles:** ${dbStatus.tempRoles}`,
+            `**Snapshot member:** ${dbStatus.memberSnapshots}`,
+            "",
+            dbStatus.active
+              ? "Data penting Pak RW tersimpan di MongoDB dan lebih aman dari reset hosting."
+              : "Isi ENV hostings `MONGODB_URI` lalu redeploy supaya data tidak reset."
+          ].join("\n"))
+          .setFooter({ text: makeOTFooter(`${config.serverName} • MongoDB Storage`) })
+          .setTimestamp();
+
+        return safeReply(message, { embeds: [embed] });
+      }
+
+      if (cmd === "level" || cmd === "rank" || cmd === "cekpoin") {
+        const target = message.mentions.members.first() || message.member;
+        const data = readLevelData();
+        const userData = getLevelUser(data, message.guild.id, target.id);
+
+        return sendLevelProfileMessage(message, target, userData);
+      }
+
+      if (cmd === "bonuslevel" || cmd === "cekbonus" || cmd === "bonuspoin") {
+        const target = message.mentions.members.first() || message.member;
+        const data = readLevelData();
+        const userData = getLevelUser(data, message.guild.id, target.id);
+        const info = getLevelBonusInfo(target);
+        const embed = new EmbedBuilder()
+          .setColor(info.active ? 0xf5c542 : color())
+          .setTitle("🎁 Cek Bonus Ekstra Poin")
+          .setDescription([
+            `${target}, ini status bonus level kamu.`,
+            "",
+            buildBonusStatusText(target, userData),
+            "",
+            "**Alur:** saat kamu dapat poin chat/voice, Pak RW cek otomatis apakah kamu Booster, Juragan, atau Donatur. Kalau iya, poin dasar ditambah bonus sesuai persen dashboard."
+          ].join("\n"))
+          .setFooter({ text: makeOTFooter(`${config.serverName} • Bonus Level`) })
+          .setTimestamp();
+
+        return safeReply(message, { embeds: [embed] });
+      }
+
+      if (cmd === "toplevel") {
+        const data = readLevelData();
+        const rows = Object.values(data.users || {})
+          .filter((u) => u.guildId === message.guild.id)
+          .filter((u) => !shouldExcludeOwnerFromLeaderboard(message.guild.ownerId, u.userId))
+          .sort((a, b) => ((b.chat || 0) + (b.voice || 0)) - ((a.chat || 0) + (a.voice || 0)))
+          .slice(0, 10);
+
+        const desc = rows.length
+          ? rows.map((u, i) => {
+              const info = getLevelInfo(u);
+              return `**${i + 1}.** <@${u.userId}> — **${info.current.name} (Lvl. ${info.current.level})**\n💬 ${formatNumber(u.chat || 0)} | 🎙️ ${formatNumber(u.voice || 0)}`;
+            }).join("\n\n")
+          : "Belum ada data level warga.";
+
+        const embed = new EmbedBuilder()
+          .setColor(color())
+          .setTitle("🏆 Top Level Warga DESA TULUS")
+          .setDescription(desc)
+          .setFooter({ text: makeOTFooter(`${config.serverName} • Level Leaderboard`) })
+          .setTimestamp();
+
+        return safeReply(message, { embeds: [embed] });
+      }
+
+      if (cmd === "topaktif" || cmd === "topwarga" || cmd === "topchat" || cmd === "topvoice" || cmd === "motm") {
+        if (cmd === "topchat") {
+          const rows = getTopActiveRows(message.guild.id, "chat", getTopActiveConfig().topLimit, message.guild.ownerId);
+          const embed = new EmbedBuilder()
+            .setColor(0xf5c542)
+            .setTitle("💬 Top Chat Warga Bulan Ini")
+            .setDescription("Poin, level, dan rank di bawah dihitung dari **poin chat bulan ini**.\n\n" + formatTopActiveRows(rows, "chat"))
+            .setFooter({ text: makeOTFooter(`${config.serverName} • ${getMonthLabel()}`) })
+            .setTimestamp();
+          return safeReply(message, { embeds: [embed] });
+        }
+
+        if (cmd === "topvoice") {
+          const rows = getTopActiveRows(message.guild.id, "voice", getTopActiveConfig().topLimit, message.guild.ownerId);
+          const embed = new EmbedBuilder()
+            .setColor(0xf5c542)
+            .setTitle("🎙️ Top Voice Warga Bulan Ini")
+            .setDescription("Poin, level, dan rank di bawah dihitung dari **poin voice bulan ini**.\n\n" + formatTopActiveRows(rows, "voice"))
+            .setFooter({ text: makeOTFooter(`${config.serverName} • ${getMonthLabel()}`) })
+            .setTimestamp();
+          return safeReply(message, { embeds: [embed] });
+        }
+
+        return safeReply(message, { embeds: [buildTopActiveBoardEmbed(message.guild, "command manual")] });
+      }
+
+      if (cmd === "posttopaktif") {
+        if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+          return safeReply(message, "❌ Command ini khusus admin.");
+        }
+
+        const ok = await sendTopActiveBoard(message.guild, `diposting oleh ${message.author.username}`);
+        return safeReply(message, ok ? "✅ Papan Top Aktif sudah dikirim." : "❌ Channel Top Aktif belum benar. Cek dashboard `/top-active`.");
+      }
+
+      if (cmd === "testmotm" || cmd === "testmemberofthemonth") {
+        if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+          return safeReply(message, "❌ Command ini khusus admin.");
+        }
+        if (shouldExcludeOwnerFromLevel(message.guild, message.author.id)) {
+          removeOwnerLevelData(message.guild);
+          return safeReply(message, "👑 Owner server tidak masuk level/Top Aktif/MOTM. Untuk test MOTM, pakai command owner `/testmotm @member` dan tag member lain.");
+        }
+
+        const data = readLevelData();
+        const realUserData = getLevelUser(data, message.guild.id, message.author.id);
+        const testUserData = makeSafeTestMotmData(realUserData);
+
+        // Command test harus selalu kelihatan hasilnya, tapi TIDAK boleh mengubah data asli.
+        // Jadi tidak menambah poin, tidak menaikkan level, tidak memberi role MOTM.
+        const result = await forceSendMemberOfTheMonthTest(message.member, testUserData, message.channel, { giveRole: false });
+
+        if (!result.ok) {
+          return safeReply(message, `❌ Test Member Of The Month gagal: ${result.reason || "channel tidak ditemukan"}`);
+        }
+
+        return safeReply(message, `✅ Test Member Of The Month sudah dikirim ke ${result.channel}. Ini hanya preview; poin, level, dan role tidak berubah.`);
+      }
+
+      if (cmd === "testlevel100") {
+        if (shouldExcludeOwnerFromLevel(message.guild, message.author.id)) {
+          removeOwnerLevelData(message.guild);
+          return safeReply(message, "👑 Owner server tidak masuk sistem level. Test Level 100 tidak dijalankan untuk owner.");
+        }
+        const data = readLevelData();
+        const realUserData = getLevelUser(data, message.guild.id, message.author.id);
+        const testUserData = makeSafeTestLevelData(realUserData, 100);
+
+        await sendLevelUp(message.member, testUserData, message.channel);
+
+        return safeReply(message, "✅ Test Level 100 dikirim sebagai preview. Data asli aman: poin, level, dan role Level 100 tidak ditambah.");
+      }
+
+      if (cmd === "testlevel") {
+        if (shouldExcludeOwnerFromLevel(message.guild, message.author.id)) {
+          removeOwnerLevelData(message.guild);
+          return safeReply(message, "👑 Owner server tidak masuk sistem level. Test level-up tidak dijalankan untuk owner.");
+        }
+        const data = readLevelData();
+        const realUserData = getLevelUser(data, message.guild.id, message.author.id);
+        const testUserData = makeSafeTestLevelData(realUserData, 10);
+
+        await sendLevelUp(message.member, testUserData, message.channel);
+
+        return safeReply(message, "✅ Test level-up dikirim ke Channel Level OT sebagai preview. Data asli aman: poin dan level tidak ditambah.");
+      }
+
+
+      if (cmd === "donaturku" || cmd === "benefitdonatur" || cmd === "aksesdonatur") {
+        return replyDonaturOnly(message.member, message);
+      }
+
+      if (cmd === "donatur" || cmd === "temprole" || cmd === "kasihdonatur" || cmd === "donasi") {
+        if (!canManageDonatur(message.member)) {
+          return safeReply(message, "❌ Command ini khusus Owner server dan Admin yang punya izin Administrator.");
+        }
+
+        const target = message.mentions.members.first();
+
+        if (!target) {
+          return safeReply(message, [
+            "❌ Tag member yang mau diberi role Donatur.",
+            "",
+            "Cara pakai:",
+            "`!donatur @user 100k`",
+            "`!donasi @user 200k`",
+            "",
+            "Hitungan otomatis:",
+            "100k = 10 hari",
+            "200k = 20 hari",
+            "300k = 30 hari",
+            "dan seterusnya."
+          ].join("\n"));
+        }
+
+        const amountText = args[1];
+
+        if (!amountText) {
+          return safeReply(message, "❌ Tulis nominal donasinya. Contoh: `!donatur @user 100k`");
+        }
+
+        const amount = parseDonationAmount(amountText);
+        const minimum = Number(config.donaturMinimumAmount || 100000);
+
+        if (!amount || amount < minimum) {
+          return safeReply(message, `❌ Minimal donasi untuk role Donatur adalah **${formatRupiah(minimum)}**. Contoh: \`!donatur @user 100k\``);
+        }
+
+        const days = donationDays(amount);
+
+        await grantDonaturRole(target, days, message.member, message.channel, amount);
+        return;
+      }
+
+      if (cmd === "cekdonatur") {
+        if (!canManageDonatur(message.member)) {
+          return safeReply(message, "❌ Command ini khusus Owner server dan Admin yang punya izin Administrator.");
+        }
+
+        const target = message.mentions.members.first() || message.member;
+
+        if (!isFilledId(config.donaturRoleId)) {
+          return safeReply(message, "❌ `donaturRoleId` belum diisi di config.json.");
+        }
+
+        const item = findTempRole(message.guild.id, target.id, config.donaturRoleId);
+
+        if (!item) {
+          return safeReply(message, `${target} tidak punya data Donatur sementara dari Pak RW.`);
+        }
+
+        return safeReply(message, `ℹ️ ${target} memiliki role **${item.roleName || "Donatur"}** sampai **${formatDateTime(item.expiresAt)}**.`);
+      }
+
+      if (cmd === "hapusdonatur" || cmd === "removedonatur") {
+        if (!canManageDonatur(message.member)) {
+          return safeReply(message, "❌ Command ini khusus Owner server dan Admin yang punya izin Administrator.");
+        }
+
+        const target = message.mentions.members.first();
+
+        if (!target) {
+          return safeReply(message, "❌ Tag member yang mau dicabut role Donatur-nya. Contoh: `!hapusdonatur @user`");
+        }
+
+        await removeDonaturRole(target, message.channel);
+        return;
+      }
+
+      if (cmd === "testboost") {
+        if (!config.juragan?.enabled) {
+          return safeReply(message, "Fitur Juragan sedang dimatikan di config.");
+        }
+
+        const role = isFilledId(config.juragan.roleId)
+          ? message.guild.roles.cache.get(config.juragan.roleId)
+          : null;
+
+        if (role && !message.member.roles.cache.has(role.id)) {
+          await message.member.roles.add(role).catch((err) => {
+            console.log("TESTBOOST ROLE ERROR:", err.message);
+          });
+        }
+
+        await sendJuraganWelcome(message.member);
+
+        return safeReply(message, "✅ Test boost Juragan dikirim. Cek channel boost/Juragan Desa.");
+      }
+
+
+      if (cmd === "premium" || cmd === "mahal" || cmd === "suitepremium") {
+        return safeReply(message, [
+          "💎 **Pak RW v10.10.54 — Big Bot DESA TULUS**",
+          "",
+          "Pak RW sekarang jadi bot besar DESA TULUS: satu balai warga digital untuk curhat, saran, level, top aktif, voice, donatur, juragan, boost poin, dan pengumuman desa.",
+          "",
+          "**Alur premium:**",
+          "edit → preview → test aman → backup",
+          "",
+          "**Fitur berguna:**",
+          "• 🤖 AI Pro: ikut gaya bahasa member, bisa lu/gua, aku/kamu, sopan, atau pedas aman",
+          "• 🧩 Embed Builder: pilih channel tujuan dan kirim embed dari dashboard",
+          "• 🔝 Level: level-up rapi, cek poin 1 channel, test tidak nambah data",
+          "• 🏆 Top Aktif: Top Voice + Top Chat, auto post 00.00 WIB",
+          "• 💡 Saran: nama pengirim opsional, kosong = anonim",
+          "• ☁️ Curhat Anonim: panel + thread balasan",
+          "• 💎 Juragan & 💸 Donatur: role, benefit, bonus poin, dan akses khusus",
+          "• 🛠️ Tools: MongoDB status, backup, source, command test, dan dashboard clean",
+          "",
+          "Buka dashboard → Suite Fitur untuk atur semua modul."
+        ].join("\n"));
+      }
+
+      if (cmd === "fitur" || cmd === "alur" || cmd === "features" || cmd === "suite") {
+        const p = config.prefix || "rw";
+        return safeReply(message, [
+          "🧭 **Pak RW Big Bot Balai Warga v10.10.54**",
+          "",
+          "Alurnya sekarang dibuat seperti bot besar balai warga digital:",
+          "**warga butuh bantuan → Pak RW baca konteks → pilih fitur → eksekusi/preview → data tetap aman**.",
+          "",
+          "**Fitur yang bisa diatur:**",
+          "• 🤖 Tanya Pak RW — AI natural ikut gaya bahasa user",
+          "• ☁️ Curhat & Curhat Anonim — panel, thread, balasan anonim",
+          "• 💡 Saran — panel + voting setuju/tidak setuju",
+          "• 👋 Welcome — pesan warga baru",
+          "• 💎 Juragan — boost role, embed, akses khusus, bonus poin",
+          "• 💸 Donatur — role sementara otomatis dari nominal",
+          "• 🔝 Level — chat/voice poin, rank, role level 100",
+          "• 🏆 Top Aktif/MOTM — top chat, top voice, banner manual",
+          "• 🖼️ Banner Manual — logo, background, image embed, MOTM",
+          "• 🔗 Discord Manager — role/channel/emoji/ID",
+          "",
+          `Command penting: \`${p}help\`, \`${p}topaktif\`, \`${p}topchat\`, \`${p}topvoice\`, \`${p}testmotm @user\`, \`${p}saran\`, \`${p}anonim\`.`
+        ].join("\n"));
+      }
+
+      if (cmd === "help") {
+        const p = config.prefix || "rw";
+        return safeReply(message, [
+          "🤍 **Pak RW Help**",
+          "",
+          "**Utama**",
+          `\`${p}ping\` - cek ping bot`,
+          `\`${p}status\` - cek status bot`,
+          `\`${p}mongodb\` - cek database MongoDB`,
+          `\`${p}help\` - lihat bantuan`,
+          `\`${p}premium\` - lihat fitur premium Pak RW`,
+          `\`${p}besar\` - lihat ringkasan Pak RW Big Bot`,
+          `\`${p}desa\` - lihat balai warga digital DESA TULUS`,
+          `\`${p}cekconfig\` - cek config penting bot`,
+          "",
+          "**Juragan / Donatur**",
+          `\`${p}testboost\` - test embed/role Juragan`,
+          `\`${p}donatur @user 100k\` - kasih role Donatur otomatis`,
+          `\`${p}cekdonatur @user\` - cek masa aktif Donatur`,
+          `\`${p}hapusdonatur @user\` - cabut role Donatur`,
+          `\`${p}donaturku\` - menu role Donatur`,
+          "`rwtanya pertanyaan` - AI khusus role Donatur",
+          "`rwtarik @user` - tarik member ke voice",
+          "`rwusir @user` - usir member dari voice",
+          "",
+          "**Level**",
+          "`rwcekpoin` - cek poin level",
+          "`rwtoplevel` - leaderboard level",
+          `\`${p}testlevel\` - test embed level-up`,
+          `\`${p}testlevel100\` - test role Level 100 1 bulan`,
+          "",
+          "**Utility Baru**",
+          `\`${p}serverinfo\` - info server`,
+          `\`${p}userinfo @user\` - info user`,
+          `\`${p}avatar @user\` - lihat avatar`,
+          `\`${p}channelinfo #channel\` - info channel`,
+          `\`${p}roles\` - daftar role server`,
+          `\`${p}id @user #channel @role\` - bantu ambil ID`,
+          `\`${p}say #channel pesan\` - admin kirim pesan lewat bot`,
+          "Auto Thread Image - gambar yang dikirim di channel Top Aktif otomatis dibuat thread",
+          "",
+          "**Panel**",
+          `\`${p}saran\` - kirim panel saran`,
+          `\`${p}anonim\` - kirim panel curhat anonim`,
+          "",
+          "AI aktif di channel AI, channel curhat, atau saat bot di-mention."
+        ].join("\n"));
+      }
+
+      if (cmd === "saran") {
+        if (!config.suggestion?.enabled) {
+          return safeReply(message, "Fitur saran sedang dimatikan di config.");
+        }
+
+        const embed = new EmbedBuilder()
+          .setColor(color())
+          .setTitle(config.suggestion?.title || "💡 DESA TULUS • Kritik & Saran")
+          .setDescription(config.suggestion?.description || "Klik tombol di bawah untuk mengirim saran.")
+          .setFooter({ text: makeOTFooter("Pak RW • Sistem Saran") })
+          .setTimestamp();
+
+        return safeReply(message, {
+          embeds: [embed],
+          components: [
+            new ActionRowBuilder().addComponents(
+              new ButtonBuilder()
+                .setCustomId("open_suggestion")
+                .setLabel("Kasih Saran")
+                .setEmoji("💡")
+                .setStyle(ButtonStyle.Secondary)
+            )
+          ]
+        });
+      }
+
+      if (cmd === "anonim" || cmd === "curhatanonim") {
+        const embed = new EmbedBuilder()
+          .setColor(color())
+          .setTitle("☁️ Curhat Anonim DESA TULUS")
+          .setDescription(
+            "Klik tombol **☁️ Curhat ka Pak RW** di bawah ini untuk mengirim curhatan anonim.\n\n" +
+            "Identitas kamu tidak akan ditampilkan. Curhatan akan masuk sebagai **Anonymous** 🤍"
+          )
+          .setFooter({ text: makeOTFooter("Pak RW • Curhat Anonim") })
+          .setTimestamp();
+
+        return safeReply(message, {
+          embeds: [embed],
+          components: [anonimPanelRow()]
+        });
+      }
+
+    }
+    const mentioned = message.mentions.has(client.user);
+    const inAiChannel = message.channel.id === config.aiChannelId;
+    const inCurhatChannel = message.channel.id === config.curhatChannelId;
+    const inJuraganAi = message.channel.name === (config.juragan?.aiChannelName || "🤖・ai-juragan");
+
+    if (!inAiChannel && !inCurhatChannel && !inJuraganAi && !mentioned) return;
+
+    const cooldownMs = config.ai?.cooldownMs || 4500;
+    if (isCooldown(message.author.id, cooldownMs)) {
+      const sisa = getRemaining(message.author.id);
+      return safeReply(message, `⏳ Tunggu **${sisa} detik** dulu sebelum chat Pak RW lagi ya.`);
+    }
+
+    await message.channel.sendTyping();
+
+    let clean = message.content
+      .replace(new RegExp(`<@!?${client.user.id}>`, "g"), "")
+      .trim();
+
+    if (!clean && mentioned) clean = "halo";
+
+    if (lower.includes("owner") || lower.includes("pemilik")) {
+      return safeReply(message, `👑 Owner **${config.serverName}** adalah **${config.ownerName}** 🤍`);
+    }
+
+    let mode = inCurhatChannel ? "curhat" : "normal";
+    if (inJuraganAi) mode = "juragan";
+    const reply = await askAI(clean || "halo", mode);
+
+    return safeReply(message, trimReply(reply));
+  } catch (err) {
+    console.log("MESSAGE ERROR:", err);
+    return safeReply(message, "Maaf ya, Pak RW lagi error sebentar. Coba lagi nanti 🤍");
+  }
+});
+
+
+function isOwnerCommandInteractionUser(interaction) {
+  if (!interaction?.guild || !interaction?.user) return false;
+  const cfg = ownerCommandConfig();
+  if (interaction.user.id === interaction.guild.ownerId) return true;
+  return cfg.allowedUserIds.includes(interaction.user.id);
+}
+
+function buildOwnerStatusEmbedForGuild(guild) {
+  const cfg = getTopActiveConfig();
+  return new EmbedBuilder()
+    .setColor(0xf5c542)
+    .setTitle("👑 Status Owner Pak RW")
+    .setDescription([
+      `**Bot:** ${client.user?.tag || "belum ready"}`,
+      `**Server:** ${guild?.name || config.serverName || "DESA TULUS"}`,
+      `**Ping:** ${client.ws.ping}ms`,
+      `**Prefix publik:** \`${config.prefix || "rw"}\``,
+      `**Owner text prefix:** \`${ownerCommandConfig().prefix}\``,
+      `**AI Model:** \`${config.ai?.openRouterModel || "openai/gpt-4o-mini"}\``,
+      `**MongoDB:** ${isMongoActive() ? "Aktif ✅" : "Fallback/Belum aktif ⚠️"}`,
+      `**Top Aktif:** ${cfg.enabled ? "Aktif" : "Nonaktif"} • ${cfg.channelId ? `<#${cfg.channelId}>` : "belum diset"}`,
+      `**MOTM Target:** ${formatNumber(cfg.pointsThreshold || 10000)} poin`,
+      `**Bonus:** ${cfg.bonusEnabled ? `+${cfg.bonusPercent || 15}% aktif` : "Nonaktif"}`,
+      `**Channel Level:** ${isFilledId(config.levelChannelId) ? `<#${config.levelChannelId}>` : "belum diset"}`,
+      `**Owner di leaderboard:** ${cfg.excludeOwnerFromLeaderboard !== false ? "Tidak muncul ✅" : "Masih muncul ⚠️"}`,
+      `**Uptime:** ${Math.floor(process.uptime() / 60)} menit`
+    ].join("\n"))
+    .setFooter({ text: makeOTFooter(`${config.serverName || "DESA TULUS"} • Owner Status`) })
+    .setTimestamp();
+}
+
+function slashOwnerHelpEmbed(guild) {
+  return new EmbedBuilder()
+    .setColor(0xf5c542)
+    .setTitle("👑 Slash Command Pak RW")
+    .setDescription([
+      "Command ini sekarang muncul langsung di menu Discord saat ketik `/`.",
+      "Sebagian command umum bisa dipakai warga, command owner tetap dikunci untuk owner server.",
+      "",
+      "**Umum:**",
+      "`/cekpoin` • cek poin/level",
+      "`/cekbonus` • cek bonus +15%",
+      "`/topaktif` • board Top Aktif lengkap",
+      "`/topchat` • leaderboard chat",
+      "`/topvoice` • leaderboard voice",
+      "`/levelrule` • aturan level",
+      "",
+      "**Owner:**",
+      "`/posttop` atau `/posttopaktif` • kirim board Top Aktif gaya rapi ke channel Top Aktif",
+      "`/testmotm user:@member` • test banner MOTM member",
+      "`/fixlevel` • sinkron level sesuai poin",
+      "`/givepoin` • tambah poin",
+      "`/kurangpoin` • kurangi poin",
+      "`/setpoin` • set poin",
+      "`/resetpoin` • reset poin member",
+      "`/ownerstatus` • status bot"
+    ].join("\n"))
+    .setFooter({ text: makeOTFooter(`${config.serverName || guild?.name || "DESA TULUS"} • Slash Commands`) })
+    .setTimestamp();
+}
+
+async function resolveSlashMember(interaction, optionName = "user") {
+  const optionMember = interaction.options.getMember(optionName);
+  if (optionMember) return optionMember;
+  if (interaction.member?.id) {
+    return interaction.guild.members.fetch(interaction.member.id).catch(() => interaction.member);
+  }
+  return interaction.member;
+}
+
+async function handlePakRwVisibleSlashCommand(interaction) {
+  if (!interaction.isChatInputCommand()) return false;
+  const cmd = interaction.commandName;
+  const publicSlash = ["fitur", "premium", "cekpoin", "cekbonus", "topaktif", "topchat", "topvoice", "levelrule"];
+  const ownerSlash = ["posttopaktif", "posttop", "testmotm", "fixlevel", "givepoin", "kurangpoin", "setpoin", "resetpoin", "ownerstatus", "ownerhelp"];
+
+  if (!publicSlash.includes(cmd) && !ownerSlash.includes(cmd)) return false;
+
+  if (ownerSlash.includes(cmd) && !isOwnerCommandInteractionUser(interaction)) {
+    await interaction.reply({ content: "❌ Slash command ini khusus Owner server.", flags: 64 });
+    return true;
+  }
+
+  if (cmd === "ownerhelp") {
+    await interaction.reply({ embeds: [slashOwnerHelpEmbed(interaction.guild)], flags: 64 });
+    return true;
+  }
+
+  if (cmd === "ownerstatus") {
+    await interaction.reply({ embeds: [buildOwnerStatusEmbedForGuild(interaction.guild)], flags: 64 });
+    return true;
+  }
+
+
+  if (cmd === "fitur") {
+    await interaction.reply({
+      content: [
+        "🧭 **Pak RW Big Bot Balai Warga v10.10.54**",
+        "",
+        "**Alur bot besar:** pilih fitur → edit setting → preview → test → backup.",
+        "",
+        "**Fitur utama:**",
+        "• 🤖 Tanya Pak RW — AI natural ikut gaya bahasa user",
+        "• ☁️ Curhat & Anonim — panel curhat, thread, balasan anonim",
+        "• 💡 Saran — panel + voting",
+        "• 👋 Welcome — sambut warga baru",
+        "• 💎 Juragan — boost role, embed, bonus poin",
+        "• 💸 Donatur — role durasi otomatis dari nominal",
+        "• 🔝 Level — chat/voice poin, rank, level 100 role",
+        "• 🏆 Top Aktif/MOTM — top chat, top voice, banner manual",
+        "",
+        "Dashboard: buka `/feature-flow` di web panel untuk edit semua modul."
+      ].join("\n"),
+      flags: 64
+    });
+    return true;
+  }
+
+
+  if (cmd === "premium") {
+    await interaction.reply({
+      content: [
+        "💎 **Pak RW v10.10.54 — Big Bot DESA TULUS**",
+        "",
+        "**Alur utama:** edit → preview → test aman → backup.",
+        "",
+        "**Yang premium:**",
+        "• 🤖 Tanya Pak RW Pro: lucu, rapi, pedas aman, ikut gaya bahasa member",
+        "• 🧩 Embed Builder: mirip Carl-bot, pilih channel, preview, raw JSON, kirim langsung",
+        "• 🔝 Level & Cek Poin: 1 channel, style rapi, test tidak ubah data",
+        "• 🏆 Top Aktif/MOTM: Top Voice + Top Chat, auto 00.00 WIB, banner manual",
+        "• ☁️ Curhat, 💡 Saran, 👋 Welcome, 💎 Juragan, 💸 Donatur tetap aman",
+        "• 🛠️ Tools: MongoDB, backup, dashboard, status, dan command test",
+        "",
+        "Buka dashboard → Suite Fitur buat ngatur semuanya."
+      ].join("\n"),
+      flags: 64
+    });
+    return true;
+  }
+
+  if (cmd === "levelrule") {
+    const tuning = getLevelTuningConfig();
+    await interaction.reply({
+      content: [
+        "📌 **Rumus Level Pak RW**",
+        `Mode: **${tuning.mode}**`,
+        "Total Poin = **Poin Chat + Poin Voice**",
+        `Setiap **${formatNumber(tuning.pointsPerLevel)} poin total** naik **1 level**.`,
+        `Level maksimal: **${formatNumber(tuning.maxLevel)}**`,
+        "Contoh: 0-499 poin = Level 1, 500 poin = Level 2, 10.000 poin = Level 21."
+      ].join("\n"),
+      flags: 64
+    });
+    return true;
+  }
+
+  if (cmd === "cekpoin") {
+    const target = await resolveSlashMember(interaction, "user");
+    if (shouldExcludeOwnerFromLevel(interaction.guild, target.id)) {
+      removeOwnerLevelData(interaction.guild);
+      await interaction.reply({ content: "👑 Owner server tidak dihitung di sistem level dan tidak muncul di leaderboard keaktifan.", flags: 64 });
+      return true;
+    }
+    const data = readLevelData();
+    const userData = getLevelUser(data, interaction.guild.id, target.id);
+    await sendLevelProfileInteraction(interaction, target, userData);
+    return true;
+  }
+
+  if (cmd === "cekbonus") {
+    const target = await resolveSlashMember(interaction, "user");
+    const data = readLevelData();
+    const userData = getLevelUser(data, interaction.guild.id, target.id);
+    const info = getLevelBonusInfo(target);
+    const embed = new EmbedBuilder()
+      .setColor(info.active ? 0xf5c542 : color())
+      .setTitle("🎁 Cek Bonus Ekstra Poin")
+      .setDescription([
+        `${target}, ini status bonus level kamu.`,
+        "",
+        buildBonusStatusText(target, userData),
+        "",
+        "**Alur:** saat kamu dapat poin chat/voice, Pak RW cek otomatis apakah kamu Booster, Juragan, atau Donatur. Kalau iya, poin dasar ditambah bonus sesuai persen dashboard."
+      ].join("\n"))
+      .setFooter({ text: makeOTFooter(`${config.serverName} • Bonus Level`) })
+      .setTimestamp();
+    await interaction.reply({ embeds: [embed] });
+    return true;
+  }
+
+  if (cmd === "topaktif") {
+    await interaction.reply({ embeds: [buildTopActiveBoardEmbed(interaction.guild, "slash command")] });
+    return true;
+  }
+
+  if (cmd === "topchat" || cmd === "topvoice") {
+    const type = cmd === "topchat" ? "chat" : "voice";
+    const rows = getTopActiveRows(interaction.guild.id, type, getTopActiveConfig().topLimit, interaction.guild.ownerId);
+    const embed = new EmbedBuilder()
+      .setColor(0xf5c542)
+      .setTitle(cmd === "topchat" ? "💬 Top Chat Warga Bulan Ini" : "🎙️ Top Voice Warga Bulan Ini")
+      .setDescription((type === "chat" ? "Poin, level, dan rank di bawah dihitung dari **poin chat bulan ini**." : "Poin, level, dan rank di bawah dihitung dari **poin voice bulan ini**.") + "\n\n" + formatTopActiveRows(rows, type))
+      .setFooter({ text: makeOTFooter(`${config.serverName} • ${getMonthLabel()}`) })
+      .setTimestamp();
+    await interaction.reply({ embeds: [embed] });
+    return true;
+  }
+
+  if (cmd === "posttopaktif" || cmd === "posttop") {
+    await interaction.deferReply({ flags: 64 });
+    const ok = await sendTopActiveBoard(interaction.guild, `slash command oleh ${interaction.user.username}`);
+    await interaction.editReply(ok ? "✅ Papan Top Aktif gaya DESA TULUS sudah dikirim ke channel Top Aktif." : "❌ Channel Top Aktif belum benar. Cek dashboard `/top-active`.");
+    return true;
+  }
+
+  if (cmd === "fixlevel") {
+    const result = syncAllLevelsWithPoints(interaction.guild);
+    await interaction.reply({
+      content: [
+        "✅ Level sudah disinkronkan ulang berdasarkan total poin.",
+        `Data dicek: **${formatNumber(result.total)}** user`,
+        `Level yang diperbaiki: **${formatNumber(result.changed)}** user`,
+        "Rumus aktif: **Total Poin / Poin per Level**."
+      ].join("\n"),
+      flags: 64
+    });
+    return true;
+  }
+
+  if (["givepoin", "kurangpoin", "setpoin"].includes(cmd)) {
+    const target = await resolveSlashMember(interaction, "user");
+    const amount = Number(interaction.options.getNumber("jumlah") || 0);
+    const type = ownerPointType(interaction.options.getString("jenis") || "chat");
+
+    if (!target || !amount || amount < 0) {
+      await interaction.reply({ content: "❌ Jumlah poin tidak valid.", flags: 64 });
+      return true;
+    }
+
+    if (shouldExcludeOwnerFromLevel(interaction.guild, target.id)) {
+      removeOwnerLevelData(interaction.guild);
+      await interaction.reply({ content: "👑 Owner server tidak dihitung di level/Top Aktif. Data owner dibersihkan dan tidak bisa diubah poinnya.", flags: 64 });
+      return true;
+    }
+
+    const data = readLevelData();
+    const userData = getLevelUser(data, interaction.guild.id, target.id);
+    const beforeLevel = getLevelInfo(userData).current.level;
+    let result;
+
+    if (cmd === "givepoin") {
+      const monthly = ensureMonthlyForOwnerEdit(userData);
+      if (type === "voice") {
+        userData.voice = Number(((userData.voice || 0) + amount).toFixed(1));
+        monthly.voice = Number(((monthly.voice || 0) + amount).toFixed(1));
+      } else {
+        userData.chat = Number(((userData.chat || 0) + amount).toFixed(1));
+        monthly.chat = Number(((monthly.chat || 0) + amount).toFixed(1));
+      }
+      monthly.total = Number(((monthly.chat || 0) + (monthly.voice || 0)).toFixed(1));
+      userData.level = getLevelInfo(userData).current.level;
+      userData.lastActivityAt = Date.now();
+      const afterLevel = userData.level;
+      result = { chat: userData.chat, voice: userData.voice, monthlyTotal: monthly.total, level: userData.level };
+      writeLevelData(data);
+      if (afterLevel > beforeLevel) {
+        await sendLevelUp(target, userData, interaction.channel);
+      }
+      await interaction.reply({ content: `✅ ${target} mendapat **${formatNumber(amount)} poin ${type}**.${afterLevel > beforeLevel ? " Level-up juga dikirim ke channel level." : ""}`, embeds: [buildLevelProfileEmbed(target, userData)], flags: 64 });
+      return true;
+    }
+
+    if (cmd === "kurangpoin") {
+      result = subtractOwnerPoints(userData, amount, type);
+      writeLevelData(data);
+      await interaction.reply({ content: `✅ Poin ${target} dikurangi **${formatNumber(amount)} poin ${type}**.`, embeds: [buildOwnerPointEditEmbed(target, "minus", amount, type, result)], flags: 64 });
+      return true;
+    }
+
+    if (cmd === "setpoin") {
+      result = setOwnerPoints(userData, amount, type);
+      const afterLevel = Number(result.level || getLevelInfo(userData).current.level);
+      writeLevelData(data);
+      if (afterLevel > beforeLevel) {
+        await sendLevelUp(target, userData, interaction.channel);
+      }
+      await interaction.reply({ content: `✅ Poin ${target} diset ke **${formatNumber(amount)} poin ${type}**.${afterLevel > beforeLevel ? " Level-up juga dikirim ke channel level." : ""}`, embeds: [buildOwnerPointEditEmbed(target, "set", amount, type, result)], flags: 64 });
+      return true;
+    }
+  }
+
+  if (cmd === "resetpoin") {
+    const target = await resolveSlashMember(interaction, "user");
+    if (shouldExcludeOwnerFromLevel(interaction.guild, target.id)) {
+      removeOwnerLevelData(interaction.guild);
+      await interaction.reply({ content: "✅ Data level owner sudah dibersihkan. Owner tetap tidak masuk level dan leaderboard.", flags: 64 });
+      return true;
+    }
+    const data = readLevelData();
+    const userData = getLevelUser(data, interaction.guild.id, target.id);
+    userData.chat = 0;
+    userData.voice = 0;
+    userData.level = 1;
+    userData.lastActivityAt = Date.now();
+    const monthly = ensureMonthlyForOwnerEdit(userData);
+    monthly.chat = 0;
+    monthly.voice = 0;
+    monthly.total = 0;
+    writeLevelData(data);
+    await interaction.reply({ content: `✅ Poin ${target} sudah direset.`, flags: 64 });
+    return true;
+  }
+
+  if (cmd === "testmotm") {
+    await interaction.deferReply({ flags: 64 });
+    let target = interaction.options.getMember("user");
+    if (!target) target = interaction.member;
+    target = await interaction.guild.members.fetch(target.id).catch(() => target);
+
+    if (shouldExcludeOwnerFromLevel(interaction.guild, target.id)) {
+      removeOwnerLevelData(interaction.guild);
+      await interaction.editReply("👑 Owner server tidak masuk Top Aktif/MOTM. Pilih member biasa di opsi `user`.");
+      return true;
+    }
+
+    const data = readLevelData();
+    const realUserData = getLevelUser(data, interaction.guild.id, target.id);
+    const testUserData = makeSafeTestMotmData(realUserData);
+    const result = await forceSendMemberOfTheMonthTest(target, testUserData, interaction.channel, { giveRole: false });
+    await interaction.editReply(result.ok ? `✅ Test Member Of The Month dikirim untuk ${target} ke ${result.channel}. Ini hanya preview; poin, level, dan role tidak berubah.` : `❌ Test MOTM gagal: ${result.reason || "unknown"}`);
+    return true;
+  }
+
+  return false;
+}
+
+// ================= INTERACTION SARAN =================
+client.on(Events.InteractionCreate, async (interaction) => {
+  try {
+
+    if (interaction.isChatInputCommand() && await handlePakRwVisibleSlashCommand(interaction)) return;
+
+    if (interaction.isChatInputCommand() && interaction.commandName === "donaturku") {
+      return replyDonaturOnly(interaction.member, interaction);
+    }
+
+    if (interaction.isChatInputCommand() && interaction.commandName === "donatur") {
+      if (!canManageDonatur(interaction.member)) {
+        return interaction.reply({
+          content: "❌ Command ini khusus Owner server dan Admin yang punya izin Administrator.",
+          flags: 64
+        });
+      }
+
+      const target = interaction.options.getMember("user");
+      const nominalText = interaction.options.getString("nominal");
+
+      if (!target) {
+        return interaction.reply({
+          content: "❌ Member tidak ditemukan.",
+          flags: 64
+        });
+      }
+
+      const amount = parseDonationAmount(nominalText);
+      const minimum = Number(config.donaturMinimumAmount || 100000);
+
+      if (!amount || amount < minimum) {
+        return interaction.reply({
+          content: `❌ Minimal donasi untuk role Donatur adalah **${formatRupiah(minimum)}**. Contoh: \`/donatur user:@KADES nominal:100k\``,
+          flags: 64
+        });
+      }
+
+      const days = donationDays(amount);
+
+      await grantDonaturRole(target, days, interaction.member, interaction.channel, amount);
+
+      return interaction.reply({
+        content: `✅ Slash command berhasil: ${target} diberi role Donatur selama **${days} hari** dari donasi **${formatRupiah(amount)}**.`,
+        flags: 64
+      });
+    }
+
+    if (interaction.isButton()) {
+
+
+      if (interaction.customId === "curhat_anonim_open" || interaction.customId === "open_anonim_curhat") {
+        const modal = new ModalBuilder()
+          .setCustomId("anonim_curhat_modal")
+          .setTitle("Curhat Anonim DESA TULUS");
+
+        const contentInput = new TextInputBuilder()
+          .setCustomId("anonim_content")
+          .setLabel("Isi curhat")
+          .setPlaceholder("Tulis curhatan kamu di sini. Identitas kamu tidak akan ditampilkan.")
+          .setStyle(TextInputStyle.Paragraph)
+          .setMaxLength(1200)
+          .setRequired(true);
+
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(contentInput)
+        );
+
+        return interaction.showModal(modal);
+      }
+
+      if (interaction.customId === "curhat_anonim_reply") {
+        const msg = interaction.message;
+
+        let thread = null;
+        if (msg.hasThread && msg.thread) {
+          thread = msg.thread;
+        } else {
+          thread = await msg.startThread({
+            name: "💬 Diskusi Curhat",
+            autoArchiveDuration: 1440,
+            reason: "Thread diskusi curhat anonim"
+          }).catch(() => null);
+        }
+
+        if (!thread) {
+          return interaction.reply({
+            content: "❌ Pak RW belum bisa membuat thread. Pastikan bot punya izin Create Public Threads dan Send Messages in Threads.",
+            flags: 64
+          });
+        }
+
+        const modal = new ModalBuilder()
+          .setCustomId(`anonim_reply_modal_${msg.id}`)
+          .setTitle("Balas Curhat Anonim");
+
+        const replyInput = new TextInputBuilder()
+          .setCustomId("anonim_reply_content")
+          .setLabel("Isi balasan")
+          .setPlaceholder("Tulis balasan kamu dengan sopan. Identitas kamu tidak akan ditampilkan.")
+          .setStyle(TextInputStyle.Paragraph)
+          .setMaxLength(1000)
+          .setRequired(true);
+
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(replyInput)
+        );
+
+        return interaction.showModal(modal);
+      }
+
+      if (interaction.customId === "open_suggestion") {
+        if (!config.suggestion?.enabled) {
+          return interaction.reply({ content: "Fitur saran sedang dimatikan.", flags: 64 });
+        }
+
+        const modal = new ModalBuilder()
+          .setCustomId("suggestion_modal")
+          .setTitle("Kasih Saran DESA TULUS");
+
+        const titleInput = new TextInputBuilder()
+          .setCustomId("suggestion_title")
+          .setLabel("Judul saran")
+          .setPlaceholder("Contoh: tambah channel rekomendasi film")
+          .setStyle(TextInputStyle.Short)
+          .setMaxLength(80)
+          .setRequired(true);
+
+        const contentInput = new TextInputBuilder()
+          .setCustomId("suggestion_content")
+          .setLabel("Isi saran")
+          .setPlaceholder("Tulis saran kamu dengan jelas dan sopan")
+          .setStyle(TextInputStyle.Paragraph)
+          .setMaxLength(900)
+          .setRequired(true);
+
+        const senderInput = new TextInputBuilder()
+          .setCustomId("suggestion_sender_name")
+          .setLabel("Nama pengirim (opsional)")
+          .setPlaceholder("Kosongkan kalau ingin tampil sebagai Anonim")
+          .setStyle(TextInputStyle.Short)
+          .setMaxLength(80)
+          .setRequired(false);
+
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(titleInput),
+          new ActionRowBuilder().addComponents(contentInput),
+          new ActionRowBuilder().addComponents(senderInput)
+        );
+
+        return safeShowModal(interaction, modal);
+      }
+
+      if (interaction.customId === "vote_yes" || interaction.customId === "vote_no") {
+        const messageId = interaction.message.id;
+        const userId = interaction.user.id;
+
+        if (!suggestionVotes.has(messageId)) {
+          suggestionVotes.set(messageId, { yes: new Set(), no: new Set() });
+        }
+
+        const data = suggestionVotes.get(messageId);
+
+        if (interaction.customId === "vote_yes") {
+          data.no.delete(userId);
+          data.yes.add(userId);
+        } else {
+          data.yes.delete(userId);
+          data.no.add(userId);
+        }
+
+        return interaction.update({
+          components: [suggestionRow(data.yes.size, data.no.size)]
+        });
+      }
+    }
+    if (interaction.isModalSubmit() && interaction.customId === "anonim_curhat_modal") {
+      await interaction.deferReply({ flags: 64 });
+
+      const content = interaction.fields.getTextInputValue("anonim_content");
+
+      const targetChannel = getTextChannel(interaction.guild, config.anonymousCurhatChannelId) || interaction.channel;
+
+      const embed = new EmbedBuilder()
+        .setColor(color())
+        .setTitle("☁️ Pesan Curhat")
+        .setDescription(content.slice(0, 1200))
+        .setFooter({ text: makeOTFooter("☁️ Anonymous") })
+        .setTimestamp();
+
+      const sent = await safeSend(targetChannel, {
+        embeds: [embed],
+        components: [anonimPostRow()]
+      });
+
+      if (sent) {
+        const thread = await sent.startThread({
+          name: "💬 Diskusi Curhat",
+          autoArchiveDuration: 1440,
+          reason: "Thread diskusi curhat anonim"
+        }).catch(() => null);
+
+        if (thread) {
+          await thread.send("Thread ini dibuat untuk diskusi curhat anonim. Jawab dengan baik, sopan, dan jangan menghakimi 🤍").catch(() => {});
+        }
+      }
+
+      return interaction.editReply({
+        content: "✅ Curhat kamu sudah terkirim sebagai Anonymous 🤍"
+      });
+    }
+
+
+
+    if (interaction.isModalSubmit() && interaction.customId.startsWith("anonim_reply_modal_")) {
+      await interaction.deferReply({ flags: 64 });
+
+      const messageId = interaction.customId.replace("anonim_reply_modal_", "");
+      const content = interaction.fields.getTextInputValue("anonim_reply_content");
+
+      const targetChannel = getTextChannel(interaction.guild, config.anonymousCurhatChannelId) || interaction.channel;
+
+      const curhatMessage = await targetChannel.messages.fetch(messageId).catch(() => null);
+
+      let thread = curhatMessage?.thread || null;
+      if (!thread && curhatMessage) {
+        thread = await curhatMessage.startThread({
+          name: "💬 Diskusi Curhat",
+          autoArchiveDuration: 1440,
+          reason: "Thread diskusi balasan anonim"
+        }).catch(() => null);
+      }
+
+      if (!thread) {
+        return interaction.editReply({
+          content: "❌ Pak RW belum bisa menemukan thread curhat ini. Coba klik tombol Balas dari pesan curhat yang masih ada."
+        });
+      }
+
+      const replyEmbed = new EmbedBuilder()
+        .setColor(color())
+        .setTitle("💬 Balasan Anonim")
+        .setDescription(content.slice(0, 1000))
+        .setFooter({ text: makeOTFooter("☁️ Anonymous Reply") })
+        .setTimestamp();
+
+      await thread.send({ embeds: [replyEmbed] }).catch(() => null);
+
+      return interaction.editReply({
+        content: "✅ Balasan kamu sudah terkirim sebagai Anonymous 🤍"
+      });
+    }
+
+    if (interaction.isModalSubmit() && interaction.customId === "suggestion_modal") {
+      const title = interaction.fields.getTextInputValue("suggestion_title");
+      const content = interaction.fields.getTextInputValue("suggestion_content");
+      let customSenderName = "";
+
+      try {
+        customSenderName = interaction.fields.getTextInputValue("suggestion_sender_name");
+      } catch {
+        customSenderName = "";
+      }
+
+      customSenderName = String(customSenderName || "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 80);
+
+      const senderDisplay = customSenderName || "Anonim";
+      const senderNote = customSenderName
+        ? "Nama pengirim ditulis manual oleh warga."
+        : "Pengirim mengosongkan nama, jadi otomatis tampil sebagai Anonim.";
+
+      const embed = new EmbedBuilder()
+        .setColor(color())
+        .setTitle("💡 Saran Baru DESA TULUS")
+        .setDescription("Ada saran baru dari warga. Silakan vote dan diskusikan dengan baik 🤍")
+        .addFields(
+          { name: "Judul", value: title.slice(0, 1024) },
+          { name: "Isi Saran", value: content.slice(0, 1024) },
+          { name: "Pengirim", value: senderDisplay.slice(0, 1024) },
+          { name: "Info", value: senderNote.slice(0, 1024) }
+        )
+        .setFooter({ text: makeOTFooter("Vote saran ini dengan tombol di bawah • Nama kosong = Anonim") })
+        .setTimestamp();
+
+      const suggestionChannel = getTextChannel(interaction.guild, config.suggestionChannelId) || interaction.channel;
+      const sent = await safeSend(suggestionChannel, {
+        embeds: [embed],
+        components: [suggestionRow(0, 0)]
+      });
+
+      if (sent) suggestionVotes.set(sent.id, { yes: new Set(), no: new Set() });
+
+      return interaction.reply({
+        content: `✅ Saran kamu berhasil dikirim. Pengirim tampil sebagai **${senderDisplay}**. Kalau nama dikosongkan, Pak RW otomatis pakai **Anonim** 🤍`,
+        flags: 64
+      });
+    }
+  } catch (err) {
+    console.log("INTERACTION ERROR:", err.code || err.message);
+
+    // 10062 = Unknown interaction. Token tombol/modal sudah expired.
+    // Jangan paksa reply karena pasti gagal dan bisa bikin error berulang.
+    if (err.code === 10062) return;
+
+    if (interaction.replied || interaction.deferred) {
+      return interaction.followUp({ content: "Terjadi error sebentar ya. Coba klik tombol dari panel baru.", flags: 64 }).catch(() => {});
+    }
+
+    return interaction.reply({ content: "Terjadi error sebentar ya. Coba klik tombol dari panel baru.", flags: 64 }).catch(() => {});
+  }
+});
+
+client.on("error", (err) => {
+  console.log("❌ DISCORD CLIENT ERROR:", err?.message || err);
+});
+
+client.on("shardError", (err) => {
+  console.log("❌ DISCORD SHARD ERROR:", err?.message || err);
+});
+
+client.on("warn", (info) => {
+  console.log("⚠️ DISCORD WARN:", info);
+});
+
+async function startDiscordBot() {
+  const rawToken = process.env.DISCORD_TOKEN;
+  const token = String(rawToken || "").trim().replace(/^['"]|['"]$/g, "");
+
+  if (!token || token.includes("ISI_TOKEN") || token.includes("TOKEN_BOT")) {
+    console.log("❌ DISCORD_TOKEN belum diisi dengan benar di ENV hostings.");
+    console.log("ℹ️ Dashboard tetap aktif, tapi bot Discord tidak akan online sampai token benar.");
+    return;
+  }
+
+  console.log("🗄️ Menyiapkan database Pak RW...");
+  await initMongoStore();
+
+  console.log("🔐 DISCORD_TOKEN terdeteksi. Mencoba login Discord bot...");
+
+  const readyTimeout = setTimeout(() => {
+    if (!client.isReady()) {
+      console.log("⚠️ Bot belum masuk ClientReady setelah 30 detik. Cek Privileged Gateway Intents di Discord Developer Portal: SERVER MEMBERS INTENT dan MESSAGE CONTENT INTENT harus ON.");
+    }
+  }, 30000);
+
+  try {
+    await client.login(token);
+    clearTimeout(readyTimeout);
+    console.log("✅ Login Discord berhasil dipanggil. Menunggu event ready...");
+  } catch (err) {
+    clearTimeout(readyTimeout);
+    console.log("❌ GAGAL LOGIN DISCORD:", err?.message || err);
+    console.log("ℹ️ Dashboard tetap aktif. Perbaiki DISCORD_TOKEN / intents / invite permission lalu Redeploy.");
+  }
+}
+
+startDiscordBot();

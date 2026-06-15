@@ -1,0 +1,279 @@
+{
+  "templates": {
+    "pakrw-juragan": {
+      "name": "pakrw-juragan",
+      "feature": "Juragan",
+      "status": "Aktif",
+      "protected": false,
+      "defaultChannelId": "",
+      "lastMessageId": "",
+      "sourceChannelId": "",
+      "sourceMessageId": "",
+      "content": "<a:Boost:1512485430887714866> {user} baru saja menjadi **Juragan Desa**!",
+      "embed": {
+        "title": "<a:Boost:1512485430887714866> WILUJEUNG SUMPING JURAGAN! <a:Boost:1512485430887714866>",
+        "description": "Terima kasih sudah mendukung server ini {user} .\nSekarang kamu dapat menikmati benefit dari role <@&1508912271852572733> :\n\n• Mendapatkan role <@&1508912271852572733>\n• Display role di member list\n• Bonus ekstra poin +15%\n• Akses ke fitur Soundboard\n• Akses ke voice channel VIP ⁠⁠⁠<#1512435808194400347>\n• Akses text channel khusus donatur ⁠⁠⁠<#1512487010948874430>\n\nSelamat menikmati benefit Juragan. Kamu keren banget 😎",
+        "color": 16732120,
+        "footer": {
+          "text": "DESA TULUS • Juragan System",
+          "icon_url": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
+        }
+      },
+      "components": [],
+      "lastEditedAt": "",
+      "lastSentAt": "",
+      "lastSyncedFromDiscordAt": "",
+      "configKey": "juragan"
+    },
+    "pakrw-levelUp": {
+      "name": "pakrw-levelUp",
+      "feature": "Protected",
+      "status": "Protected",
+      "protected": true,
+      "defaultChannelId": "",
+      "lastMessageId": "",
+      "sourceChannelId": "",
+      "sourceMessageId": "",
+      "content": "",
+      "embed": {
+        "title": "<a:rocket_animated:1512884173453529288> WARGA NAIK LEVEL!",
+        "description": "Sekarang menjadi **{rank} (Lvl. {level})** 🔥",
+        "color": 3066993,
+        "footer": {
+          "text": "DESA TULUS • Gunakan rwcekpoin untuk melihat level",
+          "icon_url": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
+        }
+      },
+      "components": [],
+      "lastEditedAt": "",
+      "lastSentAt": "",
+      "lastSyncedFromDiscordAt": "",
+      "configKey": "levelUp"
+    },
+    "pakrw-levelProfile": {
+      "name": "pakrw-levelProfile",
+      "feature": "Protected",
+      "status": "Protected",
+      "protected": true,
+      "defaultChannelId": "",
+      "lastMessageId": "",
+      "sourceChannelId": "",
+      "sourceMessageId": "",
+      "content": "",
+      "embed": {
+        "title": "📊 Level Warga",
+        "description": "{user}",
+        "color": 2282478,
+        "footer": {
+          "text": "DESA TULUS • Level Warga",
+          "icon_url": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
+        }
+      },
+      "components": [],
+      "lastEditedAt": "",
+      "lastSentAt": "",
+      "lastSyncedFromDiscordAt": "",
+      "configKey": "levelProfile"
+    },
+    "pakrw-donatur": {
+      "name": "pakrw-donatur",
+      "feature": "Donatur",
+      "status": "Aktif",
+      "protected": false,
+      "defaultChannelId": "",
+      "lastMessageId": "",
+      "sourceChannelId": "",
+      "sourceMessageId": "",
+      "content": "",
+      "embed": {
+        "title": "💎 Donatur Desa Access",
+        "description": "Halo {user}, ini adalah menu khusus untuk role **Donatur DESA TULUS** 🤍\n\nStatus role kamu: **Aktif**\n{expiredText}",
+        "color": 3107839,
+        "footer": {
+          "text": "DESA TULUS • Donatur System",
+          "icon_url": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
+        }
+      },
+      "components": [],
+      "lastEditedAt": "",
+      "lastSentAt": "",
+      "lastSyncedFromDiscordAt": "",
+      "configKey": "donatur"
+    },
+    "pakrw-anonimPanel": {
+      "name": "pakrw-anonimPanel",
+      "feature": "Curhat",
+      "status": "Aktif",
+      "protected": false,
+      "defaultChannelId": "",
+      "lastMessageId": "",
+      "sourceChannelId": "",
+      "sourceMessageId": "",
+      "content": "",
+      "embed": {
+        "title": "☁️ Curhat Anonim DESA TULUS",
+        "description": "Punya sesuatu yang ingin kamu ceritakan tanpa menampilkan identitas?\n\nKlik tombol **☁️ Curhat ka Pak RW** di bawah ini. Curhatan kamu akan dikirim sebagai **Anonim** dan warga bisa membalas lewat thread diskusi 🤍",
+        "color": 16777215,
+        "footer": {
+          "text": "DESA TULUS • Curhat Anonim Aman",
+          "icon_url": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
+        }
+      },
+      "components": [],
+      "lastEditedAt": "",
+      "lastSentAt": "",
+      "lastSyncedFromDiscordAt": "",
+      "configKey": "anonimPanel"
+    },
+    "pakrw-memberOfTheMonth": {
+      "name": "pakrw-memberOfTheMonth",
+      "feature": "Protected",
+      "status": "Protected",
+      "protected": true,
+      "defaultChannelId": "",
+      "lastMessageId": "",
+      "sourceChannelId": "",
+      "sourceMessageId": "",
+      "content": "",
+      "embed": {
+        "title": "🏆 MEMBER OF THE MONTH DESA TULUS",
+        "description": "{user} resmi menjadi **Member Of The Month** bulan ini.\n\n⭐ Total Poin Bulan Ini: **{total}** poin\n💬 Top Chat: **{chat}** poin\n🎙️ Top Voice: **{voice}** poin\n\nTerima kasih sudah aktif dan ikut menghidupkan server **{server}** 🤍",
+        "color": 16106818,
+        "footer": {
+          "text": "DESA TULUS • Member Of The Month",
+          "icon_url": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
+        }
+      },
+      "components": [],
+      "lastEditedAt": "",
+      "lastSentAt": "",
+      "lastSyncedFromDiscordAt": "",
+      "configKey": "memberOfTheMonth"
+    },
+    "pakrw-suggestionResult": {
+      "name": "pakrw-suggestionResult",
+      "feature": "Saran",
+      "status": "Aktif",
+      "protected": false,
+      "defaultChannelId": "",
+      "lastMessageId": "",
+      "sourceChannelId": "",
+      "sourceMessageId": "",
+      "content": "",
+      "embed": {
+        "title": "💡 Saran Baru DESA TULUS",
+        "description": "{user} mengirim saran:\n\n{content}",
+        "color": 16777215,
+        "footer": {
+          "text": "DESA TULUS • Saran & Voting",
+          "icon_url": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
+        }
+      },
+      "components": [],
+      "lastEditedAt": "",
+      "lastSentAt": "",
+      "lastSyncedFromDiscordAt": "",
+      "configKey": "suggestionResult"
+    },
+    "pakrw-curhatReply": {
+      "name": "pakrw-curhatReply",
+      "feature": "Curhat",
+      "status": "Aktif",
+      "protected": false,
+      "defaultChannelId": "",
+      "lastMessageId": "",
+      "sourceChannelId": "",
+      "sourceMessageId": "",
+      "content": "",
+      "embed": {
+        "title": "🤍 Balasan Pak RW",
+        "description": "{reply}",
+        "color": 16777215,
+        "footer": {
+          "text": "DESA TULUS • Curhat System",
+          "icon_url": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
+        }
+      },
+      "components": [],
+      "lastEditedAt": "",
+      "lastSentAt": "",
+      "lastSyncedFromDiscordAt": "",
+      "configKey": "curhatReply"
+    },
+    "pakrw-topActiveBoard": {
+      "name": "pakrw-topActiveBoard",
+      "feature": "Protected",
+      "status": "Protected",
+      "protected": true,
+      "defaultChannelId": "",
+      "lastMessageId": "",
+      "sourceChannelId": "",
+      "sourceMessageId": "",
+      "content": "",
+      "embed": {
+        "title": "🏆 TOP AKTIF WARGA BULAN {month} {server}",
+        "description": "Update otomatis setiap hari pukul 00.00 WIB",
+        "color": 16106818,
+        "footer": {
+          "text": "DESA TULUS • Gunakan perintah rapihin untuk melihat poin top aktifnya",
+          "icon_url": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
+        }
+      },
+      "components": [],
+      "lastEditedAt": "",
+      "lastSentAt": "",
+      "lastSyncedFromDiscordAt": "",
+      "configKey": "topActiveBoard"
+    },
+    "pakrw-cariMabar": {
+      "name": "pakrw-cariMabar",
+      "feature": "Mabar",
+      "status": "Aktif",
+      "protected": false,
+      "defaultChannelId": "",
+      "lastMessageId": "",
+      "sourceChannelId": "",
+      "sourceMessageId": "",
+      "content": "🎮 {user} lagi cari teman mabar di **{server}**!",
+      "embed": {
+        "title": "🎮 CARI MABAR DESA TULUS",
+        "description": "Lagi nyari teman main? Isi info mabar dengan jelas biar warga lain gampang ikut.\n\n<a:Animated_Arrow_Bluelite:1512751559140839576> **Game:** {game}\n<a:Animated_Arrow_Bluelite:1512751559140839576> **Mode:** {mode}\n<a:Animated_Arrow_Bluelite:1512751559140839576> **Jumlah Slot:** {slot}\n<a:Animated_Arrow_Bluelite:1512751559140839576> **Jam Main:** {time}\n<a:Animated_Arrow_Bluelite:1512751559140839576> **Catatan:** {note}",
+        "color": 5793266,
+        "footer": {
+          "text": "DESA TULUS • Cari Mabar System",
+          "icon_url": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
+        },
+        "author": {
+          "name": "DESA TULUS • Cari Mabar"
+        }
+      },
+      "components": [],
+      "lastEditedAt": "",
+      "lastSentAt": "",
+      "lastSyncedFromDiscordAt": "",
+      "configKey": "cariMabar"
+    },
+    "pakrw-welcome-message": {
+      "name": "pakrw-welcome-message",
+      "feature": "Welcome",
+      "status": "Aktif",
+      "protected": false,
+      "defaultChannelId": "1504495053400441081",
+      "lastMessageId": "",
+      "sourceChannelId": "",
+      "sourceMessageId": "",
+      "content": "",
+      "embed": {
+        "title": "👋 Warga Baru Datang!",
+        "description": "Halo {user}, wilujeung sumping di **{server} 🤍**\n\nSenang banget kamu sudah bergabung di sini. Semoga kamu betah, nyaman, dan bisa ikut ngobrol bareng warga DESA TULUS.\n\n📌 Jangan lupa baca rules dulu supaya paham aturan server.\n💬 Langsung kenalan di chat warga, jangan malu-malu ya.\n🎫 Kalau butuh bantuan, kamu bisa hubungi staff atau buka ticket.\n\nKamu adalah warga ke-**{memberCount}** di server ini. Wilujeung sumping dan semoga harimu menyenangkan 🤍",
+        "color": 16777215
+      },
+      "components": [],
+      "lastEditedAt": "",
+      "lastSentAt": "",
+      "lastSyncedFromDiscordAt": "",
+      "description": "Wilujeung sumping {user} di **{server} 🌾**\n\nPak RW nampi anjeun janten warga anyar di DESA TULUS. Mugia betah, rukun, sareng tiasa silih ajénan sareng warga sanés.\n\n📌 Mangga baca aturan heula supados terang tata tertib desa.\n💬 Upami parantos siap, mangga kenalan di chat warga.\n🎫 Upami peryogi bantosan, tiasa ngahubungi staff atanapi buka ticket.\n\nAnjeun mangrupikeun warga ka-**{memberCount}** di desa ieu. Wilujeung sumping, mugia betah di lembur urang 🤍",
+      "title": "🏡 Wilujeung Sumping Warga Anyar!"
+    }
+  }
+}

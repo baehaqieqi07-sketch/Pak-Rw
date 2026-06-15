@@ -1,0 +1,20 @@
+node_modules
+.env
+npm-debug.log
+.DS_Store
+runtime-logs
+logs
+backups
+*.backup.json
+*.tmp
+*.zip
+
+# data aktif / runtime, jangan upload ke GitHub
+data/level.json
+data/tempRoles.json
+data/*.backup.json
+level.json
+tempRoles.json
+memory.json
+dashboard-activity.json
+embed-templates.runtime.json

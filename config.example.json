@@ -1,0 +1,781 @@
+{
+  "serverName": "DESA TULUS",
+  "ownerName": "PAK RW",
+  "prefix": "rw",
+  "embedColor": "#F5E9C8",
+  "activityText": "DESA TULUS 🌾 • Pak RW Jaga Warga",
+  "aiChannelId": "1506356360298893312",
+  "curhatChannelId": "1507363585779695706",
+  "anonymousCurhatChannelId": "1507430020027514922",
+  "suggestionChannelId": "1505917590323597342",
+  "ticketChannelId": "",
+  "chatWargaChannelId": "1504495053400441081",
+  "logChannelId": "",
+  "rulesChannelId": "",
+  "infoChannelId": "",
+  "eventChannelId": "",
+  "juragan": {
+    "enabled": true,
+    "roleId": "1508912271852572733",
+    "boostChannelId": "1508899914946707456",
+    "categoryName": "💎｜JURAGAN DESA",
+    "aiChannelName": "🤖・pak-rw-juragan",
+    "autoSetupChannels": false
+  },
+  "welcome": {
+    "enabled": true,
+    "sendToChatWarga": true,
+    "title": "🏡 Wilujeung Sumping Warga Anyar!",
+    "message": "Wilujeung sumping {user} di **{server} 🌾**\n\nPak RW nampi anjeun janten warga anyar di DESA TULUS. Mugia betah, rukun, sareng tiasa silih ajénan sareng warga sanés.\n\n📌 Mangga baca aturan heula supados terang tata tertib desa.\n💬 Upami parantos siap, mangga kenalan di chat warga.\n🎫 Upami peryogi bantosan, tiasa ngahubungi staff atanapi buka ticket.\n\nAnjeun mangrupikeun warga ka-**{memberCount}** di desa ieu. Wilujeung sumping, mugia betah di lembur urang 🤍",
+    "style": "desa_tulus_big_bot_sunda_formal_perdesaan",
+    "dashboardHelp": "Gunakan {user}, {server}, dan {memberCount}. Pesan default memakai Wilujeung sumping dan vibes perdesaan Sunda."
+  },
+  "ai": {
+    "cooldownMs": 15000,
+    "maxMessageLength": 1300,
+    "openRouterModel": "openai/gpt-4o-mini",
+    "styleMode": "pak_rw_big_bot_desa_tulus_sunda_formal",
+    "pronounMode": "auto",
+    "allowMildProfanity": false,
+    "safeMirror": true,
+    "answerFlow": "pak_rw_big_bot_clear_action_first",
+    "defaultDepth": "ringkes_jelas_tapi_berisi",
+    "ownerTone": "sopan_tegas_ngayomi",
+    "juraganDepth": "premium_detail",
+    "featureGuideEnabled": true,
+    "followUserPronoun": true,
+    "fallbackModels": [
+      "openai/gpt-4o-mini"
+    ],
+    "proModeEnabled": true,
+    "proModeNote": "Model utama memakai OpenAI GPT-5.2 Pro via OpenRouter. Jika model pro tidak tersedia di akun/API, bot otomatis mencoba fallback.",
+    "toxicityMode": "formal_sopan_tegas_aman",
+    "profanityLevel": "none",
+    "toxicReplyWhenUserHarsh": false,
+    "blockedToxicity": [
+      "jangan pakai hinaan identitas/SARA/protected class",
+      "jangan ancam, doxxing, pelecehan seksual, atau nyuruh kekerasan",
+      "jangan menyerang member secara personal berlebihan",
+      "tetap arahkan ke solusi meski gaya jawabannya pedas"
+    ],
+    "spicyIntensity": "off_formal",
+    "spicyNote": "Pak RW boleh tegas dan ceplas-ceplos kalau warga kasar duluan, tetapi tetap tidak boleh menyerang identitas, SARA/protected class, ancaman, doxxing, pelecehan seksual, atau bullying personal.",
+    "premiumPersonality": "pak_rw_besar_desa_tulus_perdesaan_sunda_formal_ngayomi_solutif",
+    "comedyModeEnabled": true,
+    "usefulFeatureMode": true,
+    "responseQuality": "pak_rw_big_bot_premium_hemat",
+    "premiumRules": [
+      "jawaban harus rapi, sopan, formal, ringkes tapi jelas, dan punya rasa Pak RW perdesaan Sunda",
+      "kalau user minta Bahasa Indonesia, jangan campur Basa Sunda kecuali frasa khas seperti Wilujeung sumping yang memang bagian server",
+      "kalau user minta Basa Sunda, jawab Basa Sunda formal dan sopan",
+      "untuk masalah bot/coding/dashboard, tetap kasih langkah fix yang bisa langsung dicoba",
+      "jangan kasar, jangan SARA, jangan ancaman, jangan doxxing, jangan pelecehan, jangan spam",
+      "Pak RW harus paham konteks DESA TULUS seperti balai warga digital: welcome, saran, curhat, level, top aktif, donatur, juragan, voice, dan boost poin.",
+      "Semua jawaban harus terasa seperti Pak RW asli: ngayomi, sopan, tegas, solutif, dan tidak bertele-tele.",
+      "Kalau warga minta Bahasa Indonesia jawab Indonesia saja; kalau minta Basa Sunda jawab Basa Sunda formal saja; jangan campur kecuali diminta.",
+      "Saat menyebut channel/user/role, utamakan mention Discord asli jika ID/objek tersedia, bukan tulisan biasa.",
+      "Tetap hemat OpenRouter: jangan jawaban terlalu panjang kecuali user minta detail."
+    ],
+    "fallbackMessage": "Punten, Pak RW nuju teu tiasa ngahubungi AI sakedap. Cobian deui engké, nya. Upami peryogi, Pak RW tetep tiasa bantu ku jawaban dasar 🤍",
+    "antiSpamNote": "AI hanya menjawab di channel yang diatur dan memakai cooldown supaya tidak spam.",
+    "qualityMode": "premium_stable",
+    "safeErrorHandling": true,
+    "personaName": "Pak RW",
+    "personaRole": "Pak RW DESA TULUS yang benar-benar paham suasana server, berperan seperti RW asli: sopan, formal, ngayomi warga, tegas saat perlu, paham budaya perdesaan Sunda, dan membantu semua fitur server tanpa mengubah data lama.",
+    "pakRwRules": [
+      "Selalu berperan sebagai Pak RW DESA TULUS, bukan asisten kaku dan bukan bot lama.",
+      "Pahami konteks server DESA TULUS: warga, chat warga, curhat, saran, welcome, level, cek poin, top aktif, MOTM, juragan, donatur, voice, boost poin, dan mabar.",
+      "Vibes harus perdesaan Sunda: lembur, warga, balai desa, pos ronda, rukun, sauyunan, tata krama, dan suasana hangat desa.",
+      "Bahasa wajib mengikuti permintaan user: kalau user minta Bahasa Indonesia, jawab Bahasa Indonesia sopan tanpa campur Sunda kecuali istilah server; kalau user minta Basa Sunda, jawab Basa Sunda formal; jangan campur bahasa tanpa diminta.",
+      "Untuk welcome gunakan nuansa Wilujeung sumping khas DESA TULUS, bukan sapaan umum yang datar.",
+      "Untuk curhat, Pak RW harus mendengarkan warga, menenangkan, tidak menghakimi, lalu memberi langkah kecil yang aman dan masuk akal.",
+      "Untuk konflik warga, Pak RW menjadi penengah: adil, tidak memihak buta, tidak memperkeruh, dan menjaga suasana DESA TULUS tetap rukun.",
+      "Tetap sopan dan formal. Boleh tegas, tetapi jangan kasar, jangan menghina, jangan SARA, jangan doxxing, jangan ancaman, jangan pelecehan, dan jangan memicu ribut."
+    ],
+    "globalCooldownMs": 3500,
+    "dailyLimit": 220,
+    "maxTokens": 650,
+    "limitSafeMode": true,
+    "mentionMode": "real_discord_mentions",
+    "languageMode": "match_requested_language_no_mixing",
+    "defaultLanguage": "indonesia_formal",
+    "sundaFormalEnabled": true,
+    "sundaVibeEnabled": true,
+    "villageVibe": "perdesaan_sunda_lembur_rukun_sauyunan",
+    "noLimitModeNote": "Mode hemat OpenRouter aktif: model murah, cooldown lebih panjang, max token lebih kecil, fallback lokal saat limit/error, dan fallback model mahal dimatikan.",
+    "fallbackLocalEnabled": true,
+    "serverKnowledgeMode": "deep_desa_tulus_context",
+    "languagePolicy": "auto_detect_no_mixing_id_or_sunda_formal",
+    "botScale": "big_bot"
+  },
+  "panels": {
+    "sendSuggestionPanelOnReady": false
+  },
+  "suggestion": {
+    "enabled": true,
+    "title": "💡 DESA TULUS • Kotak Saran Warga",
+    "description": "Aya usulan, kritik, atanapi saran kanggo DESA TULUS? Tulis dengan sopan dan jelas. Pak RW akan baca supaya desa makin rapi, nyaman, dan sauyunan 🤍",
+    "allowCustomSenderName": true,
+    "emptySenderNameAsAnonymous": true,
+    "senderNameHelp": "Pengirim saran bisa mengisi nama sendiri. Kalau dikosongkan, saran tampil sebagai Anonim.",
+    "buttonText": "💡 Kirim Saran ke Pak RW",
+    "successMessage": "✅ Saran kamu sudah diterima Pak RW. Hatur nuhun, masukannya akan dibaca dengan baik.",
+    "votingMode": "one_user_one_vote",
+    "dashboardHelp": "Saran warga masuk ke Pak RW dengan bahasa sopan dan rapi. Kalau nama dikosongkan, tampil sebagai Anonim."
+  },
+  "levelChannelId": "1511737744978743367",
+  "level100RoleId": "1505183243362767019",
+  "level100RoleDurationDays": 30,
+  "donaturRoleId": "1512099315651444957",
+  "donaturDefaultDays": 30,
+  "donaturRpPerDay": 10000,
+  "donaturMinimumAmount": 100000,
+  "embeds": {
+    "juragan": {
+      "color": "#FF4FD8",
+      "title": "<a:Boost:1512485430887714866> WILUJEUNG SUMPING JURAGAN DESA! <a:Boost:1512485430887714866>",
+      "description": "Hatur nuhun parantos ngadukung DESA TULUS, {user}.\nAyeuna anjeun tiasa menikmati benefit role <@&1508912271852572733>:\n\n• Mendapatkan role <@&1508912271852572733>\n• Display role di member list\n• Bonus ekstra poin +15%\n• Akses fitur Soundboard\n• Akses voice channel VIP ⁠⁠⁠<#1512435808194400347>\n• Akses text channel khusus donatur ⁠⁠⁠<#1512487010948874430>\n\nPak RW ngahaturkeun nuhun. Mugia DESA TULUS langkung rame, rukun, sareng sauyunan 🤍",
+      "footer": "DESA TULUS • Juragan Desa",
+      "content": "<a:Boost:1512485430887714866> {user} resmi janten **Juragan Desa**!",
+      "thumbnail": "avatar",
+      "image": "",
+      "footerIcon": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
+    },
+    "levelUp": {
+      "color": "#2ECC71",
+      "title": "<a:rocket_animated:1512884173453529288> WARGA NAIK LEVEL!",
+      "description": "Sekarang menjadi **{rank} (Lvl. {level})** 🔥",
+      "footer": "DESA TULUS • Gunakan rwcekpoin untuk melihat level",
+      "footerIcon": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
+    },
+    "levelProfile": {
+      "color": "#22D3EE",
+      "title": "📊 Level Warga",
+      "description": "{user}",
+      "footer": "DESA TULUS • Level Warga",
+      "footerIcon": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
+    },
+    "donatur": {
+      "color": "#2F6BFF",
+      "title": "💎 Donatur Desa Access",
+      "description": "Wilujeung sumping {user}, ieu menu khusus kanggo role **Donatur DESA TULUS** 🤍\n\nStatus role kamu: **Aktif**\n{expiredText}",
+      "footer": "DESA TULUS • Donatur Desa",
+      "footerIcon": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
+    },
+    "anonimPanel": {
+      "color": "#FFFFFF",
+      "title": "☁️ Curhat Anonim ka Pak RW",
+      "description": "Aya hal anu hoyong dicarioskeun tanpa nembongkeun identitas?\n\nKlik tombol **☁️ Curhat ka Pak RW** di handap. Curhatan kamu dikirim anonim, lalu Pak RW akan bantu dengarkan dengan sopan dan aman 🤍",
+      "footer": "DESA TULUS • Curhat Anonim Pak RW",
+      "footerIcon": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
+    },
+    "dashboard": {
+      "brandTitle": "Pak RW Big Bot",
+      "brandSubtitle": "DESA TULUS • Balai Warga Digital",
+      "homeTitle": "Pak RW Big Bot DESA TULUS",
+      "homeSubtitle": "Satu bot besar untuk warga, curhat, saran, level, top aktif, donatur, juragan, voice, dan pengumuman desa.",
+      "accentText": "DESA TULUS 🌾 • Pak RW Jaga Warga",
+      "media": {
+        "logoUrl": "",
+        "bannerUrl": "",
+        "backgroundUrl": "",
+        "faviconUrl": "",
+        "defaultEmbedImageUrl": "",
+        "defaultThumbnailUrl": "",
+        "motmBackgroundImageUrl": "",
+        "topActiveBoardImageUrl": ""
+      },
+      "themeMode": "control_center_soft_dark",
+      "accentColor": "#8B7CFF",
+      "accentColor2": "#FF78D7"
+    },
+    "memberOfTheMonth": {
+      "color": "#F5C542",
+      "title": "🏆 MEMBER OF THE MONTH DESA TULUS",
+      "description": "{user} resmi menjadi **Member Of The Month** bulan ini.\n\n⭐ Total Poin Bulan Ini: **{total}** poin\n💬 Top Chat: **{chat}** poin\n🎙️ Top Voice: **{voice}** poin\n\nTerima kasih sudah aktif dan ikut menghidupkan server **{server}** 🤍",
+      "footer": "DESA TULUS • Member Of The Month",
+      "footerIcon": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
+    },
+    "suggestionResult": {
+      "color": "#FFFFFF",
+      "title": "💡 Saran Warga DESA TULUS",
+      "description": "{user} mengirim saran:\n\n{content}",
+      "footer": "DESA TULUS • Kotak Saran Pak RW",
+      "image": "",
+      "thumbnail": "avatar",
+      "content": "",
+      "footerIcon": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
+    },
+    "curhatReply": {
+      "color": "#FFFFFF",
+      "title": "🤍 Waleran Pak RW",
+      "description": "{reply}",
+      "footer": "DESA TULUS • Pak RW Ngadangu Warga",
+      "image": "",
+      "thumbnail": "avatar",
+      "content": "",
+      "footerIcon": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
+    },
+    "topActiveBoard": {
+      "color": "#F5C542",
+      "title": "🏆 TOP AKTIF WARGA BULAN {month} {server}",
+      "description": "Update otomatis setiap hari pukul 00.00 WIB",
+      "footer": "DESA TULUS • Gunakan perintah rapihin untuk melihat poin top aktifnya",
+      "image": "",
+      "thumbnail": "",
+      "content": "",
+      "footerIcon": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
+    },
+    "cariMabar": {
+      "color": "#5865F2",
+      "content": "🎮 {user} nuju milarian rerencangan mabar di **{server}**!",
+      "authorIcon": "",
+      "authorName": "DESA TULUS • Cari Mabar Warga",
+      "authorUrl": "",
+      "title": "🎮 CARI MABAR WARGA DESA",
+      "titleUrl": "",
+      "description": "Hayu warga, anu badé mabar tuliskeun infona kalayan jelas supaya warga séjén gampang ngiringan.\n\n<a:Animated_Arrow_Bluelite:1512751559140839576> **Game:** {game}\n<a:Animated_Arrow_Bluelite:1512751559140839576> **Mode:** {mode}\n<a:Animated_Arrow_Bluelite:1512751559140839576> **Jumlah Slot:** {slot}\n<a:Animated_Arrow_Bluelite:1512751559140839576> **Jam Main:** {time}\n<a:Animated_Arrow_Bluelite:1512751559140839576> **Catatan:** {note}",
+      "fields": [
+        {
+          "name": "📌 Cara Ikut",
+          "value": "Balas pesan ini atau langsung tag pembuat mabar. Jangan spam, tetap sopan, dan saling tunggu di voice/chat DESA TULUS.",
+          "inline": false
+        },
+        {
+          "name": "🔊 Voice",
+          "value": "Kalau sudah lengkap, masuk voice bareng dan jaga suasana tetap nyaman.",
+          "inline": false
+        }
+      ],
+      "image": "",
+      "thumbnail": "avatar",
+      "footer": "DESA TULUS • Mabar Warga",
+      "footerIcon": "",
+      "timestamp": true,
+      "destinationChannelId": "1504495053400441081"
+    }
+  },
+  "topActive": {
+    "enabled": true,
+    "channelId": "1512730320665972837",
+    "memberOfTheMonthRoleId": "1512734425283297320",
+    "pointsThreshold": 10000,
+    "topLimit": 10,
+    "chatPointPerMessage": 5,
+    "voicePointPerMinute": 5,
+    "announceLevelUp": false,
+    "announceMemberOfTheMonth": false,
+    "bannerEnabled": true,
+    "dailyAutoPost": true,
+    "dailyPostHourWIB": 0,
+    "title": "🏆 TOP AKTIF WARGA DESA TULUS",
+    "subtitle": "Update otomatis dari Top Chat, Top Voice, dan bonus +15% untuk Booster/Juragan/Donatur.",
+    "footer": "DESA TULUS • Papan Keaktifan Warga",
+    "bannerTitle": "MEMBER OF THE MONTH",
+    "bannerSubtitle": "TOP CHAT • TOP VOICE • TOP AKTIF",
+    "useOneChannel": true,
+    "autoImageThreadEnabled": true,
+    "autoImageThreadArchiveMinutes": 1440,
+    "autoImageThreadName": "🖼️ Diskusi Gambar • {username}",
+    "autoImageThreadMessage": "🖼️ Thread otomatis kanggo diskusi gambar ieu. Mangga ngobrol kalayan sopan di dieu 🤍",
+    "bonusEnabled": true,
+    "bonusPercent": 15,
+    "bannerImageUrl": "",
+    "boardAuthor": "DESA TULUS • Papan warga paling aktif di balai desa",
+    "boardTitleTemplate": "🏆 TOP AKTIF WARGA BULAN {month} {server}",
+    "boardUpdateText": "Update otomatis setiap hari pukul 00.00 WIB",
+    "topActiveFieldTitle": "🏆 Top Aktif",
+    "topVoiceFieldTitle": "🎙️ Top Voice",
+    "topChatFieldTitle": "💬 Top Chat",
+    "motmReactionEmojis": "🔥,👏,🏆,🎉,🥳",
+    "motmThreadArchiveMinutes": 1440,
+    "bannerBgStart": "#080704",
+    "bannerBgMiddle": "#171006",
+    "bannerBgEnd": "#120c04",
+    "bannerGold": "#F6C75A",
+    "bannerTextColor": "#FFFFFF",
+    "rowArrowEmoji": "<a:Animated_Arrow_Bluelite:1512751559140839576>",
+    "excludeOwnerFromLevel": true,
+    "excludeOwnerFromLeaderboard": true,
+    "bannerNameLabel": "",
+    "bannerFooterText": "",
+    "bannerAvatarRingText": "",
+    "bannerShowStats": true,
+    "bannerMode": "manual_image",
+    "manualBannerUrl": "",
+    "manualBannerOverlayEnabled": false,
+    "manualBannerDim": false,
+    "manualBannerAvatarEnabled": false,
+    "manualBannerNameEnabled": false,
+    "bannerCategoryTemplate": "TOP CHAT BULAN INI",
+    "bannerAvatarX": 0.5,
+    "bannerAvatarY": 0.485,
+    "bannerAvatarRadius": 0.132,
+    "bannerNameX": 0.5,
+    "bannerNameY": 0.69,
+    "bannerNameFontSize": 0.064,
+    "bannerCategoryX": 0.5,
+    "bannerCategoryY": 0.765,
+    "bannerCategoryFontSize": 0.043,
+    "bannerTotalX": 0.5,
+    "bannerTotalY": 0.835,
+    "bannerTotalFontSize": 0.044,
+    "bannerTextMaxWidth": 0.62,
+    "bannerCardWidth": 900,
+    "bannerCardHeight": 506,
+    "postBoardAfterMotm": false,
+    "motmSendMode": "image_only",
+    "boardFooterText": "DESA TULUS • Gunakan perintah rwcekpoin untuk melihat poin warga",
+    "dailyPostWindowMinutes": 10,
+    "dailyPostMode": "once_per_day_persistent_after_00_wib",
+    "motmAwardMode": "manual_only",
+    "autoMotmRole": false,
+    "manualMotmDashboardEnabled": true
+  },
+  "texts": {
+    "motmContentTemplate": "🏆 Wilujeng {user}! Anjeun janten {role} TOP CHAT BULAN {month} di DESA TULUS.",
+    "motmTestPrefix": "",
+    "motmThreadName": "Wilujeng kanggo {username}",
+    "motmThreadMessage": "🎉 Wilujeng kanggo {user}! Mangga warga tiasa ngucapkeun selamat di thread ieu 🤍",
+    "levelUpTopActiveTitle": "🆙 Warga Naik Level + Masuk Top Aktif",
+    "emptyLeaderboardText": "Belum ada data bulan ini.",
+    "dashboardSaveSuccess": "✅ Setting Pak RW Big Bot berhasil disimpan. Balai warga digital langsung live reload.",
+    "dashboardHelpText": "Pilih modul, edit bagian penting, preview, test aman, lalu backup. Semua fitur memakai branding Pak RW DESA TULUS.",
+    "embedFormatHelp": "Gunakan {user}, {server}, {level}, {rank}, {total}, {chat}, {voice}, {role}, {month}, dan {memberCount} untuk isi otomatis.",
+    "topActiveArrowEmojiDefault": "<a:Animated_Arrow_Bluelite:1512751559140839576>",
+    "motmManualBannerHelp": "Mode Manual Image aktif: banner MOTM dikirim dari URL manual dashboard tanpa generate avatar/nama otomatis.",
+    "testModeSafeText": "Mode test hanya preview: tidak menambah poin, tidak menaikkan level, dan tidak memberi role asli.",
+    "premiumSuiteHelp": "Pak RW DESA TULUS: AI sopan formal, vibes perdesaan Sunda, dashboard rapi, curhat warga, saran, welcome, level, Top Aktif, MOTM, dan tools all-in-one.",
+    "cariMabarDashboardHelp": "Embed Cari Mabar sudah masuk menu /embeds. Edit seperti Carl-bot, pilih Destination channel, lalu klik Kirim Embed Ini.",
+    "bigBotIntro": "Pak RW adalah bot besar DESA TULUS: ngayomi warga, menjaga alur server, mendengar curhat, dan membantu staff dengan rapi."
+  },
+  "ownerCommands": {
+    "enabled": true,
+    "prefix": "/",
+    "allowedUserIds": [],
+    "description": "Command khusus owner server. Owner server selalu bisa pakai prefix ini. Owner dikecualikan dari level dan leaderboard aktif."
+  },
+  "level": {
+    "excludeOwnerFromLevel": true,
+    "mode": "chatVoiceSum",
+    "pointsPerLevel": 500,
+    "maxLevel": 100,
+    "sendLevelUpToLevelChannelOnly": true,
+    "levelUpDestinationText": "Notifikasi level-up masuk ke channel level khusus, bukan channel Top Aktif.",
+    "chatPointsPerLevel": 500,
+    "voicePointsPerLevel": 500,
+    "checkPointChannelId": "1512878244431532053",
+    "levelUpStyle": "pak-rw-clean",
+    "profileStyle": "pak-rw-checkpoint",
+    "chatCooldownMs": 60000,
+    "voiceAwardIntervalMs": 60000,
+    "flowMode": "clear_chat_voice_total_points",
+    "flowNote": "Chat dan voice dipisah jelas, total level = chat + voice + bonus. Embed tidak diganti.",
+    "totalLevelFormula": "chatVoiceSum"
+  },
+  "dashboard": {
+    "homeMode": "control_center",
+    "theme": "soft_premium_dark",
+    "easyEditMode": true,
+    "showFeatureFlow": true,
+    "showAiStylePanel": true,
+    "releaseVersion": "10.10.53",
+    "releaseName": "Pak RW Sunda Village Mode",
+    "premiumMode": true,
+    "comfortMode": true,
+    "quickActionMode": "edit_preview_test_backup",
+    "uiDensity": "spacious",
+    "focusEditModeEnabled": true,
+    "collapsibleSidebar": true,
+    "protectedSystemsLocked": [
+      "level",
+      "topActive",
+      "motm",
+      "cekPoin"
+    ],
+    "runtime": "disabled_by_default_discloud",
+    "enabledByEnv": "DASHBOARD_ENABLED=true",
+    "brandTitle": "Pak RW v10.10.53",
+    "brandSubtitle": "DESA TULUS • Pak RW Perdesaan Sunda",
+    "homeTitle": "Pak RW Control Center DESA TULUS",
+    "homeSubtitle": "Pusat pengaturan Pak RW untuk DESA TULUS dengan vibes perdesaan Sunda, sopan, formal, dan tetap aman untuk DisCloud.",
+    "accentText": "DESA TULUS 🌾 • Pak RW Balai Desa"
+  },
+  "featureFlow": {
+    "step1": "Pilih modul dari Suite Fitur: Tanya Pak RW, Curhat, Saran, Welcome, Juragan, Donatur, Level, Top Aktif, Embed Builder, Banner Manual, atau Discord Manager.",
+    "step2": "Edit setting yang kelihatan saja: channel, role, teks, warna, banner, poin, cooldown, mode AI, tombol, atau tujuan kirim embed.",
+    "step3": "Preview hasilnya di dashboard supaya format tidak berantakan sebelum masuk Discord.",
+    "step4": "Test fitur dengan command aman. Mode test tidak menambah poin, level, atau role asli.",
+    "step5": "Backup config setelah cocok supaya update berikutnya tetap aman dan tidak reset."
+  },
+  "featureSuite": {
+    "version": "10.10.53",
+    "layout": "premium_big_bot_clear_flow_safe_locked_level",
+    "modules": [
+      {
+        "id": "ai",
+        "name": "Tanya Pak RW",
+        "icon": "🤖",
+        "status": "Aktif",
+        "menu": "/modules",
+        "flow": "Atur model, gaya bahasa, cooldown, dan panjang jawaban. Test di channel AI."
+      },
+      {
+        "id": "curhat",
+        "name": "Curhat & Curhat Anonim",
+        "icon": "☁️",
+        "status": "Aktif",
+        "menu": "/embeds",
+        "flow": "Curhat dijawab Pak RW dengan sopan, empati, formal, dan tidak menghakimi."
+      },
+      {
+        "id": "suggestion",
+        "name": "Kotak Saran Warga",
+        "icon": "💡",
+        "status": "Aktif",
+        "menu": "/embeds",
+        "flow": "Edit judul panel, deskripsi, tombol saran, dan voting setuju/tidak setuju."
+      },
+      {
+        "id": "welcome",
+        "name": "Wilujeung Sumping Warga",
+        "icon": "👋",
+        "status": "Aktif",
+        "menu": "/modules",
+        "flow": "Edit pesan welcome, channel chat warga, dan placeholder user/member count."
+      },
+      {
+        "id": "juragan",
+        "name": "Juragan Desa / Booster",
+        "icon": "💎",
+        "status": "Aktif",
+        "menu": "/modules",
+        "flow": "Edit role Juragan, channel boost, embed, benefit, dan test boost."
+      },
+      {
+        "id": "donatur",
+        "name": "Donatur Desa",
+        "icon": "💸",
+        "status": "Aktif",
+        "menu": "/modules",
+        "flow": "Edit role, nominal per hari, minimum donasi, durasi, dan command donatur."
+      },
+      {
+        "id": "level",
+        "name": "Level & Poin",
+        "icon": "🔝",
+        "status": "Aktif",
+        "menu": "/modules",
+        "flow": "Edit channel level, poin chat/voice, bonus role, level 100 role, dan leaderboard."
+      },
+      {
+        "id": "topactive",
+        "name": "Top Aktif / MOTM",
+        "icon": "🏆",
+        "status": "Aktif",
+        "menu": "/top-active",
+        "flow": "Edit Top Chat, Top Voice, Top Aktif, target MOTM, banner manual, dan mode kirim."
+      },
+      {
+        "id": "media",
+        "name": "Banner Manual",
+        "icon": "🖼️",
+        "status": "Aktif",
+        "menu": "/media",
+        "flow": "Tempel URL logo, banner dashboard, background, image embed, dan banner MOTM manual."
+      },
+      {
+        "id": "discord",
+        "name": "Discord Manager",
+        "icon": "🔗",
+        "status": "Aktif",
+        "menu": "/discord",
+        "flow": "Lihat channel, role, emoji, ID, dan pilih data dari server biar tidak salah input."
+      },
+      {
+        "id": "embedbuilder",
+        "name": "Carlbot Style Embed Builder",
+        "icon": "🧩",
+        "status": "Aktif",
+        "menu": "/embeds",
+        "flow": "Edit normal text, author, title, description, fields, image, thumbnail, footer, raw JSON, pilih channel, lalu kirim embed."
+      },
+      {
+        "id": "premiumtools",
+        "name": "Premium Tools",
+        "icon": "🛠️",
+        "status": "Aktif",
+        "menu": "/tools",
+        "flow": "Cek database, config, source, backup, command test, dan status penting sebelum deploy."
+      },
+      {
+        "id": "safeTest",
+        "name": "Safe Test Mode",
+        "icon": "🧪",
+        "status": "Aktif",
+        "menu": "/test-center",
+        "flow": "Test level, MOTM, boost, embed, dan panel tanpa mengubah data asli."
+      },
+      {
+        "id": "mabar",
+        "name": "Cari Mabar",
+        "icon": "🎮",
+        "status": "Aktif",
+        "menu": "/cari-mabar",
+        "flow": "Edit panel mabar warga dengan vibes perdesaan DESA TULUS."
+      },
+      {
+        "id": "owoAutoRole",
+        "name": "OwO Auto Role",
+        "icon": "🎮",
+        "status": "Aktif",
+        "menu": "/owo-auto-role",
+        "flow": "Deteksi command OwO prefix w di channel OwO/Squad OwO lalu beri role otomatis tanpa spam notice."
+      },
+      {
+        "id": "activeVoiceRole",
+        "name": "Voice Role Otomatis",
+        "icon": "🎙️",
+        "status": "Aktif",
+        "menu": "/active-voice-role",
+        "flow": "Member yang sedang berada di voice otomatis mendapat role Member Aktif; role dicabut saat keluar voice."
+      },
+      {
+        "id": "boostpoin",
+        "name": "Boost Poin Event",
+        "icon": "⚡",
+        "status": "Standby",
+        "menu": "/boost-poin",
+        "flow": "Owner aktifkan event chat/voice manual, pilih channel event, lalu Pak RW memberi boost +5% dan mencatat peserta otomatis."
+      }
+    ],
+    "quality": "premium_big_bot",
+    "protectedNote": "Level, Top Aktif/MOTM, dan Cek Poin tidak diubah pada update ini."
+  },
+  "cekPoinChannelId": "1512878244431532053",
+  "premiumSuite": {
+    "enabled": true,
+    "version": "10.10.53",
+    "name": "Pak RW Sunda Village Suite",
+    "server": "DESA TULUS",
+    "style": "perdesaan Sunda, sopan formal, rapi, ngayomi warga, stabil, hemat AI",
+    "flow": [
+      "edit",
+      "preview",
+      "test",
+      "backup"
+    ],
+    "usefulFeatures": [
+      "Embed Builder kirim ke channel",
+      "Safe Test Mode",
+      "Cek Poin 1 channel",
+      "Top Aktif auto 00.00 WIB",
+      "AI style mirror",
+      "Dashboard quick action",
+      "MongoDB storage check"
+    ],
+    "safeSpicyLimit": "pedas boleh, toxic personal/SARA/ancaman/doxxing/pelecehan tetap diblokir",
+    "premiumSuiteHelp": "Pak RW DESA TULUS: semua fitur bernuansa perdesaan Sunda, sopan, formal, dan tetap aman tanpa reset data.",
+    "protectedSystems": [
+      "Level & Poin",
+      "Top Aktif / MOTM",
+      "Cek Poin"
+    ]
+  },
+  "mabar": {
+    "enabled": true,
+    "channelId": "1504495053400441081",
+    "embedKey": "cariMabar",
+    "allowCustomSenderText": true,
+    "defaultGame": "Belum diisi",
+    "defaultMode": "Santai / Rank / Custom",
+    "defaultSlot": "Belum diisi",
+    "defaultTime": "Belum diisi",
+    "defaultNote": "Hayu mabar bareng warga DESA TULUS, tetap rukun dan sopan 🤍",
+    "buttonText": "🎮 Cari Mabar",
+    "statusText": "Aktif",
+    "dashboardHelp": "Panel Cari Mabar bernuansa warga desa: channel, judul, deskripsi, warna, footer, tombol, dan status aktif/nonaktif."
+  },
+  "curhat": {
+    "enabled": true,
+    "cooldownMs": 6000,
+    "style": "pak_rw_desa_tulus_ngadangu_warga_sopan",
+    "dashboardHelp": "Curhat dijawab sebagai Pak RW: mendengarkan warga, sopan, tidak menghakimi, dan membantu pelan-pelan."
+  },
+  "anonymousCurhat": {
+    "enabled": true,
+    "buttonText": "☁️ Curhat ka Pak RW",
+    "threadEnabled": true,
+    "safeAnonymousMode": true,
+    "dashboardHelp": "Identitas pengirim tidak ditampilkan. Pak RW menjawab dengan sopan dan menjaga rahasia warga."
+  },
+  "donatur": {
+    "enabled": true,
+    "dashboardHelp": "Role Donatur, durasi, nominal per hari, dan minimum amount bisa diatur dari dashboard tanpa reset data.",
+    "errorSafeMode": true
+  },
+  "commandPermissions": {
+    "enabled": true,
+    "staffRoleIds": [],
+    "adminRoleIds": [],
+    "panelRoleIds": [],
+    "allowStaffSendPanel": true,
+    "hideOwnerCommandsFromMembers": true,
+    "memberCommandsEnabled": true,
+    "staffCommandsEnabled": true,
+    "ownerCommandsEnabled": true,
+    "safeMode": true,
+    "protectedSystems": [
+      "level",
+      "topActive",
+      "motm",
+      "cekPoin"
+    ]
+  },
+  "features": {
+    "ai": {
+      "enabled": true
+    },
+    "curhat": {
+      "enabled": true
+    },
+    "anonim": {
+      "enabled": true
+    },
+    "saran": {
+      "enabled": true
+    },
+    "welcome": {
+      "enabled": true
+    },
+    "juragan": {
+      "enabled": true
+    },
+    "donatur": {
+      "enabled": true
+    },
+    "mabar": {
+      "enabled": true
+    }
+  },
+  "dashboardRoleDisplay": {
+    "enabled": true,
+    "showRoleNameInDashboard": true,
+    "saveAsDiscordId": true,
+    "previewMentionAsRoleName": true,
+    "note": "Dashboard menampilkan @Nama Role, tetapi config tetap menyimpan ID/mention Discord agar aman saat dikirim."
+  },
+  "embedSync": {
+    "enabled": true,
+    "storage": "embed-templates.json",
+    "ownerOnly": true,
+    "staffPreviewOnly": true,
+    "protectedEmbeds": [
+      "levelUp",
+      "levelProfile",
+      "topActiveBoard",
+      "memberOfTheMonth"
+    ],
+    "defaultPreviewMode": "desktop",
+    "safeUpdateOnlyOwnMessages": true
+  },
+  "owoAutoRole": {
+    "enabled": true,
+    "prefix": "w",
+    "playerRoleId": "ISI_ID_ROLE_OWO_PLAYER",
+    "squadRoleId": "ISI_ID_ROLE_OWO_SQUAD",
+    "playerChannelIds": [
+      "ISI_ID_CHANNEL_OWO"
+    ],
+    "squadChannelIds": [
+      "ISI_ID_CHANNEL_SQUAD_OWO"
+    ],
+    "logToConsole": true,
+    "sendNotice": false
+  },
+  "activeVoiceRole": {
+    "enabled": true,
+    "roleId": "",
+    "roleName": "Member Aktif",
+    "removeOnLeave": true,
+    "includeStage": true,
+    "logToConsole": true,
+    "sendNotice": false
+  },
+  "boostPoin": {
+    "enabled": true,
+    "eventActive": false,
+    "eventId": "boost-event-1",
+    "eventName": "Boost Poin DESA TULUS",
+    "eventMode": "chat_voice",
+    "boostPercent": 5,
+    "channelId": "ISI_ID_CHANNEL_BOOST_POIN",
+    "channelName": "⚡・boost-poin",
+    "chatChannelIds": [],
+    "voiceChannelIds": [],
+    "includeAllChatChannels": false,
+    "includeAllVoiceChannels": false,
+    "autoRegisterParticipants": true,
+    "sendNotice": false,
+    "logToConsole": true,
+    "announcementTitle": "⚡ BOOST POIN DIAKTIFKAN",
+    "announcementDescription": "Boost poin diperbarui:\n\n👤 Oleh: {by}\n💥 Multiplier: {multiplier}\n⏱️ Durasi: {duration} menit\n📍 Channel: {channels}\n🕒 Berakhir: {endsAt}",
+    "mentionText": "",
+    "roleMentionIds": [],
+    "endTitle": "⚠️ BOOST POIN BERAKHIR",
+    "endDescription": "Boost poin telah selesai.\n\n🔄 Status: Kembali ke normal (x1)",
+    "announcementColor": "#F5C542",
+    "endColor": "#FF5C7A",
+    "showJoinButton": true,
+    "joinButtonLabel": "Join Event",
+    "durationMinutes": 60,
+    "eventByText": "@Pak RW",
+    "eventByUserId": ""
+  },
+  "botName": "Pak RW",
+  "botRole": "Pak RW DESA TULUS",
+  "mentions": {
+    "enabled": true,
+    "realUserMentions": true,
+    "realChannelMentions": true,
+    "allowEveryone": false,
+    "maxUserMentionsPerReply": 5,
+    "maxChannelMentionsPerReply": 20,
+    "note": "Pak RW bisa mengubah @nama warga dan #nama-channel menjadi mention Discord asli jika ditemukan di server. @everyone/@here tetap diblokir agar tidak mengganggu warga."
+  },
+  "botMode": "pak_rw_big_bot_desa_digital",
+  "desaTulusBigBot": {
+    "enabled": true,
+    "name": "Pak RW DESA TULUS",
+    "version": "10.10.54",
+    "theme": "perdesaan Sunda formal, pos ronda, balai warga, sawah, lembur rukun",
+    "mission": "menjadi bot besar untuk mengatur warga, mendengar curhat, menyambut warga anyar, membantu staff, menjaga poin/level, saran, donatur, juragan, top aktif, dan informasi desa digital",
+    "languagePolicy": {
+      "id": "Jika warga memakai Bahasa Indonesia, Pak RW wajib menjawab Bahasa Indonesia yang sopan dan jelas.",
+      "su": "Jika warga meminta Basa Sunda, Pak RW wajib menjawab Basa Sunda formal dan sopan.",
+      "noMixing": "Jangan campur Indonesia-Sunda kecuali user meminta campuran atau frasa server seperti Wilujeung sumping."
+    },
+    "bigBotPrinciples": [
+      "satu identitas: Pak RW untuk DESA TULUS",
+      "semua embed terasa seperti pengumuman balai warga",
+      "fitur harus jelas alurnya dan tidak membingungkan warga",
+      "jawaban AI hemat OpenRouter tapi tetap pintar dan solutif",
+      "data lama dan MongoDB tidak boleh direset"
+    ],
+    "coreModules": [
+      "AI Pak RW",
+      "Curhat Warga",
+      "Curhat Anonim",
+      "Kotak Saran Warga",
+      "Wilujeung Sumping",
+      "Juragan Desa",
+      "Donatur Desa",
+      "Level & Poin Warga",
+      "Top Aktif & MOTM",
+      "Cek Poin",
+      "Voice Warga",
+      "Boost Poin",
+      "Discord Manager"
+    ]
+  }
+}
