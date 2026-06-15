@@ -64,7 +64,7 @@ app.use(express.json({ limit: "8mb" }));
 const isDashboardEnabled = String(process.env.DASHBOARD_ENABLED || "false").toLowerCase() === "true";
 
 
-const dashboardSecret = process.env.DASHBOARD_SECRET || process.env.DISCORD_TOKEN || "bekiw-dashboard-secret";
+const dashboardSecret = process.env.DASHBOARD_SECRET || process.env.DISCORD_TOKEN || "pak-rw-dashboard-secret";
 const dashboardPassword = process.env.DASHBOARD_PASSWORD || "desatulus";
 const dashboardSessions = new Set();
 
@@ -80,7 +80,7 @@ function getCookie(req, name) {
 }
 
 function isDashboardAuth(req) {
-  const token = getCookie(req, "bekiw_dashboard");
+  const token = getCookie(req, "pakrw_dashboard");
   return Boolean(token && dashboardSessions.has(token));
 }
 
@@ -5465,15 +5465,15 @@ function dashboardLayout(inner, active = "dashboard") {
             localStorage.setItem(storageKey, body.classList.contains(cls) ? "1" : "0");
           });
         }
-        setToggle("sidebarCollapseBtn", "sidebar-collapsed", "bekiwSidebarCollapsed");
-        setToggle("focusModeBtn", "focus-edit", "bekiwFocusEdit");
-        setToggle("hidePreviewBtn", "hide-dashboard-preview", "bekiwHidePreview");
-        const density = localStorage.getItem("bekiwUiDensity") || "spacious";
+        setToggle("sidebarCollapseBtn", "sidebar-collapsed", "pakrwSidebarCollapsed");
+        setToggle("focusModeBtn", "focus-edit", "pakrwFocusEdit");
+        setToggle("hidePreviewBtn", "hide-dashboard-preview", "pakrwHidePreview");
+        const density = localStorage.getItem("pakrwUiDensity") || "spacious";
         function applyDensity(next) {
           body.classList.remove("ui-density-spacious", "ui-density-comfortable", "ui-density-compact");
           body.classList.add("ui-density-" + next);
           document.querySelectorAll("[data-density]").forEach((b) => b.classList.toggle("active", b.dataset.density === next));
-          localStorage.setItem("bekiwUiDensity", next);
+          localStorage.setItem("pakrwUiDensity", next);
         }
         applyDensity(density);
         document.querySelectorAll("[data-density]").forEach((b) => b.addEventListener("click", () => applyDensity(b.dataset.density || "spacious")));
@@ -9932,14 +9932,14 @@ app.post("/login", (req, res) => {
 
   const token = makeSessionToken();
   dashboardSessions.add(token);
-  res.setHeader("Set-Cookie", `bekiw_dashboard=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=Lax; Max-Age=86400`);
+  res.setHeader("Set-Cookie", `pakrw_dashboard=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=Lax; Max-Age=86400`);
   return res.redirect("/");
 });
 
 app.get("/logout", (req, res) => {
-  const token = getCookie(req, "bekiw_dashboard");
+  const token = getCookie(req, "pakrw_dashboard");
   if (token) dashboardSessions.delete(token);
-  res.setHeader("Set-Cookie", "bekiw_dashboard=; HttpOnly; Path=/; Max-Age=0");
+  res.setHeader("Set-Cookie", "pakrw_dashboard=; HttpOnly; Path=/; Max-Age=0");
   res.redirect("/login");
 });
 
@@ -14021,7 +14021,7 @@ function makeSafeTestLevelData(baseUserData = {}, targetLevel = 10) {
     chat: Math.max(Number(baseUserData.chat || 0), targetPoints),
     voice: Number(baseUserData.voice || 0),
     level: safeLevel,
-    __bekiwTestOnly: true
+    __pakRwTestOnly: true
   };
 }
 
@@ -14039,7 +14039,7 @@ function makeSafeTestMotmData(baseUserData = {}) {
       bonus: Number(baseUserData.monthly?.bonus || 0),
       lastActivityAt: Date.now()
     },
-    __bekiwTestOnly: true
+    __pakRwTestOnly: true
   };
   cloned.monthly.total = Number(((cloned.monthly.chat || 0) + (cloned.monthly.voice || 0)).toFixed(1));
   return cloned;
@@ -15792,12 +15792,12 @@ function canUseVoiceCommand(member) {
   return isAdmin || isDonatur;
 }
 
-async function handleKiwVoiceCommand(message) {
+async function handleRwVoiceCommand(message) {
   const raw = message.content.trim();
   const args = raw.split(/\s+/);
   const cmd = (args.shift() || "").toLowerCase();
 
-  if (!["rwtarik", "rwusir", "kiwtarik", "kiwusir"].includes(cmd)) return false;
+  if (!["rwtarik", "rwusir"].includes(cmd)) return false;
 
   if (!canUseVoiceCommand(message.member)) {
     await safeReply(message, "❌ Command ini khusus **Owner**, **Admin**, dan member dengan role **Donatur**.");
@@ -15822,7 +15822,7 @@ async function handleKiwVoiceCommand(message) {
     return true;
   }
 
-  if (cmd === "rwtarik" || cmd === "kiwtarik") {
+  if (cmd === "rwtarik") {
     const authorVoice = message.member.voice.channel;
     const targetVoice = target.voice.channel;
 
@@ -15837,7 +15837,7 @@ async function handleKiwVoiceCommand(message) {
     }
 
     await target.voice.setChannel(authorVoice).catch(async (err) => {
-      console.log("KIWTARIK ERROR:", err.message);
+      console.log("RWTARIK ERROR:", err.message);
       await safeReply(message, "❌ Gagal menarik member. Pastikan bot punya permission **Move Members** dan role bot berada cukup tinggi.");
     });
 
@@ -15845,7 +15845,7 @@ async function handleKiwVoiceCommand(message) {
     return true;
   }
 
-  if (cmd === "rwusir" || cmd === "kiwusir") {
+  if (cmd === "rwusir") {
     const targetVoice = target.voice.channel;
 
     if (!targetVoice) {
@@ -15854,7 +15854,7 @@ async function handleKiwVoiceCommand(message) {
     }
 
     await target.voice.disconnect("Diusir dari voice lewat command rwusir").catch(async (err) => {
-      console.log("KIWUSIR ERROR:", err.message);
+      console.log("RWUSIR ERROR:", err.message);
       await safeReply(message, "❌ Gagal mengusir member dari voice. Pastikan bot punya permission **Move Members** dan role bot berada cukup tinggi.");
     });
 
@@ -15867,11 +15867,11 @@ async function handleKiwVoiceCommand(message) {
 
 
 
-async function handleKiwTanyaCommand(message) {
+async function handleRwTanyaCommand(message) {
   const raw = message.content.trim();
   const lowerRaw = raw.toLowerCase();
 
-  const pakRwTanyaCmd = lowerRaw.startsWith("rwtanya") ? "rwtanya" : (lowerRaw.startsWith("kiwtanya") ? "kiwtanya" : null);
+  const pakRwTanyaCmd = lowerRaw.startsWith("rwtanya") ? "rwtanya" : null;
   if (!pakRwTanyaCmd) return false;
 
   if (!isFilledId(config.donaturRoleId)) {
@@ -15890,7 +15890,7 @@ async function handleKiwTanyaCommand(message) {
 
   if (!question) {
     await safeReply(message, [
-      "💎 **KIWTANYA • Donatur Desa**",
+      "💎 **RWTANYA • Donatur Desa**",
       "",
       "Cara pakai:",
       "`rwtanya pertanyaan kamu`",
@@ -15931,7 +15931,7 @@ async function handleKiwTanyaCommand(message) {
     .setColor(0x2f6bff)
     .setTitle(`💎 Jawaban Pak RW untuk ${displayName}`)
     .setDescription(trimReply(answer))
-    .setFooter({ text: makeOTFooter(`${config.serverName} • KIWTANYA Donatur`) })
+    .setFooter({ text: makeOTFooter(`${config.serverName} • RWTANYA Donatur`) })
     .setTimestamp();
 
   await safeReply(message, {
@@ -15994,17 +15994,17 @@ function buildPakRwBigBotEmbed(message) {
     .setTimestamp();
 }
 
-async function handleKiwLevelCommand(message) {
+async function handleRwLevelCommand(message) {
   const raw = message.content.trim().toLowerCase();
 
-  if (!["rwcekpoin", "rwlevel", "rwrank", "rwtoplevel", "rwtopaktif", "rwpapanaktif", "rwleaderboardaktif", "kiwcekpoin", "kiwlevel", "kiwrank", "kiwtoplevel", "kiwtopaktif", "kiwpapanaktif"].some((cmd) => raw === cmd || raw.startsWith(`${cmd} `))) {
+  if (!["rwcekpoin", "rwlevel", "rwrank", "rwtoplevel", "rwtopaktif", "rwpapanaktif", "rwleaderboardaktif"].some((cmd) => raw === cmd || raw.startsWith(`${cmd} `))) {
     return false;
   }
 
   const parts = message.content.trim().split(/\s+/);
   const cmd = (parts.shift() || "").toLowerCase();
 
-  if (["rwtoplevel", "kiwtoplevel"].includes(cmd)) {
+  if (["rwtoplevel"].includes(cmd)) {
     const data = readLevelData();
     const rows = Object.values(data.users || {})
       .filter((u) => u.guildId === message.guild.id)
@@ -16030,7 +16030,7 @@ async function handleKiwLevelCommand(message) {
     return true;
   }
 
-  if (["rwpapanaktif", "rwleaderboardaktif", "kiwpapanaktif"].includes(cmd)) {
+  if (["rwpapanaktif", "rwleaderboardaktif"].includes(cmd)) {
     await safeReply(message, { embeds: [buildLeaderboardActiveEmbed(message.guild, "prefix command")] });
     return true;
   }
@@ -16863,7 +16863,7 @@ async function handlePakRwCommandCenterPrefix(message, cmd, args = []) {
     return true;
   }
 
-  if (["ai", "aiatur", "setai", "rwai", "kiwai"].includes(cleanCmd)) {
+  if (["ai", "aiatur", "setai", "rwai"].includes(cleanCmd)) {
     if (!isPakRwOwner(message)) return safeReply(message, denyOwnerText()), true;
     const sub = String(args[0] || "status").toLowerCase();
     config.ai = config.ai || {};
@@ -16917,7 +16917,7 @@ async function handlePakRwCommandCenterPrefix(message, cmd, args = []) {
   }
 
   if (["tanya"].includes(cleanCmd)) {
-    // Biarkan handleKiwTanyaCommand menangani rwtanya/kiwtanya yang sudah ada.
+    // Biarkan handleRwTanyaCommand menangani rwtanya yang sudah ada.
     return false;
   }
 
@@ -17199,7 +17199,7 @@ function ownerHelpEmbed(message) {
       `\`${p}ping\` • cek ping bot`,
       `\`${p}reloadconfig\` • reload config dari file`,
       `\`${p}backupconfig\` • download backup config.json`,
-      `\`${p}setprefix kiw\` • ganti prefix publik`,
+      `\`${p}setprefix rw\` • ganti prefix publik`,
       `\`${p}setactivity DESA TULUS 🤍\` • ganti activity bot`,
       `\`${p}setai openai/gpt-4o-mini\` • ganti model AI`,
       "",
@@ -17318,7 +17318,7 @@ async function handleOwnerPrefixCommand(message) {
   }
 
   if (cmd === "setprefix") {
-    if (!args[0]) return safeReply(message, `❌ Contoh: \`${p}setprefix kiw\``), true;
+    if (!args[0]) return safeReply(message, `❌ Contoh: \`${p}setprefix rw\``), true;
     config.prefix = args[0];
     await saveLiveConfigFromOwner(message, `Prefix publik diganti jadi \`${config.prefix}\``);
     return true;
@@ -17793,11 +17793,11 @@ client.on(Events.MessageCreate, async (message) => {
     const prefix = config.prefix || "!";
     const lower = message.content.toLowerCase();
 
-    if (await handleKiwLevelCommand(message)) return;
+    if (await handleRwLevelCommand(message)) return;
 
-    if (await handleKiwTanyaCommand(message)) return;
+    if (await handleRwTanyaCommand(message)) return;
 
-    if (await handleKiwVoiceCommand(message)) return;
+    if (await handleRwVoiceCommand(message)) return;
 
     await handleChatLevel(message);
 

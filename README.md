@@ -32,7 +32,7 @@ DASHBOARD_ENABLED=false
 ## Tes lokal
 
 ```bat
-cd /d "D:\bekiw ot"
+cd /d "D:\Pak Rw"
 npm install
 npm run check
 npm start
@@ -106,7 +106,7 @@ Pak RW harus mengikuti bahasa user:
 ### Data aman
 Update ini tidak menyertakan `.env`, `data/`, `logs/`, `backups/`, atau file runtime aktif. Data level, Top Aktif, MOTM, Donatur, Juragan, dan AI memory tetap aman selama MongoDB/ENV lama dipakai.
 
-## v10.10.56 — Papan Aktif Lifetime + Siklus 100.000 Poin
+## v10.10.57 — Papan Aktif Lifetime + Siklus 100.000 Poin
 
 Update ini menambahkan alur level yang lebih besar untuk DESA TULUS:
 
