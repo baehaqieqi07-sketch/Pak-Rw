@@ -4455,7 +4455,7 @@ function dashboardShell(content, title = "Pak RW Dashboard") {
     }
 
 
-    /* ================= PAK RW SOFT CONTROL ROOM v10.10.54 ================= */
+    /* ================= PAK RW SOFT CONTROL ROOM v10.10.55 ================= */
     body.dashboard-clean {
       background:
         radial-gradient(circle at 16% -8%, rgba(76,96,255,.20), transparent 34%),
@@ -4608,7 +4608,7 @@ function dashboardShell(content, title = "Pak RW Dashboard") {
 
 
 
-    /* ================= PAK RW BIG BOT FLOW v10.10.54 ================= */
+    /* ================= PAK RW BIG BOT FLOW v10.10.55 ================= */
     .bbo-flow {
       display: grid;
       grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -4714,7 +4714,7 @@ function dashboardShell(content, title = "Pak RW Dashboard") {
 
 
 
-    /* ================= COMFORT PRO DASHBOARD v10.10.54 ================= */
+    /* ================= COMFORT PRO DASHBOARD v10.10.55 ================= */
     body.dashboard-clean {
       background:
         radial-gradient(circle at 14% -8%, rgba(80, 118, 255, .18), transparent 34%),
@@ -4990,7 +4990,7 @@ function dashboardShell(content, title = "Pak RW Dashboard") {
 
   
 
-    /* ================= FULL FEATURE SUITE v10.10.54 ================= */
+    /* ================= FULL FEATURE SUITE v10.10.55 ================= */
     body.dashboard-clean {
       background:
         radial-gradient(circle at 8% 0%, rgba(124,109,255,.18), transparent 28%),
@@ -5031,7 +5031,7 @@ function dashboardShell(content, title = "Pak RW Dashboard") {
 
   
 
-/* ================= PAK RW PREMIUM DASHBOARD ONLY v10.10.54 ================= */
+/* ================= PAK RW PREMIUM DASHBOARD ONLY v10.10.55 ================= */
 :root{
   --premium-bg:#070a14;
   --premium-bg2:#0b1021;
@@ -5138,7 +5138,7 @@ body.has-unsaved .unsaved-pill{display:block;}
 @media(max-width:860px){.premium-app{grid-template-columns:1fr}.premium-sidebar{position:fixed;left:0;top:0;bottom:0;width:min(86vw,320px);transform:translateX(-105%);transition:.2s ease;height:100vh}.nav-open .premium-sidebar{transform:translateX(0)}.mobile-nav-toggle{display:block}.premium-main{padding:16px 14px 78px}.premium-topbar,.premium-section-head{flex-direction:column}.premium-hero{padding:22px;border-radius:24px}.premium-hero h2{font-size:28px}.premium-grid,.premium-feature-grid,.premium-flow{grid-template-columns:1fr}.premium-pins{grid-template-columns:1fr 1fr}.premium-card,.premium-section{border-radius:22px}.carl-workspace,.carl-shell{grid-template-columns:1fr!important}.carl-preview-panel,.carl-side{position:relative!important;top:auto!important}}
 
 
-/* ================= PAK RW SPACIOUS PREMIUM DASHBOARD ONLY v10.10.54 ================= */
+/* ================= PAK RW SPACIOUS PREMIUM DASHBOARD ONLY v10.10.55 ================= */
 :root{
   --sp-bg:#070912;
   --sp-bg2:#0b1020;
@@ -5281,7 +5281,7 @@ body.ui-density-compact textarea{min-height:120px!important;}
 @media(max-width:860px){.premium-main{padding:18px!important;padding-bottom:100px!important}.premium-topbar{align-items:flex-start!important}.premium-toolbar{justify-content:flex-start!important}.premium-grid,.premium-feature-grid,.premium-flow,.premium-preview-grid{grid-template-columns:1fr!important}.premium-section{padding:20px!important}.premium-sidebar{width:min(88vw,340px)!important}.premium-card,.premium-section{border-radius:24px!important}body.focus-edit .premium-main,body.sidebar-collapsed .premium-main{padding:18px!important;padding-bottom:100px!important}}
 
 
-/* ===== v10.10.54 Control Center Premium Safe Polish ===== */
+/* ===== v10.10.55 Control Center Premium Safe Polish ===== */
 .premium-protect-note{border:1px solid rgba(255,120,215,.18);background:linear-gradient(135deg,rgba(120,168,255,.09),rgba(255,120,215,.07));border-radius:22px;padding:14px 16px;color:rgba(248,251,255,.76);font-weight:850;line-height:1.55;margin:14px 0;}
 .premium-feature.locked,.premium-card.locked{border-color:rgba(247,205,103,.18)!important;background:linear-gradient(180deg,rgba(247,205,103,.065),rgba(255,255,255,.035))!important;}
 .premium-feature.locked:after{content:"Locked Safe";position:absolute;right:14px;top:14px;padding:5px 8px;border-radius:999px;background:rgba(247,205,103,.12);border:1px solid rgba(247,205,103,.22);font-size:10px;font-weight:1000;color:#ffe8a0;}
@@ -5377,7 +5377,7 @@ function dashboardLayout(inner, active = "dashboard") {
         <div class="premium-brand">
           <div class="premium-logo">${dashboardLogoHtml()}</div>
           <div>
-            <h1>${escapeHtml(dash.brandTitle || "Pak RW v10.10.54")}</h1>
+            <h1>${escapeHtml(dash.brandTitle || "Pak RW v10.10.55")}</h1>
             <p>${escapeHtml(dash.brandSubtitle || "Premium Control Center")}</p>
           </div>
         </div>
@@ -5414,7 +5414,7 @@ function dashboardLayout(inner, active = "dashboard") {
       <main class="premium-main">
         <div class="premium-topbar">
           <div>
-            <b>Pak RW Control Center</b>
+            <b>Pak RW Unified Control Center</b>
             <span>DESA TULUS • Dashboard premium + Embed Sync Discord ↔ Dashboard</span>
           </div>
           <div class="premium-toolbar" aria-label="Dashboard tools">
@@ -5428,7 +5428,7 @@ function dashboardLayout(inner, active = "dashboard") {
             </div>
             <span class="premium-chip ${statusText === "Online" ? "ok" : "warn"}">● ${escapeHtml(statusText)}</span>
             <span class="premium-chip">${escapeHtml(cfg.serverName || "DESA TULUS")}</span>
-            <span class="premium-chip">v10.10.54</span>
+            <span class="premium-chip">v10.10.55</span>
           </div>
         </div>
         ${inner}
@@ -5528,8 +5528,8 @@ function renderDashboard(req) {
 
   return dashboardLayout(`
     <section class="${heroClass}"${heroStyle}>
-      <div class="premium-hero-badge">🤍 DESA TULUS • Control Center Premium</div>
-      <h2>${escapeHtml(cfg.embeds?.dashboard?.homeTitle || "Pak RW Premium Control Center v10.10.54")}</h2>
+      <div class="premium-hero-badge">🌾 DESA TULUS • Balai Desa Digital Premium</div>
+      <h2>${escapeHtml(cfg.embeds?.dashboard?.homeTitle || "Pak RW Premium Control Center v10.10.55")}</h2>
       <p>${escapeHtml(cfg.embeds?.dashboard?.homeSubtitle || "Dashboard dibuat lebih rapi, adem, dan modern seperti panel bot Discord besar. Semua fitur lama tetap aman; update ini hanya merapikan web dashboard, navigasi, editor, preview, dan pengalaman edit.")}</p>
       <div class="premium-actions">
         <a class="btn" href="/embeds">🎨 Edit Embed</a>
@@ -5635,7 +5635,7 @@ function renderFeatureFlowDashboard(req) {
 
   return dashboardLayout(`
     <section class="suite-hero">
-      <span class="ot-badge">🧭 FULL FEATURE SUITE • v10.10.54</span>
+      <span class="ot-badge">🧭 FULL FEATURE SUITE • v10.10.55</span>
       <h2>Semua Fitur Pak RW, Satu Alur yang Jelas</h2>
       <p>Halaman ini dibuat supaya dashboard terasa seperti bot besar terkenal: fitur tidak numpuk, tiap modul punya tujuan, dan setelah edit kamu tahu harus preview, test, lalu backup.</p>
       <div class="ot-hero-actions">
@@ -5902,7 +5902,8 @@ function renderMaxtonMegaControl(req, saved = false, error = "") {
           ${maxtonChannelSelect(guild, "chatWargaChannelId", "Channel Chat Warga / Welcome", cfg.chatWargaChannelId, "text")}
           ${maxtonChannelSelect(guild, "levelChannelId", "Channel Level Up", cfg.levelChannelId, "text")}
           ${maxtonChannelSelect(guild, "cekPoinChannelId", "Channel Cek Poin", cfg.cekPoinChannelId || cfg.level?.checkPointChannelId || cfg.levelChannelId, "text")}
-          ${maxtonChannelSelect(guild, "topActiveChannelId", "Channel Top Aktif 1 Channel", topCfg.channelId || cfg.levelChannelId, "text")}
+          ${maxtonChannelSelect(guild, "topActiveChannelId", "Channel Top Aktif Bulanan", topCfg.channelId || cfg.levelChannelId, "text")}
+          ${maxtonChannelSelect(guild, "leaderboardActiveChannelId", "Channel Leaderboard Aktif / Papan Aktif", topCfg.leaderboardActiveChannelId || topCfg.channelId || cfg.levelChannelId, "text")}
           ${maxtonChannelSelect(guild, "boostChannelId", "Channel Boost / Juragan", cfg.juragan.boostChannelId, "text")}
           ${maxtonChannelSelect(guild, "ticketChannelId", "Channel Ticket", cfg.ticketChannelId, "text")}
           ${maxtonChannelSelect(guild, "logChannelId", "Channel Log", cfg.logChannelId, "text")}
@@ -6032,7 +6033,7 @@ function renderMaxtonMegaControl(req, saved = false, error = "") {
         <h3>✍️ Semua Text Center</h3>
         <p class="section-note">Semua text penting dibuat bisa diedit dari dashboard. Ada field simpel, daftar text otomatis dari config, tambah text baru, dan JSON semua text. Placeholder aman: {user}, {username}, {server}, {role}, {month}, {total}, {chat}, {voice}, {level}, {rank}, {memberCount}, {expiredText}.</p>
         <div class="formgrid">
-          ${configInput("welcomeTitle", "Judul Welcome", cfg.welcome.title || "👋 Warga Baru Datang!")}
+          ${configInput("welcomeTitle", "Judul Welcome", cfg.welcome.title || "🏡 Wilujeung Sumping Warga Anyar!")}
           ${configInput("suggestionTitle", "Judul Panel Saran", cfg.suggestion.title || "💡 DESA TULUS • Kritik & Saran")}
           ${configInput("dashboardBrandTitle", "Dashboard Brand Title", dash.brandTitle || "Pak RW")}
           ${configInput("dashboardBrandSubtitle", "Dashboard Brand Subtitle", dash.brandSubtitle || "Pak RW Control")}
@@ -6238,7 +6239,7 @@ function applyMaxtonControlPost(body = {}) {
 
   cfg.welcome.enabled = bool("welcomeEnabled");
   cfg.welcome.sendToChatWarga = bool("welcomeSendToChatWarga");
-  cfg.welcome.title = body.welcomeTitle || cfg.welcome.title || "👋 Warga Baru Datang!";
+  cfg.welcome.title = body.welcomeTitle || cfg.welcome.title || "🏡 Wilujeung Sumping Warga Anyar!";
   cfg.welcome.message = body.welcomeMessage || cfg.welcome.message || "";
   cfg.suggestion.enabled = bool("suggestionEnabled");
   cfg.suggestion.title = body.suggestionTitle || cfg.suggestion.title || "💡 DESA TULUS • Kritik & Saran";
@@ -6247,8 +6248,9 @@ function applyMaxtonControlPost(body = {}) {
 
   cfg.topActive.enabled = bool("topActiveEnabled");
   cfg.topActive.channelId = body.topActiveChannelId || cfg.topActive.channelId || cfg.levelChannelId || "";
+  cfg.topActive.leaderboardActiveChannelId = body.leaderboardActiveChannelId || cfg.topActive.leaderboardActiveChannelId || cfg.topActive.channelId || "";
   cfg.topActive.memberOfTheMonthRoleId = body.memberOfTheMonthRoleId || cfg.topActive.memberOfTheMonthRoleId || "";
-  cfg.topActive.pointsThreshold = num(body.topActivePointsThreshold, cfg.topActive.pointsThreshold ?? 10000, 1);
+  cfg.topActive.pointsThreshold = num(body.topActivePointsThreshold, cfg.topActive.pointsThreshold ?? 100000, 1);
   cfg.topActive.topLimit = num(body.topActiveLimit, cfg.topActive.topLimit ?? 10, 3, 50);
   cfg.topActive.chatPointPerMessage = num(body.topActiveChatPoint, cfg.topActive.chatPointPerMessage ?? 5, 0.1);
   cfg.topActive.voicePointPerMinute = num(body.topActiveVoicePoint, cfg.topActive.voicePointPerMinute ?? 5, 0.1);
@@ -6486,9 +6488,10 @@ function renderTopActiveDashboard(req, saved = false, error = "") {
       <div class="formgrid">
         <div><label>Status Fitur</label><select name="enabled"><option value="on" ${topCfg.enabled !== false ? "selected" : ""}>Aktif</option><option value="off" ${topCfg.enabled === false ? "selected" : ""}>Nonaktif</option></select></div>
         <div><label>Mode 1 Channel</label><select name="useOneChannel"><option value="on" ${topCfg.useOneChannel !== false ? "selected" : ""}>Aktif - Top Aktif/MOTM 1 channel</option><option value="off" ${topCfg.useOneChannel === false ? "selected" : ""}>Nonaktif</option></select></div>
-        ${guild ? selectField("channelId", "Channel Top Aktif (1 Channel)", channelOptions(guild, topCfg.channelId || cfg.levelChannelId, "text")) : configInput("channelId", "Channel Top Aktif ID (1 Channel)", topCfg.channelId || cfg.levelChannelId || "")}
+        ${guild ? selectField("channelId", "Channel Top Aktif Bulanan", channelOptions(guild, topCfg.channelId || cfg.levelChannelId, "text")) : configInput("channelId", "Channel Top Aktif Bulanan ID", topCfg.channelId || cfg.levelChannelId || "")}
+        ${guild ? selectField("leaderboardActiveChannelId", "Channel Leaderboard Aktif / Papan Aktif Lifetime", channelOptions(guild, topCfg.leaderboardActiveChannelId || topCfg.channelId || cfg.levelChannelId, "text")) : configInput("leaderboardActiveChannelId", "Channel Leaderboard Aktif ID", topCfg.leaderboardActiveChannelId || topCfg.channelId || "")}
         ${guild ? selectField("memberOfTheMonthRoleId", "Role Member Of The Month", roleOptions(guild, topCfg.memberOfTheMonthRoleId || "")) : configInput("memberOfTheMonthRoleId", "Role Member Of The Month ID", topCfg.memberOfTheMonthRoleId || "")}
-        ${configInput("pointsThreshold", "Target Poin Member Of The Month", topCfg.pointsThreshold || 10000, "number")}
+        ${configInput("pointsThreshold", "Target Poin Member Of The Month + Reset Siklus", topCfg.pointsThreshold || 100000, "number")}
         ${configInput("topLimit", "Jumlah Ranking Ditampilkan", topCfg.topLimit || 10, "number")}
         ${configInput("chatPointPerMessage", "Poin per Chat", topCfg.chatPointPerMessage || 5, "number")}
         ${configInput("voicePointPerMinute", "Poin per Menit Voice", topCfg.voicePointPerMinute || 2, "number")}
@@ -7509,7 +7512,7 @@ function defaultEmbedTemplateRegistry() {
       sourceChannelId: "",
       sourceMessageId: "",
       content: "",
-      embed: { title: cfg.welcome.title || "👋 Warga Baru Datang!", description: cfg.welcome.message || "", color: hexToIntColor(cfg.embedColor || "#FFFFFF") },
+      embed: { title: cfg.welcome.title || "🏡 Wilujeung Sumping Warga Anyar!", description: cfg.welcome.message || "", color: hexToIntColor(cfg.embedColor || "#FFFFFF") },
       components: [],
       lastEditedAt: "",
       lastSentAt: "",
@@ -8093,7 +8096,7 @@ function renderControlCenter(req, saved = false, error = "", actionMessage = "")
 
   return dashboardLayout(`
     <div class="hero-banner">
-      <h2>🧠 GOD MODE Control Center</h2>
+      <h2>🌾 Balai Desa Control Center</h2>
       <p>Panel pusat buat kontrol Pak RW seperti bot besar: kirim pengumuman, quick embed, cek koneksi Discord, dan akses action penting dari satu tempat.</p>
       <div class="mini-row">
         <span class="mini-pill">🤖 Bot: ${escapeHtml(client?.user?.tag || "Belum online")}</span>
@@ -10228,7 +10231,7 @@ app.get("/logs", requireDashboardAuth, (req, res) => {
   const activities = readDashboardActivity(40);
   res.send(dashboardLayout(`
     <section class="premium-hero"><div class="premium-hero-badge">📜 DESA TULUS • Recent Activity</div><h2>Logs & Activity Pak RW</h2><p>Catatan ringan untuk aksi dashboard: simpan template, import embed, kirim embed, update pesan, duplicate, dan aktivitas penting lain. Tidak menampilkan token/env.</p></section>
-    <section class="premium-section"><div class="premium-section-head"><div><h3>Recent Activity</h3><div class="premium-muted">Aktivitas terbaru dashboard Pak RW Control Center.</div></div><a class="btn secondary" href="/embed-sync">Embed Sync</a></div><div class="control-activity">
+    <section class="premium-section"><div class="premium-section-head"><div><h3>Recent Activity</h3><div class="premium-muted">Aktivitas terbaru dashboard Pak RW Unified Control Center.</div></div><a class="btn secondary" href="/embed-sync">Embed Sync</a></div><div class="control-activity">
       ${activities.length ? activities.map((a)=>`<div class="activity-row"><span>${escapeHtml(formatActivityTime(a.at))}</span><div><b>${escapeHtml(a.title || "Activity")}</b><span>${escapeHtml(a.detail || "")}</span></div><em class="activity-tag">${escapeHtml(a.type || "info")}</em></div>`).join("") : `<div class="premium-muted">Belum ada aktivitas tersimpan.</div>`}
     </div></section>
   `, "logs"));
@@ -10296,7 +10299,7 @@ app.post("/embeds", requireDashboardAuth, (req, res) => {
     }
 
     cfg.embeds.dashboard = cfg.embeds.dashboard || {};
-    cfg.embeds.dashboard.brandTitle = "Pak RW v10.10.54";
+    cfg.embeds.dashboard.brandTitle = "Pak RW v10.10.55";
     cfg.embeds.dashboard.brandSubtitle = "Ultra Premium + Cari Mabar Embed";
     cfg.dashboard = cfg.dashboard || {};
     cfg.dashboard.releaseVersion = "10.10.32";
@@ -10330,7 +10333,7 @@ app.post("/embeds/send/:key", requireDashboardAuth, async (req, res) => {
 
     cfg.embeds[originalKey] = updatedEmbed;
     cfg.embeds.dashboard = cfg.embeds.dashboard || {};
-    cfg.embeds.dashboard.brandTitle = "Pak RW v10.10.54";
+    cfg.embeds.dashboard.brandTitle = "Pak RW v10.10.55";
     cfg.embeds.dashboard.brandSubtitle = "Ultra Premium + Cari Mabar Embed";
     cfg.dashboard = cfg.dashboard || {};
     cfg.dashboard.releaseVersion = "10.10.32";
@@ -10520,8 +10523,9 @@ app.post("/top-active", requireDashboardAuth, (req, res) => {
 
     cfg.topActive.enabled = req.body.enabled !== "off";
     cfg.topActive.channelId = req.body.channelId || cfg.levelChannelId || "";
+    cfg.topActive.leaderboardActiveChannelId = req.body.leaderboardActiveChannelId || cfg.topActive.leaderboardActiveChannelId || cfg.topActive.channelId || "";
     cfg.topActive.memberOfTheMonthRoleId = req.body.memberOfTheMonthRoleId || "";
-    cfg.topActive.pointsThreshold = Number(req.body.pointsThreshold || 10000);
+    cfg.topActive.pointsThreshold = Number(req.body.pointsThreshold || 100000);
     cfg.topActive.useOneChannel = req.body.useOneChannel !== "off";
     cfg.topActive.topLimit = Math.max(3, Math.min(25, Number(req.body.topLimit || 10)));
     cfg.topActive.chatPointPerMessage = Math.max(1, Number(req.body.chatPointPerMessage || 5));
@@ -10535,7 +10539,8 @@ app.post("/top-active", requireDashboardAuth, (req, res) => {
     cfg.topActive.bannerEnabled = req.body.bannerEnabled !== "off";
     cfg.topActive.announceLevelUp = req.body.announceLevelUp === "on";
     cfg.topActive.announceMemberOfTheMonth = req.body.announceMemberOfTheMonth === "on";
-    cfg.topActive.motmAwardMode = cfg.topActive.announceMemberOfTheMonth ? "auto" : "manual_only";
+    cfg.topActive.motmAwardMode = "auto_cycle_100k";
+    cfg.topActive.autoMotmRole = true;
     cfg.topActive.postBoardAfterMotm = req.body.postBoardAfterMotm === "on" && cfg.topActive.announceMemberOfTheMonth === true;
     cfg.topActive.motmSendMode = req.body.motmSendMode || cfg.topActive.motmSendMode || "separate_text_image";
     cfg.topActive.autoImageThreadEnabled = req.body.autoImageThreadEnabled !== "off";
@@ -12046,10 +12051,25 @@ function getLevelUser(data, guildId, userId) {
       chat: 0,
       voice: 0,
       level: 1,
-      lastMessageAt: 0
+      lastMessageAt: 0,
+      lifetimeChat: 0,
+      lifetimeVoice: 0,
+      lifetimeTotal: 0,
+      activeCycleCount: 0,
+      activeCycleLastResetAt: 0
     };
   }
-  return data.users[key];
+
+  const u = data.users[key];
+  // Papan Aktif lifetime tidak pernah di-reset. Data lama otomatis dimigrasikan dari chat+voice.
+  const currentTotal = Number((Number(u.chat || 0) + Number(u.voice || 0)).toFixed(1));
+  if (!Number.isFinite(Number(u.lifetimeTotal)) || Number(u.lifetimeTotal || 0) < currentTotal) {
+    u.lifetimeChat = Number(u.chat || 0);
+    u.lifetimeVoice = Number(u.voice || 0);
+    u.lifetimeTotal = currentTotal;
+  }
+  u.activeCycleCount = Number(u.activeCycleCount || 0);
+  return u;
 }
 
 function getLevelInfo(userData = {}) {
@@ -12150,7 +12170,45 @@ async function getOrCreateLevelChannel(guild) {
 
 
 function getTotalLevelPoints(userData) {
+  // Ini poin siklus level saat ini. Kalau tembus target 100.000, siklus ini di-reset.
   return getTotalPointsForLevel(userData);
+}
+
+function getLifetimeLevelPoints(userData = {}) {
+  const stored = Number(userData.lifetimeTotal || 0);
+  const current = getTotalPointsForLevel(userData);
+  return Number(Math.max(stored, current).toFixed(1));
+}
+
+function addLifetimeLevelPoints(userData, type, amount) {
+  const value = normalizeLevelPointAmount(amount);
+  if (!value) return;
+  if (type === "chat") userData.lifetimeChat = Number((Number(userData.lifetimeChat || 0) + value).toFixed(1));
+  if (type === "voice") userData.lifetimeVoice = Number((Number(userData.lifetimeVoice || 0) + value).toFixed(1));
+  userData.lifetimeTotal = Number((Number(userData.lifetimeChat || 0) + Number(userData.lifetimeVoice || 0)).toFixed(1));
+  userData.lifetimeLastActivityAt = Date.now();
+}
+
+function getLevelCycleThreshold() {
+  const cfg = getTopActiveConfig();
+  return Math.max(1000, Number(cfg.pointsThreshold || 100000));
+}
+
+function resetUserLevelCycleAfterTarget(userData, type, threshold) {
+  const current = getTotalPointsForLevel(userData);
+  if (current < threshold) return false;
+
+  const remainder = Number(Math.max(0, current - threshold).toFixed(1));
+  // Siklus level diulang dari awal; Papan Aktif lifetime tetap menyimpan total lama + baru.
+  userData.chat = 0;
+  userData.voice = 0;
+  if (type === "voice") userData.voice = remainder;
+  else userData.chat = remainder;
+  userData.level = getLevelInfo(userData).current.level;
+  userData.activeCycleCount = Number(userData.activeCycleCount || 0) + 1;
+  userData.activeCycleLastResetAt = Date.now();
+  userData.lastMotmThreshold = threshold;
+  return true;
 }
 
 function isServerOwnerId(guildOrOwnerId, userId) {
@@ -12788,17 +12846,23 @@ function getTopActiveConfig() {
     enabled: t.enabled !== false,
     channelId: t.channelId || config.levelChannelId || "",
     memberOfTheMonthRoleId: t.memberOfTheMonthRoleId || "",
-    pointsThreshold: Number(t.pointsThreshold || 10000),
+    pointsThreshold: Number(t.pointsThreshold || 100000),
     useOneChannel: t.useOneChannel !== false,
     topLimit: Math.max(3, Math.min(25, Number(t.topLimit || 10))),
+    leaderboardActiveChannelId: t.leaderboardActiveChannelId || t.papanAktifChannelId || t.channelId || config.levelChannelId || "",
+    leaderboardActiveTopLimit: Math.max(3, Math.min(25, Number(t.leaderboardActiveTopLimit || t.topLimit || 10))),
+    leaderboardActiveTitleTemplate: t.leaderboardActiveTitleTemplate || "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU",
+    leaderboardActiveSubtitle: t.leaderboardActiveSubtitle || "Papan ini mencatat total poin warga dari awal bergabung sampai seterusnya. Data ini tidak di-reset meskipun siklus level kembali dari awal setelah 100.000 poin.",
+    leaderboardActiveFooter: t.leaderboardActiveFooter || "DESA TULUS • Leaderboard Aktif Warga",
+    leaderboardActiveImageUrl: t.leaderboardActiveImageUrl || config.embeds?.dashboard?.media?.topActiveBoardImageUrl || "",
     chatPointPerMessage: Number(t.chatPointPerMessage || 5),
     voicePointPerMinute: Number(t.voicePointPerMinute || 2),
     bonusEnabled: t.bonusEnabled !== false,
     bonusPercent: Math.max(0, Number(t.bonusPercent ?? 15)),
     announceLevelUp: t.announceLevelUp === true,
-    announceMemberOfTheMonth: t.announceMemberOfTheMonth === true && t.motmAwardMode !== "manual_only",
-    motmAwardMode: t.motmAwardMode || "manual_only",
-    autoMotmRole: t.autoMotmRole === true,
+    announceMemberOfTheMonth: t.announceMemberOfTheMonth === true,
+    motmAwardMode: t.motmAwardMode || "auto_cycle_100k",
+    autoMotmRole: t.autoMotmRole !== false,
     bannerEnabled: t.bannerEnabled !== false,
     autoImageThreadEnabled: t.autoImageThreadEnabled !== false,
     autoImageThreadMessage: t.autoImageThreadMessage || "🖼️ Thread otomatis dibuat buat diskusi gambar ini. Silakan ngobrol di sini ya 🤍",
@@ -13023,6 +13087,69 @@ function buildTopActiveBoardEmbed(guild, reason = "update") {
   return embed;
 }
 
+function getLeaderboardActiveRows(guildId, limit = 10, ownerId = "") {
+  const data = readLevelData();
+  const rows = Object.values(data.users || {})
+    .filter((u) => u.guildId === guildId)
+    .filter((u) => !shouldExcludeOwnerFromLeaderboard(ownerId, u.userId))
+    .map((u) => ({
+      ...u,
+      lifetimeTotal: getLifetimeLevelPoints(u),
+      lifetimeChat: Number(u.lifetimeChat || u.chat || 0),
+      lifetimeVoice: Number(u.lifetimeVoice || u.voice || 0)
+    }))
+    .filter((u) => Number(u.lifetimeTotal || 0) > 0)
+    .sort((a, b) => Number(b.lifetimeTotal || 0) - Number(a.lifetimeTotal || 0));
+  return rows.slice(0, Math.max(3, Math.min(25, Number(limit || 10))));
+}
+
+function formatLeaderboardActiveRows(rows = []) {
+  if (!rows.length) return "Belum ada data Papan Aktif.";
+  const arrow = getTopActiveArrowEmoji();
+  return rows.map((u, i) => {
+    const rank = getTopRankLabel(i);
+    const info = getLevelInfoFromPoints(u.lifetimeTotal || 0);
+    const cycle = Number(u.activeCycleCount || 0) > 0 ? ` • Siklus ${formatNumber(Number(u.activeCycleCount || 0) + 1)}` : "";
+    return `${rank} <@${u.userId}> ${arrow} **${formatNumber(u.lifetimeTotal)} poin**\n🏷️ ${info.current.name} • Lifetime Lv. ${info.current.level}${cycle}`;
+  }).join("\n");
+}
+
+function buildLeaderboardActiveEmbed(guild, reason = "update") {
+  const cfg = getTopActiveConfig();
+  const rows = getLeaderboardActiveRows(guild.id, cfg.leaderboardActiveTopLimit, guild.ownerId);
+  const serverName = config.serverName || guild.name || "DESA TULUS";
+  const embed = new EmbedBuilder()
+    .setColor(hexColor(config.embeds?.topActiveBoard?.color || "#F5C542", 0xf5c542))
+    .setAuthor({ name: `${serverName} • Leaderboard Aktif` })
+    .setTitle(applyTemplate(cfg.leaderboardActiveTitleTemplate || "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU", { server: serverName }))
+    .setDescription([
+      cfg.leaderboardActiveSubtitle,
+      "",
+      "**Alur jelas:** poin chat/voice masuk ke siklus level. Saat warga mencapai **100.000 poin**, Pak RW memberi role **Member Of The Month**, lalu poin siklus level kembali dari awal. Poin di Papan Aktif ini tetap lanjut dan tidak di-reset.",
+      "",
+      formatLeaderboardActiveRows(rows)
+    ].join("\n"))
+    .setFooter({ text: makeOTFooter(cfg.leaderboardActiveFooter || `${serverName} • Papan Aktif`) })
+    .setTimestamp();
+
+  if (cfg.leaderboardActiveImageUrl) embed.setImage(cfg.leaderboardActiveImageUrl);
+  return embed;
+}
+
+async function getLeaderboardActiveChannel(guild) {
+  const cfg = getTopActiveConfig();
+  const channelId = cfg.leaderboardActiveChannelId || cfg.channelId;
+  if (!cfg.enabled || !isFilledId(channelId)) return null;
+  return getTextChannel(guild, channelId);
+}
+
+async function sendLeaderboardActiveBoard(guild, reason = "update") {
+  const channel = await getLeaderboardActiveChannel(guild);
+  if (!channel) return false;
+  await safeSend(channel, { embeds: [buildLeaderboardActiveEmbed(guild, reason)] });
+  return true;
+}
+
 async function getTopActiveChannel(guild) {
   const cfg = getTopActiveConfig();
   if (!cfg.enabled || !isFilledId(cfg.channelId)) return null;
@@ -13118,6 +13245,7 @@ async function runTopPoinDailyPosterOnce() {
 
       const ok = await sendTopActiveBoard(guild, "auto top poin harian 00.00 WIB");
       if (ok) {
+        await sendLeaderboardActiveBoard(guild, "auto leaderboard aktif harian 00.00 WIB").catch((err) => console.log("LEADERBOARD AKTIF AUTO POST ERROR:", err?.message || err));
         state.posted[key] = {
           guildId: guild.id,
           guildName: guild.name,
@@ -13142,7 +13270,7 @@ async function runTopPoinDailyPosterOnce() {
 
 function startTopActiveDailyPoster() {
   const cfg = getTopActiveConfig();
-  console.log(`🏆 Auto post Top Poin: ${cfg.enabled && cfg.dailyAutoPost ? "aktif" : "nonaktif"} • jam ${String(cfg.dailyPostHourWIB ?? 0).padStart(2, "0")}.00 WIB • mode once-per-day persistent`);
+  console.log(`🏆 Auto post Top Aktif + Leaderboard Aktif: ${cfg.enabled && cfg.dailyAutoPost ? "aktif" : "nonaktif"} • jam ${String(cfg.dailyPostHourWIB ?? 0).padStart(2, "0")}.00 WIB • mode once-per-day persistent`);
 
   // Cek langsung setelah bot online, lalu cek tiap menit.
   setTimeout(() => runTopPoinDailyPosterOnce(), 5000);
@@ -14126,6 +14254,49 @@ async function forceSendMemberOfTheMonthTest(member, userData, fallbackChannel =
   return { ok: true, channel, roleGiven };
 }
 
+async function checkCycleMemberOfTheMonthReward(member, userData, type = "chat") {
+  const cfg = getTopActiveConfig();
+  if (!cfg.enabled || cfg.autoMotmRole === false) return false;
+  if (shouldExcludeOwnerFromLevel(member.guild, member.id)) return false;
+
+  const threshold = getLevelCycleThreshold();
+  if (getTotalPointsForLevel(userData) < threshold) return false;
+
+  let roleGiven = false;
+  if (isFilledId(cfg.memberOfTheMonthRoleId)) {
+    const role = member.guild.roles.cache.get(cfg.memberOfTheMonthRoleId);
+    if (role && !member.roles.cache.has(role.id)) {
+      await member.roles.add(role).catch((err) => console.log("MOTM 100K ROLE ADD ERROR:", err.message));
+      roleGiven = true;
+    }
+  }
+
+  const reset = resetUserLevelCycleAfterTarget(userData, type, threshold);
+  userData.memberOfTheMonthRoleGivenAt = Date.now();
+  userData.memberOfTheMonthRoleId = cfg.memberOfTheMonthRoleId || "";
+  userData.motmAuto100kCount = Number(userData.motmAuto100kCount || 0) + 1;
+  userData.lastMotmAuto100kAt = Date.now();
+
+  const channel = await getTopActiveChannel(member.guild);
+  if (channel && cfg.announceMemberOfTheMonth === true) {
+    const embed = new EmbedBuilder()
+      .setColor(0xf5c542)
+      .setTitle("🏆 MEMBER OF THE MONTH OTOMATIS")
+      .setDescription([
+        `${member} berhasil mencapai **${formatNumber(threshold)} poin aktif**.`,
+        "",
+        roleGiven ? "✅ Role **Member Of The Month** sudah diberikan." : "ℹ️ Role MOTM belum diberikan karena role belum diatur / sudah dimiliki.",
+        "🔁 Poin siklus level warga ini sudah dikembalikan dari awal.",
+        `🏛️ Papan Aktif lifetime tetap lanjut: **${formatNumber(getLifetimeLevelPoints(userData))} poin**.`
+      ].join("\n"))
+      .setFooter({ text: makeOTFooter(`${config.serverName || "DESA TULUS"} • Siklus 100.000 Poin`) })
+      .setTimestamp();
+    await safeSend(channel, { embeds: [embed] });
+  }
+
+  return reset;
+}
+
 async function checkMemberOfTheMonthReward(member, userData) {
   const cfg = getTopActiveConfig();
   // MOTM sekarang default MANUAL ONLY dari dashboard.
@@ -14384,6 +14555,7 @@ async function addLevelPoints(member, type, amount, fallbackChannel, sourceChann
 
   if (type === "chat") userData.chat = Number(((userData.chat || 0) + finalAmount).toFixed(1));
   if (type === "voice") userData.voice = Number(((userData.voice || 0) + finalAmount).toFixed(1));
+  addLifetimeLevelPoints(userData, type, finalAmount);
 
   const monthly = incrementMonthlyStats(userData, type, finalAmount);
   if (totalBonusAmount > 0) {
@@ -14406,18 +14578,19 @@ async function addLevelPoints(member, type, amount, fallbackChannel, sourceChann
     };
   }
 
+  const cycleReset = await checkCycleMemberOfTheMonthReward(member, userData, type);
   const afterInfo = getLevelInfo(userData);
   userData.level = afterInfo.current.level;
 
-  if (afterInfo.current.level >= 100 && before < 100) {
+  if (!cycleReset && afterInfo.current.level >= 100 && before < 100) {
     await grantLevel100Role(member, userData);
   }
 
-  await checkMemberOfTheMonthReward(member, userData);
+  if (!cycleReset) await checkMemberOfTheMonthReward(member, userData);
 
   writeLevelData(data);
 
-  if (afterInfo.current.level > before) {
+  if (!cycleReset && afterInfo.current.level > before) {
     await sendLevelUp(member, userData, fallbackChannel);
     await sendTopActiveLevelNotice(member, userData);
   }
@@ -14774,7 +14947,7 @@ async function sendAnonimPanel(channel) {
     const embed = new EmbedBuilder()
       .setColor(hexColor(panelEmbedCfg.color, color()))
       .setTitle(panelEmbedCfg.title || "☁️ Curhat Anonim DESA TULUS")
-      .setDescription(panelEmbedCfg.description || "Punya sesuatu yang ingin kamu ceritakan tanpa menampilkan identitas?\n\nKlik tombol **☁️ Curhat ka Pak RW** di bawah ini. Curhatan kamu akan dikirim sebagai **Anonymous** dan warga bisa membalas lewat thread diskusi 🤍")
+      .setDescription(panelEmbedCfg.description || "Punya sesuatu yang ingin kamu ceritakan tanpa menampilkan identitas?\n\nKlik tombol **☁️ Curhat ke Pak RW** di bawah ini. Curhatan kamu akan dikirim sebagai **Anonymous** dan warga bisa membalas lewat thread diskusi 🤍")
       .setFooter({ text: makeOTFooter(panelEmbedCfg.footer || "Pak RW • PANEL_CURHAT_ANONIM") })
       .setTimestamp();
 
@@ -14869,7 +15042,14 @@ async function registerPakRwSlashCommands(guild) {
       { name: "topaktif", description: "Lihat board Top Aktif Warga bulan ini", dmPermission: false },
       { name: "topchat", description: "Lihat leaderboard Top Chat bulan ini", dmPermission: false },
       { name: "topvoice", description: "Lihat leaderboard Top Voice bulan ini", dmPermission: false },
+      { name: "papanaktif", description: "Lihat Leaderboard Aktif lifetime warga", dmPermission: false },
       { name: "levelrule", description: "Lihat rumus level Pak RW yang sedang aktif", dmPermission: false },
+      {
+        name: "postpapanaktif",
+        description: "Owner: kirim Papan Aktif lifetime ke channel Leaderboard Aktif",
+        defaultMemberPermissions: adminPerms,
+        dmPermission: false
+      },
       {
         name: "posttopaktif",
         description: "Owner: kirim board Top Aktif ke channel Top Aktif",
@@ -15073,7 +15253,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
       return;
     }
 
-    const description = String(config.welcome.message || "Halo {user}, wilujeung sumping di **{server} 🤍**")
+    const description = String(config.welcome.message || "Sambut warga anyar barudak {user} di **{server} 🌾**")
       .replaceAll("{user}", `${member}`)
       .replaceAll("{server}", config.serverName)
       .replaceAll("{memberCount}", `${member.guild.memberCount}`);
@@ -15084,14 +15264,14 @@ client.on(Events.GuildMemberAdd, async (member) => {
         name: `${config.serverName} • Warga Baru`,
         iconURL: member.user.displayAvatarURL({ dynamic: true })
       })
-      .setTitle(config.welcome.title || "👋 Warga Baru Datang!")
+      .setTitle(config.welcome.title || "🏡 Wilujeung Sumping Warga Anyar!")
       .setDescription(description)
       .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 512 }))
       .setFooter({ text: makeOTFooter("DESA TULUS • Tempat warga baik berkumpul") })
       .setTimestamp();
 
     await safeSend(channel, {
-      content: `🤍 Sambut warga baru kita ${member}!`,
+      content: `🤍 Sambut warga anyar barudak ${member}!`,
       embeds: [embed]
     });
 
@@ -15786,10 +15966,10 @@ function buildPakRwBigBotEmbed(message) {
 
   return new EmbedBuilder()
     .setColor(color())
-    .setTitle("🌾 Pak RW Big Bot DESA TULUS")
+    .setTitle("🌾 Pak RW Big Bot Premium DESA TULUS")
     .setDescription([
       "Pak RW ayeuna janten **bot besar balai warga digital** pikeun DESA TULUS.",
-      "Tugasna ngayomi warga, ngabantosan staff, ngatur alur server, ngadangu curhat, sareng ngajaga sistem poin/level tetep rapih.",
+      "Tugas Pak RW adalah ngayomi warga, membantu staff, merapikan alur server, mendengarkan curhat, dan menjaga sistem poin/level tetap tertib.",
       "",
       "**🏡 Identitas Desa**",
       `Server: **${config.serverName || guild.name || "DESA TULUS"}**`,
@@ -15817,14 +15997,14 @@ function buildPakRwBigBotEmbed(message) {
 async function handleKiwLevelCommand(message) {
   const raw = message.content.trim().toLowerCase();
 
-  if (!["rwcekpoin", "rwlevel", "rwrank", "rwtoplevel", "rwtopaktif", "kiwcekpoin", "kiwlevel", "kiwrank", "kiwtoplevel", "kiwtopaktif"].some((cmd) => raw === cmd || raw.startsWith(`${cmd} `))) {
+  if (!["rwcekpoin", "rwlevel", "rwrank", "rwtoplevel", "rwtopaktif", "rwpapanaktif", "rwleaderboardaktif", "kiwcekpoin", "kiwlevel", "kiwrank", "kiwtoplevel", "kiwtopaktif", "kiwpapanaktif"].some((cmd) => raw === cmd || raw.startsWith(`${cmd} `))) {
     return false;
   }
 
   const parts = message.content.trim().split(/\s+/);
   const cmd = (parts.shift() || "").toLowerCase();
 
-  if (["rwtoplevel", "rwtopaktif", "kiwtoplevel", "kiwtopaktif"].includes(cmd)) {
+  if (["rwtoplevel", "kiwtoplevel"].includes(cmd)) {
     const data = readLevelData();
     const rows = Object.values(data.users || {})
       .filter((u) => u.guildId === message.guild.id)
@@ -15847,6 +16027,11 @@ async function handleKiwLevelCommand(message) {
       .setTimestamp();
 
     await safeReply(message, { embeds: [embed] });
+    return true;
+  }
+
+  if (["rwpapanaktif", "rwleaderboardaktif", "kiwpapanaktif"].includes(cmd)) {
+    await safeReply(message, { embeds: [buildLeaderboardActiveEmbed(message.guild, "prefix command")] });
     return true;
   }
 
@@ -16242,7 +16427,7 @@ client.on(Events.MessageCreate, async (message) => {
 
 
 
-// ================= PAK RW COMMAND CENTER v10.10.54 =================
+// ================= PAK RW COMMAND CENTER v10.10.55 =================
 // Update ini sengaja tidak menyentuh logic Level, Top Aktif/MOTM, dan Cek Poin.
 const COMMAND_THEME_COLOR = 0x7c6dff;
 const COMMAND_SAFE_FEATURES = ["ai", "curhat", "anonim", "saran", "welcome", "juragan", "donatur", "mabar"];
@@ -17276,6 +17461,13 @@ async function handleOwnerPrefixCommand(message) {
     return true;
   }
 
+  if (cmd === "postpapanaktif" || cmd === "postleaderboardaktif") {
+    const channel = resolveTextChannelArg(message, args[0]) || await getLeaderboardActiveChannel(message.guild) || message.channel;
+    await channel.send({ embeds: [buildLeaderboardActiveEmbed(message.guild, "owner command")] });
+    await safeReply(message, `✅ Papan Aktif lifetime dikirim ke ${channel}.`);
+    return true;
+  }
+
   if (cmd === "posttopaktif" || cmd === "posttop") {
     const channel = resolveTextChannelArg(message, args[0]) || getTextChannel(message.guild, getTopActiveConfig().channelId) || message.channel;
     await channel.send({ embeds: [buildTopActiveBoardEmbed(message.guild, "owner command")] });
@@ -17916,9 +18108,9 @@ client.on(Events.MessageCreate, async (message) => {
 
       if (cmd === "premium" || cmd === "mahal" || cmd === "suitepremium") {
         return safeReply(message, [
-          "💎 **Pak RW v10.10.54 — Big Bot DESA TULUS**",
+          "💎 **Pak RW v10.10.55 — Big Bot DESA TULUS**",
           "",
-          "Pak RW sekarang jadi bot besar DESA TULUS: satu balai warga digital untuk curhat, saran, level, top aktif, voice, donatur, juragan, boost poin, dan pengumuman desa.",
+          "Pak RW sekarang jadi bot besar DESA TULUS: satu balai warga digital yang rapi untuk AI, curhat, saran, welcome, level, top aktif, voice, donatur, juragan, boost poin, dashboard, dan pengumuman desa.",
           "",
           "**Alur premium:**",
           "edit → preview → test aman → backup",
@@ -17940,7 +18132,7 @@ client.on(Events.MessageCreate, async (message) => {
       if (cmd === "fitur" || cmd === "alur" || cmd === "features" || cmd === "suite") {
         const p = config.prefix || "rw";
         return safeReply(message, [
-          "🧭 **Pak RW Big Bot Balai Warga v10.10.54**",
+          "🧭 **Pak RW Big Bot Balai Warga v10.10.55**",
           "",
           "Alurnya sekarang dibuat seperti bot besar balai warga digital:",
           "**warga butuh bantuan → Pak RW baca konteks → pilih fitur → eksekusi/preview → data tetap aman**.",
@@ -18041,7 +18233,7 @@ client.on(Events.MessageCreate, async (message) => {
           .setColor(color())
           .setTitle("☁️ Curhat Anonim DESA TULUS")
           .setDescription(
-            "Klik tombol **☁️ Curhat ka Pak RW** di bawah ini untuk mengirim curhatan anonim.\n\n" +
+            "Klik tombol **☁️ Curhat ke Pak RW** di bawah ini untuk mengirim curhatan anonim.\n\n" +
             "Identitas kamu tidak akan ditampilkan. Curhatan akan masuk sebagai **Anonymous** 🤍"
           )
           .setFooter({ text: makeOTFooter("Pak RW • Curhat Anonim") })
@@ -18164,8 +18356,8 @@ async function resolveSlashMember(interaction, optionName = "user") {
 async function handlePakRwVisibleSlashCommand(interaction) {
   if (!interaction.isChatInputCommand()) return false;
   const cmd = interaction.commandName;
-  const publicSlash = ["fitur", "premium", "cekpoin", "cekbonus", "topaktif", "topchat", "topvoice", "levelrule"];
-  const ownerSlash = ["posttopaktif", "posttop", "testmotm", "fixlevel", "givepoin", "kurangpoin", "setpoin", "resetpoin", "ownerstatus", "ownerhelp"];
+  const publicSlash = ["fitur", "premium", "cekpoin", "cekbonus", "topaktif", "topchat", "topvoice", "papanaktif", "levelrule"];
+  const ownerSlash = ["postpapanaktif", "posttopaktif", "posttop", "testmotm", "fixlevel", "givepoin", "kurangpoin", "setpoin", "resetpoin", "ownerstatus", "ownerhelp"];
 
   if (!publicSlash.includes(cmd) && !ownerSlash.includes(cmd)) return false;
 
@@ -18188,7 +18380,7 @@ async function handlePakRwVisibleSlashCommand(interaction) {
   if (cmd === "fitur") {
     await interaction.reply({
       content: [
-        "🧭 **Pak RW Big Bot Balai Warga v10.10.54**",
+        "🧭 **Pak RW Big Bot Balai Warga v10.10.55**",
         "",
         "**Alur bot besar:** pilih fitur → edit setting → preview → test → backup.",
         "",
@@ -18213,7 +18405,7 @@ async function handlePakRwVisibleSlashCommand(interaction) {
   if (cmd === "premium") {
     await interaction.reply({
       content: [
-        "💎 **Pak RW v10.10.54 — Big Bot DESA TULUS**",
+        "💎 **Pak RW v10.10.55 — Big Bot DESA TULUS**",
         "",
         "**Alur utama:** edit → preview → test aman → backup.",
         "",
@@ -18287,6 +18479,11 @@ async function handlePakRwVisibleSlashCommand(interaction) {
     return true;
   }
 
+  if (cmd === "papanaktif") {
+    await interaction.reply({ embeds: [buildLeaderboardActiveEmbed(interaction.guild, "slash command")] });
+    return true;
+  }
+
   if (cmd === "topchat" || cmd === "topvoice") {
     const type = cmd === "topchat" ? "chat" : "voice";
     const rows = getTopActiveRows(interaction.guild.id, type, getTopActiveConfig().topLimit, interaction.guild.ownerId);
@@ -18297,6 +18494,13 @@ async function handlePakRwVisibleSlashCommand(interaction) {
       .setFooter({ text: makeOTFooter(`${config.serverName} • ${getMonthLabel()}`) })
       .setTimestamp();
     await interaction.reply({ embeds: [embed] });
+    return true;
+  }
+
+  if (cmd === "postpapanaktif") {
+    await interaction.deferReply({ flags: 64 });
+    const ok = await sendLeaderboardActiveBoard(interaction.guild, `slash command oleh ${interaction.user.username}`);
+    await interaction.editReply(ok ? "✅ Papan Aktif lifetime sudah dikirim ke channel Leaderboard Aktif." : "❌ Channel Leaderboard Aktif belum benar. Cek dashboard `/top-active`.");
     return true;
   }
 

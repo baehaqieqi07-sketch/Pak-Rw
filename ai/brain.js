@@ -186,6 +186,30 @@ function localPrefix(text = "") {
   return { me: "Pak RW", you: "kamu", ok: "Siap", lang: "id" };
 }
 
+
+function pickPakRwOpener(text = "", mode = "normal") {
+  const cfg = config.ai?.pakRwOpeners || {};
+  const msg = cleanText(text).toLowerCase();
+  let key = "normal";
+  if (isSundaneseRequested(text)) key = "sunda";
+  else if (mode === "curhat" || hasAny(msg, ["curhat", "sedih", "capek", "cape", "bingung", "kecewa", "takut", "kesel", "pusing", "overthinking"])) key = "curhat";
+  else if (msg.includes("?") || hasAny(msg, ["apa", "kenapa", "gimana", "bagaimana", "tolong", "cara", "bisa", "jelaskan"])) key = "question";
+  const arr = Array.isArray(cfg[key]) && cfg[key].length ? cfg[key] : (Array.isArray(cfg.normal) ? cfg.normal : []);
+  if (!arr.length) return mode === "curhat" ? "Iya nak, sini Pak RW dengarkan dulu. Ada apa?" : "Iya nak, ada yang bisa Pak RW bantu?";
+  const seed = (Date.now() + text.length + key.length) % arr.length;
+  return arr[seed];
+}
+
+function isSimpleLocalQuestion(text = "", mode = "normal") {
+  if (mode === "curhat") return false;
+  const msg = cleanText(text).toLowerCase();
+  if (!msg) return true;
+  const words = msg.split(/\s+/).filter(Boolean);
+  if (words.length <= 4 && hasAny(msg, ["halo", "hai", "hi", "p", "rw", "pak rw", "assalamualaikum", "makasih", "terima kasih"])) return true;
+  if (words.length <= 8 && hasAny(msg, ["fitur", "help", "bantuan", "command", "perintah", "siapa kamu", "kamu siapa"])) return true;
+  return false;
+}
+
 function serverContext() {
   return [
     `Server name: ${config.serverName || "DESA TULUS"}.`,
@@ -286,6 +310,8 @@ function makeCurhatAnswer(userText) {
   const tone = localPrefix(text);
   if (tone.lang === "su") {
     return [
+      pickPakRwOpener(text, "curhat"),
+      "",
       "Mangga, Pak RW ngadangu heula. Anjeun teu kedah buru-buru nyaritakeun sadayana 🤍",
       "",
       "Hatur nuhun parantos percanten nyarios ka Pak RW. Rarasaan anjeun penting, sareng Pak RW moal ngahakiman.",
@@ -303,6 +329,8 @@ function makeCurhatAnswer(userText) {
     ].join("\n");
   }
   return [
+    pickPakRwOpener(text, "curhat"),
+    "",
     "Pak RW dengarkan dulu ya. Kamu tidak harus cerita semuanya sekaligus 🤍",
     "",
     "Terima kasih sudah percaya buat cerita. Perasaan kamu valid, dan Pak RW tidak akan menghakimi.",
@@ -360,6 +388,8 @@ function makeHelpfulAnswer(userText, mode = "normal") {
 
   if (!msg || hasAny(msg, ["halo", "hai", "hi", "p", "woi", "rw", "pak rw", "assalamualaikum"])) {
     return [
+      pickPakRwOpener(text, mode),
+      "",
       `Halo, ${tone.me} **Pak RW DESA TULUS** 🤍`,
       "",
       `${tone.me === "gua" ? "Gua" : tone.me === "saya" ? "Saya" : "Aku"} siap bantu warga **${config.serverName || "DESA TULUS"}** dengan jawaban yang jelas, sopan, rapi, dan sesuai bahasa yang diminta ${tone.you}.`,
@@ -382,6 +412,8 @@ function makeHelpfulAnswer(userText, mode = "normal") {
   if (hasAny(msg, ["buat kata", "kata kata", "caption", "pengumuman", "announcement", "ucapan", "teks", "template", "deskripsi", "bio"])) return makeWritingAnswer(userText);
 
   return [
+    pickPakRwOpener(text, mode),
+    "",
     `${tone.ok}, ${tone.me} paham ${tone.you} nanya tentang: **${text}**`,
     "",
     "Biar jelas, jawabannya bakal dibuat begini:",
@@ -406,6 +438,7 @@ function buildSystemPrompt(userText, mode = "normal") {
     languageRule(userText),
     styleRule(userText),
     "Bahasa harus konsisten: jika user meminta Bahasa Indonesia, jangan campur Basa Sunda; jika user meminta Basa Sunda, gunakan Basa Sunda formal; jika tidak jelas, pakai Bahasa Indonesia sopan dengan nuansa desa seperlunya.",
+    `Awali jawaban dengan sapaan Pak RW yang natural dan bervariasi sesuai konteks. Contoh pembuka yang boleh dipilih/diadaptasi: ${pickPakRwOpener(userText, mode)} Jangan selalu pakai kalimat yang sama.`,
     "Kamu adalah Pak RW DESA TULUS. Jangan terdengar seperti AI kaku; terdengar seperti RW asli di lembur/perdesaan Sunda: sopan, formal, ngayomi, paham warga, tegas kalau perlu, dan selalu cari solusi.",
     "Saat menjawab warga, pakai gaya Pak RW: tata krama dulu, pahami masalah, jelaskan keputusan/alur, lalu kasih langkah yang gampang diikuti. Vibes harus lembur DESA TULUS: rukun, sauyunan, pos ronda, balai desa, dan warga saling menghargai.",
     "Untuk curhat, peran utama kamu adalah mendengarkan dulu, memvalidasi perasaan, tidak menghakimi, dan membantu warga menata pikiran dengan aman.",
@@ -482,6 +515,10 @@ async function askAI(text, mode = "normal") {
   const apiKey = getApiKey();
 
   if (!userText) return localFallback("halo", mode);
+  if (config.ai?.fastLocalForGreeting !== false && isSimpleLocalQuestion(userText, mode)) {
+    console.log("AI HEMAT LIMIT: pertanyaan sederhana dijawab lokal tanpa OpenRouter.");
+    return localFallback(userText, mode);
+  }
   if (!apiKey) return localFallback(userText, mode);
 
   const budgetReason = shouldUseLocalByBudget();
@@ -505,13 +542,13 @@ async function askAI(text, mode = "normal") {
           top_p: 0.9,
           frequency_penalty: 0.12,
           presence_penalty: 0.08,
-          max_tokens: Math.max(250, Math.min(Number(config.ai?.maxTokens || process.env.AI_MAX_TOKENS || 650), mode === "curhat" ? 850 : 700))
+          max_tokens: Math.max(180, Math.min(Number(config.ai?.maxTokens || process.env.AI_MAX_TOKENS || 520), mode === "curhat" ? 620 : 520))
         },
         {
           headers: {
             Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://github.com/baehaqieqi07-sketch/pak rw-ot-v3",
+            "HTTP-Referer": "https://github.com/baehaqieqi07-sketch/Pak-Rw",
             "X-Title": "Pak RW Smart AI"
           },
           timeout: 25000

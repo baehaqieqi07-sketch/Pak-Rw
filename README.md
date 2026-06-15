@@ -65,7 +65,7 @@ Target log:
 - Prefix utama sekarang `rw`.
 - Mention user/channel asli tetap aktif, tetapi `@everyone` dan `@here` tetap diblokir.
 
-## Update v10.10.54 — Pak RW Big Bot DESA TULUS
+## Update v10.10.55 — Pak RW Big Bot DESA TULUS
 
 Update ini menaikkan identitas Pak RW menjadi bot besar untuk DESA TULUS. Fokusnya bukan mengganti data lama, tetapi membuat alur bot terasa seperti balai warga digital yang rapi, sopan, dan kuat.
 
@@ -105,3 +105,28 @@ Pak RW harus mengikuti bahasa user:
 
 ### Data aman
 Update ini tidak menyertakan `.env`, `data/`, `logs/`, `backups/`, atau file runtime aktif. Data level, Top Aktif, MOTM, Donatur, Juragan, dan AI memory tetap aman selama MongoDB/ENV lama dipakai.
+
+## v10.10.56 — Papan Aktif Lifetime + Siklus 100.000 Poin
+
+Update ini menambahkan alur level yang lebih besar untuk DESA TULUS:
+
+- **Top Aktif Bulanan** tetap otomatis post setiap pukul **00.00 WIB**.
+- Judul Top Aktif otomatis mengikuti bulan berjalan, contoh: `TOP AKTIF WARGA BULAN JUNI 2026 DESA TULUS`, lalu bulan berikutnya otomatis menjadi Juli, Agustus, dan seterusnya.
+- **Leaderboard Aktif / Papan Aktif Lifetime** dipisah ke channel khusus. Board ini mencatat total poin warga dari awal sampai seterusnya dan tidak ikut reset.
+- Jika warga mencapai **100.000 poin aktif**, Pak RW memberi role **Member Of The Month** otomatis, lalu poin siklus level warga tersebut dikembalikan dari awal.
+- Jika setelah reset warga mendapat 1 poin lagi, Papan Aktif lifetime akan tetap menghitung totalnya sebagai **100.001 poin**.
+- Dashboard `/top-active` sekarang disiapkan untuk memilih channel Top Aktif Bulanan, channel Leaderboard Aktif, target poin MOTM/reset, dan image board.
+- Jika ingin gambar seperti contoh, isi `Image Board Top Aktif URL` / `leaderboardActiveImageUrl` di dashboard dengan URL gambar/banner yang valid.
+
+Command baru:
+
+- `rwpapanaktif` / `rwleaderboardaktif` — lihat Papan Aktif lifetime.
+- `rwpostpapanaktif` — owner mengirim Papan Aktif lifetime ke channel Leaderboard Aktif.
+- `/papanaktif` — slash command Papan Aktif lifetime.
+- `/postpapanaktif` — slash command owner untuk mengirim Papan Aktif.
+
+Data aman:
+
+- Data lifetime tidak reset.
+- MongoDB tetap dipakai.
+- `.env`, `data`, `logs`, `backups`, dan `node_modules` tidak dimasukkan ke ZIP update.

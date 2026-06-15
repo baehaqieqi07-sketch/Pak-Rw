@@ -1,6 +1,6 @@
 {
   "name": "pak-rw-desa-tulus",
-  "version": "10.10.54",
+  "version": "10.10.56",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -17,5 +17,5 @@
   "engines": {
     "node": ">=18"
   },
-  "description": "Pak RW DESA TULUS - Big Bot desa digital, vibes perdesaan Sunda, hemat OpenRouter, DisCloud bot mode"
+  "description": "Pak RW DESA TULUS - Big Bot balai desa digital premium, vibes perdesaan Sunda, all-in-one dashboard, hemat OpenRouter anti limit"
 }
