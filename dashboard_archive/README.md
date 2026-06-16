@@ -1,15 +1,10 @@
-# Dashboard Pak RW - Archive / Disabled Mode
+# Dashboard Archive
 
-Dashboard Pak RW tidak dihapus. Di mode DisCloud, dashboard dimatikan default dengan ENV:
+`index.dashboard-legacy-v10.10.63.js` adalah snapshot lengkap sebelum dashboard React/Vite v10.10.64 dipasang.
 
-```env
-DASHBOARD_ENABLED=false
-```
+Core bot tidak dihapus. Fungsi renderer dashboard lama masih dibiarkan di `index.js` untuk kompatibilitas dan rollback, tetapi route `/dashboard/*` sekarang menyajikan static production build dari `dashboard/dist`.
 
-Kode dashboard masih tersimpan di `index.js`, tetapi web server hanya berjalan jika:
+Rollback cepat:
 
-```env
-DASHBOARD_ENABLED=true
-```
-
-Aktifkan lagi nanti setelah bot Discord stabil.
+1. Set `DASHBOARD_ENABLED=false` agar bot berjalan tanpa dashboard.
+2. Untuk mengembalikan seluruh file lama, pulihkan snapshot ini sebagai `index.js` dan gunakan config/ZIP backup sebelumnya.

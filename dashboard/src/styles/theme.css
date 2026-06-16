@@ -1,0 +1,36 @@
+:root {
+  --page-bg: #17211d;
+  --page-bg-soft: #202b25;
+  --surface: rgba(35, 46, 40, 0.86);
+  --surface-solid: #26322c;
+  --surface-elevated: rgba(47, 60, 52, 0.94);
+  --surface-subtle: rgba(238, 235, 218, 0.055);
+  --surface-hover: rgba(238, 235, 218, 0.085);
+  --border-soft: rgba(239, 236, 220, 0.10);
+  --border-strong: rgba(239, 236, 220, 0.17);
+  --text-primary: #f1eee4;
+  --text-secondary: #c3c9bf;
+  --text-muted: #919c92;
+  --text-dark: #17211d;
+  --sage: #88a08c;
+  --sage-strong: #718c77;
+  --cream: #ded4bb;
+  --bamboo: #8c6c4d;
+  --gold-muted: #b99b68;
+  --success: #78a184;
+  --warning: #b99a64;
+  --danger: #b77670;
+  --info: #7d9792;
+  --shadow-soft: 0 18px 55px rgba(7, 12, 9, 0.24);
+  --shadow-elevated: 0 24px 70px rgba(7, 12, 9, 0.34);
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --sidebar-width: 284px;
+  --sidebar-collapsed: 86px;
+  --topbar-height: 72px;
+  --transition-fast: 160ms cubic-bezier(.22,.8,.24,1);
+  --transition-base: 240ms cubic-bezier(.22,.8,.24,1);
+  --font-sans: "Plus Jakarta Sans", "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}

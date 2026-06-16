@@ -10912,237 +10912,6 @@ function savePakRwGlobalEmbedManager(req) {
 /* =================== END PAK RW FULL PREMIUM DASHBOARD REBUILD v10.10.63 =================== */
 
 
-/* =================== PAK RW DASHBOARD-ONLY REBUILD v10.10.64 =================== */
-const pakRwDashboardDist = path.join(__dirname, "dashboard", "dist");
-const pakRwDashboardIndex = path.join(pakRwDashboardDist, "index.html");
-
-function servePakRwDashboard(req, res) {
-  if (!isDashboardEnabled) return res.status(404).send("Dashboard disabled");
-  if (!fs.existsSync(pakRwDashboardIndex)) {
-    return res.status(503).send("Dashboard build belum tersedia. Jalankan npm run dashboard:build.");
-  }
-  res.setHeader("Cache-Control", "no-store");
-  return res.sendFile(pakRwDashboardIndex);
-}
-
-function renderPakRwDashboardLogin(message = "") {
-  return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#17211d"><title>Login Pak RW</title><style>
-  :root{--bg:#17211d;--surface:rgba(38,50,44,.94);--border:rgba(239,236,220,.12);--text:#f1eee4;--muted:#919c92;--cream:#ded4bb;--danger:#b77670}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;color:var(--text);font-family:"Plus Jakarta Sans","Segoe UI",system-ui,sans-serif;background:linear-gradient(rgba(19,29,24,.72),rgba(16,24,20,.87)),url('/dashboard-public/desa-tulus-landscape.webp') center/cover fixed}.card{width:min(440px,100%);border:1px solid var(--border);border-radius:24px;padding:30px;background:var(--surface);box-shadow:0 28px 80px rgba(7,12,9,.38);backdrop-filter:blur(20px)}.brand{display:flex;align-items:center;gap:13px;margin-bottom:25px}.mark{width:48px;height:48px;border-radius:15px;background:#26322c;display:grid;place-items:center}.mark svg{width:33px}.brand strong{display:block;font-size:17px}.brand span{display:block;color:var(--muted);font-size:11px;margin-top:3px}.eyebrow{color:var(--cream);font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}h1{margin:8px 0 8px;font-size:29px;letter-spacing:-.04em}p{margin:0 0 22px;color:var(--muted);font-size:12px;line-height:1.6}label{display:block;margin-bottom:7px;color:#c3c9bf;font-size:11px;font-weight:700}input{width:100%;height:46px;border:1px solid var(--border);border-radius:12px;background:rgba(12,19,16,.5);color:var(--text);outline:none;padding:0 13px;font:inherit}input:focus{border-color:rgba(136,160,140,.55);box-shadow:0 0 0 3px rgba(136,160,140,.1)}button{width:100%;height:46px;margin-top:14px;border:0;border-radius:12px;background:var(--cream);color:#17211d;font-weight:800;cursor:pointer}.error{margin-bottom:14px;border:1px solid rgba(183,118,112,.25);border-radius:11px;background:rgba(183,118,112,.1);color:#e0bbb7;padding:10px 12px;font-size:11px}.foot{margin-top:18px;color:var(--muted);font-size:10px;text-align:center}</style></head><body><form class="card" method="post" action="/login"><div class="brand"><div class="mark"><svg viewBox="0 0 64 64" fill="none"><path d="M15 34.5L32 19L49 34.5V49H39V38H25V49H15V34.5Z" fill="#DED4BB"/><path d="M12 34L32 15L52 34" stroke="#88A08C" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div><strong>Pak RW</strong><span>DESA TULUS</span></div></div><div class="eyebrow">Village Control Center</div><h1>Masuk dashboard</h1><p>Kelola Balai Warga Digital menggunakan password yang disimpan di environment hosting.</p>${message ? `<div class="error">${escapeHtml(message)}</div>` : ""}<label>Password dashboard</label><input type="password" name="password" autocomplete="current-password" required><button type="submit">Masuk ke Control Center</button><div class="foot">Pak RW · Balai Warga Digital DESA TULUS</div></form></body></html>`;
-}
-
-const pakRwDashboardAllowedRoots = new Set([
-  "serverName", "ownerName", "embedColor", "activityText", "aiChannelId", "curhatChannelId",
-  "anonymousCurhatChannelId", "suggestionChannelId", "chatWargaChannelId", "levelChannelId",
-  "cekPoinChannelId", "ticketChannelId", "rulesChannelId", "eventChannelId", "infoChannelId",
-  "logChannelId", "donaturRoleId", "level100RoleId", "welcome", "ai", "curhat", "anonymousCurhat",
-  "suggestion", "level", "topActive", "leaderboardAktif", "papanAktif", "boostPoin", "mabar",
-  "juragan", "donatur", "features", "commandPermissions", "embeds", "dashboard", "panels", "mentions",
-  "mentionPlaceholders", "placeholderLibrary", "texts"
-]);
-
-function isSafeDashboardPath(input = "") {
-  const value = String(input || "").trim();
-  if (!/^[A-Za-z0-9_.-]{1,120}$/.test(value)) return false;
-  const root = value.split(".")[0];
-  if (!pakRwDashboardAllowedRoots.has(root)) return false;
-  return !/(token|secret|password|mongodb|api[_-]?key|discord[_-]?token)/i.test(value);
-}
-
-function setDashboardPath(target, pathText, value) {
-  const parts = String(pathText).split(".").filter(Boolean);
-  let cursor = target;
-  for (let index = 0; index < parts.length - 1; index += 1) {
-    const key = parts[index];
-    if (!cursor[key] || typeof cursor[key] !== "object" || Array.isArray(cursor[key])) cursor[key] = {};
-    cursor = cursor[key];
-  }
-  cursor[parts[parts.length - 1]] = value;
-}
-
-function countDashboardFeatures(cfg = {}) {
-  const values = Object.values(cfg.features || {});
-  const total = values.length || 1;
-  const active = values.filter((entry) => entry === true || (entry && typeof entry === "object" && entry.enabled !== false)).length;
-  return { active, total };
-}
-
-function normalizeDashboardEmbed(raw = {}) {
-  const fields = Array.isArray(raw.fields) ? raw.fields.slice(0, 25).map((field) => ({
-    name: String(field?.name || "").slice(0, 256),
-    value: String(field?.value || "").slice(0, 1024),
-    inline: Boolean(field?.inline)
-  })) : [];
-  const buttons = Array.isArray(raw.buttons) ? raw.buttons.slice(0, 5).map((button) => ({
-    label: String(button?.label || "Button").slice(0, 80),
-    url: String(button?.url || "").slice(0, 500),
-    style: String(button?.style || "link")
-  })) : [];
-  return {
-    content: String(raw.content || "").slice(0, 2000).replace(/@(everyone|here)/gi, "@$1-disabled"),
-    authorName: String(raw.authorName || "").slice(0, 256),
-    authorIcon: String(raw.authorIcon || "").slice(0, 500),
-    title: String(raw.title || "").slice(0, 256),
-    description: String(raw.description || "").slice(0, 4096),
-    color: String(raw.color || "#88a08c").slice(0, 20),
-    thumbnailUrl: String(raw.thumbnailUrl || "").slice(0, 500),
-    imageUrl: String(raw.imageUrl || "").slice(0, 500),
-    footerText: String(raw.footerText || "").slice(0, 2048),
-    footerIcon: String(raw.footerIcon || "").slice(0, 500),
-    timestamp: Boolean(raw.timestamp),
-    fields,
-    buttons
-  };
-}
-
-function mergeDashboardEmbed(previous = {}, draft = {}) {
-  const value = normalizeDashboardEmbed(draft);
-  const firstButton = value.buttons[0] || {};
-  return {
-    ...previous,
-    ...value,
-    thumbnail: value.thumbnailUrl,
-    image: value.imageUrl,
-    footer: value.footerText,
-    buttonLabel: firstButton.label || "",
-    buttonUrl: firstButton.url || "",
-    dashboardEditable: true,
-    previewMustMatchDiscord: true,
-    lastDashboardEditAt: new Date().toISOString()
-  };
-}
-
-function parseDashboardColor(input = "#88a08c") {
-  const value = String(input || "#88a08c").replace("#", "");
-  return /^[0-9a-fA-F]{6}$/.test(value) ? parseInt(value, 16) : 0x88a08c;
-}
-
-function dashboardSafeUrl(input = "") {
-  const value = String(input || "").trim();
-  if (!value) return "";
-  try {
-    const parsed = new URL(value);
-    return ["https:", "http:"].includes(parsed.protocol) ? value : "";
-  } catch {
-    return "";
-  }
-}
-
-app.use("/dashboard-public", express.static(path.join(__dirname, "dashboard", "public"), { maxAge: "1d" }));
-
-app.use("/dashboard", requireDashboardAuth, express.static(pakRwDashboardDist, {
-  index: false,
-  redirect: false,
-  etag: true,
-  maxAge: process.env.NODE_ENV === "production" ? "1h" : 0
-}));
-
-app.get("/api/dashboard/bootstrap", requireDashboardAuth, (req, res) => {
-  const cfg = readConfigFile();
-  const guild = getDashboardGuild ? getDashboardGuild() : client.guilds.cache.first();
-  const featureCount = countDashboardFeatures(cfg);
-  res.set("Cache-Control", "no-store");
-  res.json({
-    ok: true,
-    status: {
-      botOnline: Boolean(client?.isReady?.()),
-      botTag: client?.user?.tag || null,
-      databaseMode: isMongoActive() ? "MongoDB Connected" : "Local JSON Fallback",
-      uptimeSeconds: Math.floor(process.uptime()),
-      dashboardEnabled: isDashboardEnabled,
-      activeFeatureCount: featureCount.active,
-      totalFeatureCount: featureCount.total,
-      version: String(cfg.version || "10.10.64"),
-      prefix: String(cfg.prefix || "rw"),
-      environment: String(process.env.NODE_ENV || "development")
-    },
-    guild: guild ? { id: guild.id, name: guild.name, memberCount: guild.memberCount } : null,
-    config: cfg,
-    embeds: cfg.embeds || {},
-    features: cfg.features || {},
-    activity: readDashboardActivity(40)
-  });
-});
-
-app.put("/api/dashboard/settings", requireDashboardAuth, (req, res) => {
-  try {
-    const patches = Array.isArray(req.body?.patches) ? req.body.patches.slice(0, 80) : [];
-    if (!patches.length) return res.status(400).json({ ok: false, error: "Tidak ada perubahan yang dikirim." });
-    const cfg = readConfigFile();
-    for (const patch of patches) {
-      const pathText = String(patch?.path || "");
-      if (!isSafeDashboardPath(pathText)) return res.status(400).json({ ok: false, error: `Path config tidak diizinkan: ${pathText}` });
-      setDashboardPath(cfg, pathText, patch.value);
-    }
-    cfg.version = "10.10.64";
-    writeConfigFile(cfg);
-    appendDashboardActivity("settings", "Setting dashboard disimpan", `${patches.length} field diperbarui melalui adapter aman.`);
-    return res.json({ ok: true, config: cfg });
-  } catch (err) {
-    return res.status(500).json({ ok: false, error: err.message || String(err) });
-  }
-});
-
-app.put("/api/dashboard/embed/:key", requireDashboardAuth, (req, res) => {
-  try {
-    const key = String(req.params.key || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80);
-    if (!key || key === "dashboard") return res.status(400).json({ ok: false, error: "Template embed tidak valid." });
-    const cfg = readConfigFile();
-    cfg.embeds = cfg.embeds || {};
-    cfg.embeds[key] = mergeDashboardEmbed(cfg.embeds[key] || {}, req.body?.embed || {});
-    cfg.version = "10.10.64";
-    writeConfigFile(cfg);
-    appendDashboardActivity("embed", "Template embed disimpan", `Template ${key} diperbarui dari Embed Builder.`);
-    return res.json({ ok: true, embed: cfg.embeds[key] });
-  } catch (err) {
-    return res.status(500).json({ ok: false, error: err.message || String(err) });
-  }
-});
-
-app.post("/api/dashboard/test-embed", requireDashboardAuth, async (req, res) => {
-  try {
-    if (!client.isReady()) return res.status(503).json({ ok: false, error: "Bot Pak RW belum online di Discord." });
-    const guild = getDashboardGuild ? getDashboardGuild() : client.guilds.cache.first();
-    if (!guild) return res.status(503).json({ ok: false, error: "Server DESA TULUS belum terbaca." });
-    const channelId = String(req.body?.channelId || "").match(/\d{15,25}/)?.[0] || "";
-    const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
-    if (!channel || !channel.isTextBased?.()) return res.status(400).json({ ok: false, error: "Channel tujuan tidak valid atau bukan text channel." });
-    const draft = normalizeDashboardEmbed(req.body?.embed || {});
-    const builder = new EmbedBuilder()
-      .setColor(parseDashboardColor(draft.color))
-      .setDescription(draft.description || "Pratinjau tes dari Pak RW Control Center.");
-    if (draft.title) builder.setTitle(draft.title);
-    if (draft.authorName) builder.setAuthor({ name: draft.authorName, iconURL: dashboardSafeUrl(draft.authorIcon) || undefined });
-    if (draft.thumbnailUrl && dashboardSafeUrl(draft.thumbnailUrl)) builder.setThumbnail(dashboardSafeUrl(draft.thumbnailUrl));
-    if (draft.imageUrl && dashboardSafeUrl(draft.imageUrl)) builder.setImage(dashboardSafeUrl(draft.imageUrl));
-    if (draft.footerText) builder.setFooter({ text: draft.footerText, iconURL: dashboardSafeUrl(draft.footerIcon) || undefined });
-    if (draft.timestamp) builder.setTimestamp();
-    if (draft.fields.length) builder.addFields(draft.fields);
-    const message = await channel.send({
-      content: draft.content || undefined,
-      embeds: [builder],
-      allowedMentions: { parse: [], users: [], roles: [], repliedUser: false }
-    });
-    appendDashboardActivity("test", "Embed tes dikirim", `Pesan tes dikirim ke #${channel.name}.`);
-    return res.json({ ok: true, messageId: message.id, channelId: channel.id });
-  } catch (err) {
-    return res.status(500).json({ ok: false, error: err.message || String(err) });
-  }
-});
-
-app.get("/api/dashboard/health", requireDashboardAuth, (req, res) => {
-  res.set("Cache-Control", "no-store");
-  res.json({
-    ok: true,
-    botOnline: Boolean(client?.isReady?.()),
-    databaseMode: isMongoActive() ? "MongoDB" : "Local JSON fallback",
-    dashboardBuild: fs.existsSync(pakRwDashboardIndex),
-    dashboardEnabled: isDashboardEnabled,
-    uptimeSeconds: Math.floor(process.uptime())
-  });
-});
-/* ================= END PAK RW DASHBOARD-ONLY REBUILD v10.10.64 ================= */
-
-
 app.get("/motm-banner.svg", (req, res) => {
   res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
   res.setHeader("Cache-Control", "no-store, max-age=0");
@@ -11150,20 +10919,45 @@ app.get("/motm-banner.svg", (req, res) => {
 });
 
 app.get("/login", (req, res) => {
-  if (isDashboardAuth(req)) return res.redirect("/dashboard");
-  res.setHeader("Cache-Control", "no-store");
-  return res.send(renderPakRwDashboardLogin());
+  if (isDashboardAuth(req)) return res.redirect("/");
+  res.send(dashboardShell(`
+    <div class="login">
+      <form class="panel loginbox" method="post" action="/login">
+        <div class="brand">
+          <div class="logo">${dashboardLogoHtml()}</div>
+          <div>
+            <h1>Pak RW Dashboard</h1>
+            <p>Masuk untuk mengelola DESA TULUS</p>
+          </div>
+        </div>
+        <label>Password Dashboard</label>
+        <input type="password" name="password" placeholder="Masukkan password dashboard" />
+        <div class="actions">
+          <button class="btn" type="submit">Masuk Dashboard</button>
+        </div>
+        <div class="footer">Atur password di ENV hostings: DASHBOARD_PASSWORD</div>
+      </form>
+    </div>
+  `, "Login Pak RW"));
 });
 
 app.post("/login", (req, res) => {
   const password = String(req.body?.password || "");
   if (password !== dashboardPassword) {
-    return res.status(401).send(renderPakRwDashboardLogin("Password dashboard tidak cocok."));
+    return res.status(401).send(dashboardShell(`
+      <div class="login">
+        <div class="panel loginbox">
+          <div class="alert danger">❌ Password salah.</div>
+          <a class="btn" href="/login">Coba Lagi</a>
+        </div>
+      </div>
+    `, "Login Gagal"));
   }
+
   const token = makeSessionToken();
   dashboardSessions.add(token);
   res.setHeader("Set-Cookie", `pakrw_dashboard=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=Lax; Max-Age=86400`);
-  return res.redirect("/dashboard");
+  return res.redirect("/");
 });
 
 app.get("/logout", (req, res) => {
@@ -11177,10 +10971,13 @@ app.get("/", requireDashboardAuth, (req, res) => {
   res.redirect("/dashboard");
 });
 
-app.get("/dashboard", requireDashboardAuth, servePakRwDashboard);
-app.get("/dashboard/", requireDashboardAuth, servePakRwDashboard);
-app.get("/dashboard/manage/:feature", requireDashboardAuth, servePakRwDashboard);
-app.get("/dashboard/*", requireDashboardAuth, servePakRwDashboard);
+app.get("/dashboard", requireDashboardAuth, (req, res) => {
+  res.send(renderPakRwPremiumDashboard(req));
+});
+
+app.get("/dashboard/manage/:feature", requireDashboardAuth, (req, res) => {
+  res.send(renderPakRwManagePage(req, req.params.feature, {}));
+});
 
 app.post("/dashboard/manage/:feature", requireDashboardAuth, (req, res) => {
   try {

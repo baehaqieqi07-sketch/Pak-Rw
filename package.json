@@ -1,10 +1,12 @@
 {
   "name": "pak-rw-desa-tulus",
-  "version": "10.10.61",
+  "version": "10.10.64",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "check": "node --check index.js && node --check ai/brain.js && node --check utils/cooldown.js && node --check db/mongoStore.js"
+    "check": "node --check index.js && node --check ai/brain.js && node --check utils/cooldown.js && node --check db/mongoStore.js",
+    "dashboard:build": "npm --prefix dashboard run build",
+    "dashboard:dev": "npm --prefix dashboard run dev"
   },
   "dependencies": {
     "axios": "^1.7.9",
@@ -17,5 +19,5 @@
   "engines": {
     "node": ">=18"
   },
-  "description": "Pak RW DESA TULUS v10.10.61 - Full Premium Dashboard Rebuild, cinematic village control center, manage pages, embed sync, AI hemat, Papan Aktif lifetime terpisah"
+  "description": "Pak RW DESA TULUS v10.10.64 - dashboard-only rebuild React/Vite dengan live Discord picker, embed builder, dan village control center"
 }

@@ -25,7 +25,7 @@
   "welcome": {
     "enabled": true,
     "sendToChatWarga": true,
-    "title": "🏡 Wilujeung Sumping Warga Anyar! {user}",
+    "title": "🏡 Wilujeung Sumping Warga Anyar! {displayName}",
     "message": "Sambut warga anyar barudak {memberTulusRole}\n\nPak RW menyambut {user} sebagai bagian dari DESA TULUS. Semoga betah, rukun, dan saling menghargai.\n\n📌 Baca aturan desa: {rulesChannel}\n💬 Kenalan di chat warga: {chatWargaChannel}\n🎫 Butuh bantuan? Buka ticket: {ticketChannel}\n\nKamu warga ke-{memberCount} di desa ini. Wilujeung sumping, semoga betah di lembur urang 🤍",
     "style": "desa_tulus_indonesia_jelas_wilujeung_sumping",
     "dashboardHelp": "Welcome sinkron dashboard baru: channel welcome, role Member Tulus, rules, chat warga, ticket, content, embed, image, preview, dan test send.",
@@ -39,7 +39,7 @@
     "cooldownMs": 12000,
     "maxMessageLength": 1100,
     "openRouterModel": "openai/gpt-4o-mini",
-    "styleMode": "pak_rw_natural_nak_contextual_hemat_dashboard_rebuild_v10_10_61",
+    "styleMode": "pak_rw_natural_nak_contextual_hemat_dashboard_rebuild_v10_10_63",
     "pronounMode": "auto",
     "allowMildProfanity": false,
     "safeMirror": true,
@@ -123,7 +123,7 @@
     "languagePolicy": "Default Bahasa Indonesia yang sopan dan jelas. Jangan membuat semua embed/chat full Sunda. Gunakan Basa Sunda formal hanya jika user meminta Bahasa Sunda. Frasa khas seperti Wilujeung Sumping boleh dipakai untuk judul welcome saja atau aksen kecil yang mudah dipahami.",
     "botScale": "big_bot",
     "fastLocalForGreeting": true,
-    "antiLimitMode": "hemat_agresif_local_first_v4_cache_context_v10_10_61",
+    "antiLimitMode": "hemat_agresif_local_first_v4_cache_context_v10_10_63",
     "dashboardMode": "ot_unified_inspired_all_in_one_clear_flow",
     "openingVariationEnabled": true,
     "openingRule": "Panggil user dengan kata “nak” secara natural, tetapi jangan semua jawaban diawali “Iya nak”. Pembuka harus nyambung konteks: kalau bertanya pakai “Baik nak, Pak RW jelaskan…”, kalau curhat pakai “Ada apa nak…”, kalau error pakai “Pak RW cek dulu ya nak…”, kalau minta dibuatkan pakai “Bisa nak, Pak RW susun…”. Jangan repetitif.",
@@ -243,7 +243,7 @@
       "footerIcon": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
     },
     "dashboard": {
-      "brandTitle": "Pak RW v10.10.61",
+      "brandTitle": "Pak RW v10.10.63",
       "brandSubtitle": "DESA TULUS • Balai Warga Digital Premium",
       "homeTitle": "Pak RW Unified Control Center DESA TULUS",
       "homeSubtitle": "Dashboard all-in-one dengan alur jelas, modul rapi, preview mudah, dan bahasa embed yang mudah dipahami warga.",
@@ -261,7 +261,7 @@
       "themeMode": "ot_unified_inspired_village_premium_readable_id",
       "accentColor": "#8B7CFF",
       "accentColor2": "#FF78D7",
-      "releaseVersion": "10.10.61",
+      "releaseVersion": "10.10.63",
       "flow": "pilih fitur → Manage → edit channel/role/embed → preview → simpan → kirim/test",
       "placeholderGuide": [
         "{user}",
@@ -382,7 +382,7 @@
       "content": "🤍 Sambut warga anyar barudak {user} {memberTulusRole}",
       "authorName": "DESA TULUS • Warga Baru",
       "authorIcon": "",
-      "title": "🏡 Wilujeung Sumping Warga Anyar! {user}",
+      "title": "🏡 Wilujeung Sumping Warga Anyar! {displayName}",
       "description": "Sambut warga anyar barudak {memberTulusRole}\n\nPak RW menyambut {user} sebagai bagian dari DESA TULUS. Semoga betah, rukun, dan saling menghargai.\n\n📌 Baca aturan desa: {rulesChannel}\n💬 Kenalan di chat warga: {chatWargaChannel}\n🎫 Butuh bantuan? Buka ticket: {ticketChannel}\n\nKamu warga ke-{memberCount} di desa ini. Wilujeung sumping, semoga betah di lembur urang 🤍",
       "thumbnail": "avatar",
       "image": "",
@@ -592,8 +592,8 @@
     "easyEditMode": true,
     "showFeatureFlow": true,
     "showAiStylePanel": true,
-    "releaseVersion": "10.10.61",
-    "releaseName": "Full Premium Dashboard Rebuild",
+    "releaseVersion": "10.10.63",
+    "releaseName": "Live Discord Channel & Role Picker",
     "premiumMode": true,
     "comfortMode": true,
     "quickActionMode": "manage_edit_preview_save_test_backup",
@@ -606,13 +606,20 @@
     "brandTitle": "Pak RW Control Center",
     "brandSubtitle": "Balai Warga Digital DESA TULUS",
     "homeTitle": "Pak RW Control Center",
-    "homeSubtitle": "Balai Warga Digital DESA TULUS dengan dashboard premium all-in-one: plugin cards, Manage Page per fitur, preview Discord, placeholder klik-copy, logs, backup, dan visual cinematic perdesaan Sunda modern.",
+    "homeSubtitle": "Balai Warga Digital DESA TULUS dengan Discord Data Picker, pilihan channel/role/user langsung dari server, placeholder binding center, preview mention, dan Manage Page premium.",
     "accentText": "DESA TULUS 🌾 • All Embed Sync",
     "responsiveMode": "desktop_laptop_tablet_mobile",
     "animationMode": "soft_grain_light_beam_village_cinematic",
     "manageRoutesEnabled": true,
     "globalEmbedManagerEnabled": true,
-    "oldDashboardArchivedAt": "dashboard_archive/"
+    "oldDashboardArchivedAt": "dashboard_archive/",
+    "discordPickerEnabled": true,
+    "placeholderBindingCenterEnabled": true,
+    "placeholderSelectionMode": "channel_role_user_server_bot_live_from_discord",
+    "discordPickerMode": "live_api",
+    "discordPickerAutoRefresh": true,
+    "uiVersion": "10.10.64",
+    "architecture": "react_vite_static_dashboard_only"
   },
   "featureFlow": {
     "step1": "Pilih modul dari Suite Fitur: Tanya Pak RW, Curhat, Saran, Welcome, Juragan, Donatur, Level, Top Aktif, Embed Builder, Banner Manual, atau Discord Manager.",
@@ -972,7 +979,7 @@
     "allowEveryone": false,
     "maxUserMentionsPerReply": 5,
     "maxChannelMentionsPerReply": 20,
-    "note": "Pak RW bisa mengubah #channel, @user, dan @role tertentu menjadi mention Discord asli. @everyone/@here tetap diblokir. v10.10.61 menambah placeholder channel/role yang lebih lengkap.",
+    "note": "Pak RW bisa mengubah #channel, @user, dan @role tertentu menjadi mention Discord asli. @everyone/@here tetap diblokir. v10.10.63 menambah placeholder channel/role yang lebih lengkap.",
     "realRoleMentions": true,
     "maxRoleMentionsPerReply": 4,
     "blockedRoleNames": [
@@ -1026,7 +1033,7 @@
       "Discord Manager"
     ]
   },
-  "version": "10.10.61",
+  "version": "10.10.64",
   "bigBot": {
     "releaseName": "Pak RW AI Natural + Welcome Mention v10.10.59"
   },
@@ -1203,5 +1210,8 @@
     "imageUrl": "",
     "doNotResetLifetime": true,
     "separateFromMonthlyTopActive": true
+  },
+  "mentionPlaceholders": {
+    "note": "Pak RW memakai picker live API agar channel dan role bisa dipilih langsung dari nama Discord. @everyone/@here tetap diblokir."
   }
 }

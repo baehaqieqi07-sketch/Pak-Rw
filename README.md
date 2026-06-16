@@ -1,13 +1,47 @@
-# Pak RW / DESA TULUS v10.10.61
+# Pak RW / DESA TULUS v10.10.63
 
-**Release:** Full Premium Dashboard Rebuild  
+**Release:** Live Discord Channel & Role Picker & Binding Center  
 **Branding publik:** Pak RW / DESA TULUS / Balai Warga Digital  
 **Prefix publik:** `rw`
 
 Update ini merombak dashboard besar-besaran supaya tidak lagi terasa seperti versi lama. Dashboard baru dibuat sebagai **control center premium bot Discord** dengan visual cinematic perdesaan DESA TULUS, plugin cards, tombol Manage, halaman manage per fitur, preview Discord, placeholder klik-copy, dan Embed Manager global.
 
-## Yang baru di v10.10.61
+## Perbaikan utama v10.10.63 — channel benar-benar bisa dipilih
 
+Dashboard sekarang mengambil daftar channel dan role **langsung dari Discord melalui API internal** setiap halaman dibuka. Alurnya:
+
+1. Buka halaman fitur atau `Channel Picker`.
+2. Tunggu status hijau `Terhubung ke DESA TULUS`.
+3. Klik dropdown channel.
+4. Pilih nama channel, bukan menyalin ID.
+5. Klik **Simpan**.
+
+Perbaikan teknis:
+
+- `GUILD_ID` diprioritaskan agar dashboard membaca server yang benar.
+- Endpoint live baru: `/api/discord-picker-data`.
+- Daftar channel dan role dapat dimuat ulang tanpa restart bot.
+- Dropdown tetap menampilkan pilihan lama jika data Discord sedang terlambat dimuat.
+- Channel dikelompokkan berdasarkan Text, Announcement, Forum, Voice, dan Category di picker besar.
+- Config tetap menyimpan ID asli sehingga mention Discord bekerja benar.
+- Tidak ada perubahan pada data level, poin, Top Aktif, Papan Aktif, MOTM, atau MongoDB.
+
+
+## Yang baru di v10.10.63
+
+
+- **Discord Data Picker** di setiap Manage Page dan Embed Manager:
+  - pilih Channel langsung dari server
+  - pilih Role langsung dari server
+  - pilih User/Member yang sudah terbaca bot
+  - pilih Server atau bot Pak RW
+  - masukkan sebagai tag Discord asli, nama biasa, atau ID
+- **Field aktif otomatis**: klik Content/Description/Title/Footer, lalu tekan `Masukkan Data`.
+- **Perlindungan field Discord**: kalau tag dipasang di Title/Author/Footer, dashboard otomatis memakai nama biasa supaya tidak muncul sebagai teks mentah `<@ID>`.
+- **Channel Placeholder Center**: `/dashboard/manage/channel-manager` untuk menghubungkan `{rulesChannel}`, `{chatWargaChannel}`, `{ticketChannel}`, `{leaderboardChannel}`, dan placeholder channel lain ke pilihan channel Discord.
+- **Role Placeholder Center**: `/dashboard/manage/role-manager` untuk menghubungkan `{memberTulusRole}`, `{staffRole}`, `{adminRole}`, `{motmRole}`, `{donaturRole}`, dan `{juraganRole}` ke pilihan role Discord.
+- Preview sekarang membaca nama channel/role asli dari server dan menampilkan mention seperti Discord.
+- Judul Welcome default memakai `{displayName}`, bukan `{user}`, karena Title Discord tidak mendukung mention asli.
 - Route dashboard utama baru: `/dashboard`
 - Root `/` otomatis masuk ke `/dashboard`
 - `/studio` diarahkan ke dashboard baru
@@ -49,9 +83,9 @@ Update ini merombak dashboard besar-besaran supaya tidak lagi terasa seperti ver
 ## File penting yang berubah
 
 - `index.js`
-  - Menambahkan Full Premium Dashboard Rebuild.
+  - Menambahkan Discord Data Picker, Placeholder Binding Center, dan perlindungan mention pada field embed.
   - Menambahkan route `/dashboard` dan `/dashboard/manage/:feature`.
-  - Menambahkan Manage Page, Global Embed Manager, preview Discord, placeholder panel, dan CSS cinematic desa.
+  - Menambahkan Manage Page, Global Embed Manager, preview Discord, Discord Data Picker, Channel/Role Placeholder Center, dan CSS cinematic desa.
 - `config.json`
   - Menambahkan setting dashboard rebuild.
   - Menambahkan `papanAktif` dan `leaderboardAktif`.
@@ -131,7 +165,7 @@ berarti cek `MONGODB_URI`, DNS, atau Atlas Network Access.
 cd /d "D:\Pak Rw"
 git status
 git add .
-git commit -m "update Pak RW premium dashboard rebuild v10.10.61"
+git commit -m "update Pak RW live Discord picker v10.10.63"
 git push
 ```
 
@@ -180,3 +214,32 @@ Get-ChildItem -Force | Where-Object { $exclude -notcontains $_.Name } | Compress
 - Update ini tidak menghapus data lama.
 - Level, poin, Top Aktif, Papan Aktif Lifetime, MOTM, Donatur, Juragan, dan MongoDB data tidak direset.
 - Nama collection MongoDB internal lama boleh tetap untuk anti-reset data, tapi tidak tampil di branding publik.
+
+---
+
+## Dashboard-Only Rebuild v10.10.64
+
+Dashboard Pak RW sekarang dipisah menjadi aplikasi React/Vite di folder `dashboard/` dan disajikan sebagai static production build oleh Express. Core bot tetap dijalankan dengan `npm start` dan tidak bergantung pada Vite development server.
+
+Dokumentasi lengkap, route, komponen, hasil build, pengujian, deploy, serta rollback tersedia di:
+
+```text
+DASHBOARD_REBUILD_v10.10.64.md
+```
+
+Build dashboard:
+
+```powershell
+cd "D:\Pak Rw\dashboard"
+npm.cmd install
+npm.cmd run build
+```
+
+Jalankan project utama:
+
+```powershell
+cd "D:\Pak Rw"
+npm.cmd install
+npm.cmd run check
+npm.cmd start
+```
