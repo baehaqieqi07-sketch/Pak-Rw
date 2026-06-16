@@ -715,7 +715,7 @@
     "placeholderSelectionMode": "channel_role_user_server_bot_live_from_discord",
     "discordPickerMode": "live_api",
     "discordPickerAutoRefresh": true,
-    "uiVersion": "10.10.64",
+    "uiVersion": "10.10.65",
     "architecture": "react_vite_static_dashboard_only"
   },
   "featureFlow": {
@@ -1130,7 +1130,7 @@
       "Discord Manager"
     ]
   },
-  "version": "10.10.64",
+  "version": "10.10.65",
   "bigBot": {
     "releaseName": "Pak RW AI Natural + Welcome Mention v10.10.59"
   },

@@ -10912,7 +10912,7 @@ function savePakRwGlobalEmbedManager(req) {
 /* =================== END PAK RW FULL PREMIUM DASHBOARD REBUILD v10.10.63 =================== */
 
 
-/* =================== PAK RW DASHBOARD-ONLY REBUILD v10.10.64 =================== */
+/* =================== PAK RW DASHBOARD-ONLY REBUILD v10.10.65 =================== */
 const pakRwDashboardDist = path.join(__dirname, "dashboard", "dist");
 const pakRwDashboardIndex = path.join(pakRwDashboardDist, "index.html");
 
@@ -11051,7 +11051,7 @@ app.get("/api/dashboard/bootstrap", requireDashboardAuth, (req, res) => {
       dashboardEnabled: isDashboardEnabled,
       activeFeatureCount: featureCount.active,
       totalFeatureCount: featureCount.total,
-      version: String(cfg.version || "10.10.64"),
+      version: String(cfg.version || "10.10.65"),
       prefix: String(cfg.prefix || "rw"),
       environment: String(process.env.NODE_ENV || "development")
     },
@@ -11073,7 +11073,7 @@ app.put("/api/dashboard/settings", requireDashboardAuth, (req, res) => {
       if (!isSafeDashboardPath(pathText)) return res.status(400).json({ ok: false, error: `Path config tidak diizinkan: ${pathText}` });
       setDashboardPath(cfg, pathText, patch.value);
     }
-    cfg.version = "10.10.64";
+    cfg.version = "10.10.65";
     writeConfigFile(cfg);
     appendDashboardActivity("settings", "Setting dashboard disimpan", `${patches.length} field diperbarui melalui adapter aman.`);
     return res.json({ ok: true, config: cfg });
@@ -11089,7 +11089,7 @@ app.put("/api/dashboard/embed/:key", requireDashboardAuth, (req, res) => {
     const cfg = readConfigFile();
     cfg.embeds = cfg.embeds || {};
     cfg.embeds[key] = mergeDashboardEmbed(cfg.embeds[key] || {}, req.body?.embed || {});
-    cfg.version = "10.10.64";
+    cfg.version = "10.10.65";
     writeConfigFile(cfg);
     appendDashboardActivity("embed", "Template embed disimpan", `Template ${key} diperbarui dari Embed Builder.`);
     return res.json({ ok: true, embed: cfg.embeds[key] });
@@ -11140,7 +11140,7 @@ app.get("/api/dashboard/health", requireDashboardAuth, (req, res) => {
     uptimeSeconds: Math.floor(process.uptime())
   });
 });
-/* ================= END PAK RW DASHBOARD-ONLY REBUILD v10.10.64 ================= */
+/* ================= END PAK RW DASHBOARD-ONLY REBUILD v10.10.65 ================= */
 
 
 app.get("/motm-banner.svg", (req, res) => {
@@ -11181,6 +11181,52 @@ app.get("/dashboard", requireDashboardAuth, servePakRwDashboard);
 app.get("/dashboard/", requireDashboardAuth, servePakRwDashboard);
 app.get("/dashboard/manage/:feature", requireDashboardAuth, servePakRwDashboard);
 app.get("/dashboard/*", requireDashboardAuth, servePakRwDashboard);
+
+// Redirect halaman dashboard lama ke shell React baru agar user tidak masuk UI lama yang berantakan.
+const legacyDashboardRouteMap = new Map([
+  ["/feature-flow", "/dashboard"],
+  ["/config", "/dashboard/settings"],
+  ["/embed-sync", "/dashboard/manage/embed"],
+  ["/embed-templates", "/dashboard/manage/embed"],
+  ["/logs", "/dashboard/logs"],
+  ["/embeds", "/dashboard/manage/embed"],
+  ["/luxe-map", "/dashboard"],
+  ["/discord-hub", "/dashboard/channel-manager"],
+  ["/orbit-roles", "/dashboard/role-manager"],
+  ["/orbit-channels", "/dashboard/channel-manager"],
+  ["/emoji-studio", "/dashboard/manage/embed"],
+  ["/dashboard-features", "/dashboard"],
+  ["/dashboard-commands", "/dashboard/command-center"],
+  ["/command-center", "/dashboard/command-center"],
+  ["/permission-center", "/dashboard/permission-center"],
+  ["/top-active", "/dashboard/manage/top-aktif"],
+  ["/feature-toggles", "/dashboard"],
+  ["/quick-edit", "/dashboard"],
+  ["/easy", "/dashboard"],
+  ["/editor", "/dashboard/manage/embed"],
+  ["/test-center", "/dashboard/manage/embed"],
+  ["/tools", "/dashboard/settings"],
+  ["/backup", "/dashboard/backup"],
+  ["/preview", "/dashboard/manage/embed"],
+  ["/boost-poin", "/dashboard/manage/boost-poin"],
+  ["/manual-motm", "/dashboard/manage/motm"],
+  ["/cari-mabar", "/dashboard/manage/mabar"],
+  ["/media", "/dashboard/banner-manager"],
+  ["/theme", "/dashboard/settings"],
+  ["/studio", "/dashboard"],
+  ["/modules", "/dashboard"],
+  ["/control", "/dashboard"],
+  ["/analytics", "/dashboard/activity"],
+  ["/data-center", "/dashboard/logs"],
+  ["/discord", "/dashboard/channel-manager"],
+  ["/commands", "/dashboard/command-center"]
+]);
+app.use((req, res, next) => {
+  if (req.method !== "GET") return next();
+  const target = legacyDashboardRouteMap.get(req.path);
+  if (!target) return next();
+  return requireDashboardAuth(req, res, () => res.redirect(302, target));
+});
 
 app.post("/dashboard/manage/:feature", requireDashboardAuth, (req, res) => {
   try {
@@ -20395,8 +20441,12 @@ async function startDiscordBot() {
   const token = String(rawToken || "").trim().replace(/^['"]|['"]$/g, "");
 
   if (!token || token.includes("ISI_TOKEN") || token.includes("TOKEN_BOT")) {
-    console.log("❌ DISCORD_TOKEN belum diisi dengan benar di ENV hostings.");
-    console.log("ℹ️ Dashboard tetap aktif, tapi bot Discord tidak akan online sampai token benar.");
+    console.log("❌ DISCORD_TOKEN belum diisi dengan benar di ENV hosting.");
+    if (isDashboardEnabled) {
+      console.log("ℹ️ Dashboard tetap aktif, tetapi daftar channel/role Discord baru muncul setelah token dan GUILD_ID benar.");
+    } else {
+      console.log("ℹ️ Dashboard sedang nonaktif dan bot Discord belum dapat login sampai token benar.");
+    }
     return;
   }
 

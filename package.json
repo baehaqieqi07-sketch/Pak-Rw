@@ -1,6 +1,6 @@
 {
   "name": "pak-rw-desa-tulus",
-  "version": "10.10.64",
+  "version": "10.10.65",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -19,5 +19,5 @@
   "engines": {
     "node": ">=18"
   },
-  "description": "Pak RW DESA TULUS v10.10.64 - dashboard-only rebuild React/Vite dengan live Discord picker, embed builder, dan village control center"
+  "description": "Pak RW DESA TULUS v10.10.65 - final dashboard rebuild dengan picker Discord jelas, embed builder sinkron, dan village control center responsif"
 }

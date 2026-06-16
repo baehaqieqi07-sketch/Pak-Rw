@@ -1,10 +1,8 @@
 # Dashboard Archive
 
-`index.dashboard-legacy-v10.10.63.js` adalah snapshot lengkap sebelum dashboard React/Vite v10.10.64 dipasang.
+Folder ini menyimpan snapshot dan dokumentasi dashboard lama untuk kebutuhan rollback atau perbandingan saja.
 
-Core bot tidak dihapus. Fungsi renderer dashboard lama masih dibiarkan di `index.js` untuk kompatibilitas dan rollback, tetapi route `/dashboard/*` sekarang menyajikan static production build dari `dashboard/dist`.
+- `index.dashboard-legacy-v10.10.63.js`: snapshot server/UI dashboard sebelum React/Vite rebuild.
+- `DASHBOARD_REBUILD_v10.10.64.md`: laporan tahap rebuild sebelumnya.
 
-Rollback cepat:
-
-1. Set `DASHBOARD_ENABLED=false` agar bot berjalan tanpa dashboard.
-2. Untuk mengembalikan seluruh file lama, pulihkan snapshot ini sebagai `index.js` dan gunakan config/ZIP backup sebelumnya.
+Tampilan production aktif berada di `dashboard/dist` dan disajikan melalui route `/dashboard`.
