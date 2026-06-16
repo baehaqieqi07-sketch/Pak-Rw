@@ -1,6 +1,6 @@
 {
   "name": "pak-rw-desa-tulus",
-  "version": "10.10.60",
+  "version": "10.10.61",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -17,5 +17,5 @@
   "engines": {
     "node": ">=18"
   },
-  "description": "Pak RW DESA TULUS - Premium Big Bot balai warga digital, default Bahasa Indonesia jelas, vibes desa Sunda secukupnya, dashboard all-in-one, hemat OpenRouter anti limit"
+  "description": "Pak RW DESA TULUS v10.10.61 - Full Premium Dashboard Rebuild, cinematic village control center, manage pages, embed sync, AI hemat, Papan Aktif lifetime terpisah"
 }

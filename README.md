@@ -1,156 +1,182 @@
-# Pak RW — DESA TULUS
+# Pak RW / DESA TULUS v10.10.61
 
-Pak RW adalah bot utama untuk server **DESA TULUS**. Branding tetap bernuansa perdesaan: warga, balai desa, pos ronda, sawah, rukun, dan tata krama. Mulai v10.10.59, semua embed publik default memakai Bahasa Indonesia yang jelas agar warga tidak bingung.
+**Release:** Full Premium Dashboard Rebuild  
+**Branding publik:** Pak RW / DESA TULUS / Balai Warga Digital  
+**Prefix publik:** `rw`
 
-## Update v10.10.59 — Welcome Mention Sinkron
+Update ini merombak dashboard besar-besaran supaya tidak lagi terasa seperti versi lama. Dashboard baru dibuat sebagai **control center premium bot Discord** dengan visual cinematic perdesaan DESA TULUS, plugin cards, tombol Manage, halaman manage per fitur, preview Discord, placeholder klik-copy, dan Embed Manager global.
 
-- Semua teks utama diarahkan ke **Pak RW** dan **DESA TULUS**.
-- Persona AI dibuat seperti **Pak RW asli**: sopan, formal, ngayomi, tegas kalau perlu, tidak kasar, dan solutif.
-- Vibes server tetap perdesaan, tetapi embed publik tidak dibuat full Sunda.
-- Bahasa mengikuti permintaan warga:
-  - Jika warga minta Bahasa Indonesia, Pak RW menjawab Bahasa Indonesia.
-  - Jika warga minta Basa Sunda, Pak RW menjawab Basa Sunda formal.
-  - Tidak mencampur bahasa kecuali warga memang minta gaya campuran.
-- Judul welcome tetap **Wilujeung Sumping Warga Anyar**, isi bawahnya memakai Bahasa Indonesia jelas.
-- Curhat diarahkan jadi **Pak RW ngadangu warga**: mendengarkan, tidak menghakimi, dan membantu pelan-pelan.
-- OpenRouter tetap hemat: model ringan, cooldown, max token kecil, dan fallback lokal saat limit/error.
-- Dashboard tetap default mati untuk DisCloud: `DASHBOARD_ENABLED=false`.
-- Data lama/MongoDB tidak direset.
+## Yang baru di v10.10.61
 
-## ENV wajib
+- Route dashboard utama baru: `/dashboard`
+- Root `/` otomatis masuk ke `/dashboard`
+- `/studio` diarahkan ke dashboard baru
+- Route manage per fitur:
+  - `/dashboard/manage/welcome`
+  - `/dashboard/manage/ai`
+  - `/dashboard/manage/curhat`
+  - `/dashboard/manage/curhat-anonim`
+  - `/dashboard/manage/saran`
+  - `/dashboard/manage/level`
+  - `/dashboard/manage/cek-poin`
+  - `/dashboard/manage/top-aktif`
+  - `/dashboard/manage/papan-aktif`
+  - `/dashboard/manage/motm`
+  - `/dashboard/manage/manual-motm`
+  - `/dashboard/manage/donatur`
+  - `/dashboard/manage/juragan`
+  - `/dashboard/manage/mabar`
+  - `/dashboard/manage/boost-poin`
+  - `/dashboard/manage/embed`
+  - `/dashboard/manage/channel-manager`
+  - `/dashboard/manage/role-manager`
+  - `/dashboard/manage/command-center`
+  - `/dashboard/manage/permission-center`
+  - `/dashboard/manage/logs-health`
+  - `/dashboard/manage/backup-center`
+- Background dashboard baru: cinematic village / Balai Warga Digital DESA TULUS.
+- Plugin & Manage Center seperti dashboard bot besar: status, tombol Manage, card fitur, dan alur edit jelas.
+- Manage Page per fitur: kiri form setting, kanan preview Discord, tombol Save/Test/Reset, warning channel/role kosong.
+- Embed Manager global untuk semua template embed utama.
+- Placeholder library lengkap dan bisa klik-copy.
+- Mention aman: `@everyone` dan `@here` diblokir dari preview/template dashboard.
+- Papan Aktif Lifetime dipisah dari Top Aktif Bulanan.
+- Top Aktif Bulanan memakai title template otomatis: `🏆 TOP AKTIF WARGA BULAN {month} {server}`.
+- MOTM 100.000 poin tetap: role otomatis, cycle reset, lifetime tidak reset.
+- AI Pak RW tetap hemat: `openai/gpt-4o-mini`, cooldown, global cooldown, local cache, fallback lokal.
+- DisCloud tetap aman RAM 100 MB.
 
-```env
-DISCORD_TOKEN=
-CLIENT_ID=
-GUILD_ID=
-MONGODB_URI=
-OPENROUTER_API_KEY=
-AI_KEY=
-DASHBOARD_ENABLED=false
+## File penting yang berubah
+
+- `index.js`
+  - Menambahkan Full Premium Dashboard Rebuild.
+  - Menambahkan route `/dashboard` dan `/dashboard/manage/:feature`.
+  - Menambahkan Manage Page, Global Embed Manager, preview Discord, placeholder panel, dan CSS cinematic desa.
+- `config.json`
+  - Menambahkan setting dashboard rebuild.
+  - Menambahkan `papanAktif` dan `leaderboardAktif`.
+  - Menambahkan placeholder library lengkap.
+  - Menambahkan template embed `welcome`, `papanAktif`, `boostPoinActive`, `boostPoinEnd`, dan `aiFallback`.
+- `config.example.json`
+  - Disamakan dengan struktur config baru tanpa rahasia.
+- `package.json`
+  - Deskripsi release diperbarui.
+- `README.md`
+  - Dokumentasi update baru.
+
+## Cara pasang di lokal
+
+Extract ZIP ke:
+
+```bat
+D:\Pak Rw
 ```
 
-## Tes lokal
+Lalu jalankan:
 
 ```bat
 cd /d "D:\Pak Rw"
-npm install
-npm run check
-npm start
+npm.cmd install
+npm.cmd run check
+npm.cmd start
 ```
 
-Target log:
+Kalau dashboard mau dibuka, isi ENV:
+
+```env
+DASHBOARD_ENABLED=true
+DASHBOARD_PASSWORD=ISI_PASSWORD_DASHBOARD
+PORT=3000
+```
+
+Lalu buka:
 
 ```txt
-🌐 DNS resolver aktif untuk MongoDB Atlas.
-🌐 Dashboard Pak RW dimatikan sementara untuk mode DisCloud.
+http://localhost:3000/dashboard
+```
+
+## Cara test aman
+
+```bat
+npm.cmd run check
+```
+
+Hasil yang diharapkan:
+
+```txt
+node --check index.js
+node --check ai/brain.js
+node --check utils/cooldown.js
+node --check db/mongoStore.js
+```
+
+Saat start, target database yang bagus:
+
+```txt
 ✅ MongoDB connected
-🤍 Pak RW ONLINE sebagai Pak RW
 🗄️ Database mode: MongoDB
 ```
 
-## Deploy DisCloud
+Kalau masih:
 
-1. Pastikan `discloud.config` ada di root project.
-2. RAM plan free diset `RAM=100`.
-3. Buat ZIP tanpa `node_modules`, `.git`, `logs`, `backups`, dan `data` aktif.
-4. Untuk DisCloud, `.env` boleh masuk ZIP privat hosting. Untuk GitHub, `.env` jangan pernah di-commit.
-5. Upload ZIP ke DisCloud.
-6. Restart app dan cek logs.
+```txt
+Database mode: Local JSON fallback
+```
 
-## Catatan penting
+berarti cek `MONGODB_URI`, DNS, atau Atlas Network Access.
+
+## Cara push GitHub
+
+```bat
+cd /d "D:\Pak Rw"
+git status
+git add .
+git commit -m "update Pak RW premium dashboard rebuild v10.10.61"
+git push
+```
+
+Repo:
+
+```txt
+https://github.com/baehaqieqi07-sketch/Pak-Rw.git
+```
+
+## Railway redeploy
+
+1. Pastikan repo Railway mengarah ke `baehaqieqi07-sketch/Pak-Rw`.
+2. Root Directory kosong kalau file ada di root.
+3. Branch `main`.
+4. Isi ENV lewat Railway Variables, bukan `.env`.
+5. Setelah `git push`, Railway auto deploy.
+
+## DisCloud deploy
+
+`discloud.config` harus tetap:
+
+```txt
+NAME=Pak RW
+TYPE=bot
+MAIN=index.js
+RAM=100
+VERSION=latest
+START=npm start
+AUTORESTART=true
+```
+
+Buat ZIP publik tanpa file berat/rahasia:
+
+```powershell
+cd "D:\Pak Rw"
+$exclude = @("node_modules", ".git", "logs", "runtime-logs", "backups", "data")
+Get-ChildItem -Force | Where-Object { $exclude -notcontains $_.Name } | Compress-Archive -DestinationPath "D:\pak-rw-discloud.zip" -Force
+```
+
+## Penting
 
 - Jangan commit `.env`.
-- Jangan reset MongoDB/data level.
-- Jangan hapus dashboard permanen; dashboard hanya dimatikan dulu di mode DisCloud.
-- Prefix utama sekarang `rw`.
-- Mention user/channel asli tetap aktif, tetapi `@everyone` dan `@here` tetap diblokir.
-
-## Update v10.10.55 — Pak RW Big Bot DESA TULUS
-
-Update ini menaikkan identitas Pak RW menjadi bot besar untuk DESA TULUS. Fokusnya bukan mengganti data lama, tetapi membuat alur bot terasa seperti balai warga digital yang rapi, sopan, dan kuat.
-
-### Identitas utama
-- Server: DESA TULUS
-- Bot: Pak RW
-- Prefix warga: `rw`
-- Vibes: perdesaan, sopan, formal-natural, mengayomi, tegas secukupnya
-- Dashboard DisCloud tetap default mati: `DASHBOARD_ENABLED=false`
-- RAM DisCloud tetap 100 MB
-
-### Mode bot besar
-Pak RW sekarang membawa konsep **Balai Warga Digital**:
-- AI Pak RW untuk tanya jawab warga
-- Curhat Warga dan Curhat Anonim
-- Kotak Saran Warga
-- Welcome Warga Anyar dengan judul Wilujeung Sumping dan isi Bahasa Indonesia
-- Level & Poin Warga
-- Top Aktif dan Member Of The Month
-- Donatur Desa dan Juragan Desa
-- Voice Warga dan Boost Poin
-- Discord Manager dan command bantu ID/channel/role
-
-### Command baru/ringkas
-- `rwbesar` — ringkasan Pak RW Big Bot
-- `rwdesa` — ringkasan balai warga digital DESA TULUS
-- `rwpakrw` — identitas Pak RW
-- `rwfitur` — daftar fitur utama
-- `rwhelp` — bantuan warga
-
-### Bahasa dan gaya
-Pak RW harus mengikuti bahasa user:
-- Kalau user meminta Bahasa Indonesia, jawab Bahasa Indonesia sopan dan jelas.
-- Kalau user meminta Basa Sunda, jawab Basa Sunda formal dan sopan.
-- Jangan campur bahasa kecuali user meminta campuran.
-- Tetap hemat OpenRouter: jawaban ringkas, jelas, dan tidak membuang token.
-
-### Data aman
-Update ini tidak menyertakan `.env`, `data/`, `logs/`, `backups/`, atau file runtime aktif. Data level, Top Aktif, MOTM, Donatur, Juragan, dan AI memory tetap aman selama MongoDB/ENV lama dipakai.
-
-## v10.10.59 — Papan Aktif Lifetime + Siklus 100.000 Poin
-
-Update ini menambahkan alur level yang lebih besar untuk DESA TULUS:
-
-- **Top Aktif Bulanan** tetap otomatis post setiap pukul **00.00 WIB**.
-- Judul Top Aktif otomatis mengikuti bulan berjalan, contoh: `TOP AKTIF WARGA BULAN JUNI 2026 DESA TULUS`, lalu bulan berikutnya otomatis menjadi Juli, Agustus, dan seterusnya.
-- **Leaderboard Aktif / Papan Aktif Lifetime** dipisah ke channel khusus. Board ini mencatat total poin warga dari awal sampai seterusnya dan tidak ikut reset.
-- Jika warga mencapai **100.000 poin aktif**, Pak RW memberi role **Member Of The Month** otomatis, lalu poin siklus level warga tersebut dikembalikan dari awal.
-- Jika setelah reset warga mendapat 1 poin lagi, Papan Aktif lifetime akan tetap menghitung totalnya sebagai **100.001 poin**.
-- Dashboard `/top-active` sekarang disiapkan untuk memilih channel Top Aktif Bulanan, channel Leaderboard Aktif, target poin MOTM/reset, dan image board.
-- Jika ingin gambar seperti contoh, isi `Image Board Top Aktif URL` / `leaderboardActiveImageUrl` di dashboard dengan URL gambar/banner yang valid.
-
-Command baru:
-
-- `rwpapanaktif` / `rwleaderboardaktif` — lihat Papan Aktif lifetime.
-- `rwpostpapanaktif` — owner mengirim Papan Aktif lifetime ke channel Leaderboard Aktif.
-- `/papanaktif` — slash command Papan Aktif lifetime.
-- `/postpapanaktif` — slash command owner untuk mengirim Papan Aktif.
-
-Data aman:
-
-- Data lifetime tidak reset.
-- MongoDB tetap dipakai.
-- `.env`, `data`, `logs`, `backups`, dan `node_modules` tidak dimasukkan ke ZIP update.
-
-## v10.10.59 - Bahasa Embed Lebih Jelas
-
-Update ini membuat Pak RW tetap bernuansa DESA TULUS, tetapi semua embed publik default memakai Bahasa Indonesia yang jelas agar warga tidak bingung.
-
-- Judul welcome tetap `Wilujeung Sumping Warga Anyar!` sebagai ciri khas desa.
-- Isi welcome memakai Bahasa Indonesia: `Sambut warga anyar barudak {user}` lalu penjelasan yang mudah dipahami.
-- Curhat, Donatur, Juragan, Cari Mabar, Top Aktif, Papan Aktif, dan dashboard tidak dibuat full Sunda.
-- Basa Sunda formal hanya dipakai ketika user meminta Pak RW menjawab pakai Bahasa Sunda.
-- Mode hemat OpenRouter tetap aktif: sapaan dan pertanyaan sederhana dijawab lokal, AI dipakai hanya saat perlu.
-
-
-## v10.10.60 — Arcane Manage Dashboard + Unified Embed Sync
-
-Update ini merapikan Pak RW supaya terasa seperti bot besar untuk DESA TULUS. Fokusnya:
-
-- AI Pak RW memakai context engine: jawaban harus nyambung dengan curhat, coding, Discord, dashboard, embed, level/top aktif, GitHub/DisCloud, atau teks.
-- Pak RW tetap memanggil warga dengan `nak`, tetapi pembuka tidak selalu `Iya nak`; opener dipilih sesuai konteks.
-- Semua embed publik diarahkan ke tema DESA TULUS yang singkat, jelas, sopan, dan tidak full Basa Sunda.
-- Welcome dibuat simpel dan bisa tag user, role Member Tulus, channel aturan, chat warga, dan ticket.
-- Dashboard diarahkan ke gaya Arcane/Carl/Dyno: card plugin + tombol Manage, embed editor all-in-one, preview sama dengan Discord, placeholder lebih banyak, dan desain desa soft premium.
-- OpenRouter tetap hemat: sapaan dan pertanyaan sederhana dijawab lokal, cooldown/global limit aktif, max token lebih aman, fallback lokal saat limit/credit/rate-limit.
-
-Catatan aman: `.env`, `data`, `logs`, `backups`, dan `node_modules` tidak perlu dipush ke GitHub.
+- Jangan commit `node_modules`.
+- Jangan commit `data`, `logs`, `runtime-logs`, `backups`.
+- Jangan masukkan token Discord, MongoDB URI asli, OpenRouter key, password dashboard, CLIENT_ID, atau GUILD_ID ke GitHub/chat publik.
+- Update ini tidak menghapus data lama.
+- Level, poin, Top Aktif, Papan Aktif Lifetime, MOTM, Donatur, Juragan, dan MongoDB data tidak direset.
+- Nama collection MongoDB internal lama boleh tetap untuk anti-reset data, tapi tidak tampil di branding publik.

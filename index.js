@@ -4455,7 +4455,7 @@ function dashboardShell(content, title = "Pak RW Dashboard") {
     }
 
 
-    /* ================= PAK RW SOFT CONTROL ROOM v10.10.60 ================= */
+    /* ================= PAK RW SOFT CONTROL ROOM v10.10.61 ================= */
     body.dashboard-clean {
       background:
         radial-gradient(circle at 16% -8%, rgba(76,96,255,.20), transparent 34%),
@@ -4608,7 +4608,7 @@ function dashboardShell(content, title = "Pak RW Dashboard") {
 
 
 
-    /* ================= PAK RW BIG BOT FLOW v10.10.60 ================= */
+    /* ================= PAK RW BIG BOT FLOW v10.10.61 ================= */
     .bbo-flow {
       display: grid;
       grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -4714,7 +4714,7 @@ function dashboardShell(content, title = "Pak RW Dashboard") {
 
 
 
-    /* ================= COMFORT PRO DASHBOARD v10.10.60 ================= */
+    /* ================= COMFORT PRO DASHBOARD v10.10.61 ================= */
     body.dashboard-clean {
       background:
         radial-gradient(circle at 14% -8%, rgba(80, 118, 255, .18), transparent 34%),
@@ -4990,7 +4990,7 @@ function dashboardShell(content, title = "Pak RW Dashboard") {
 
   
 
-    /* ================= FULL FEATURE SUITE v10.10.60 ================= */
+    /* ================= FULL FEATURE SUITE v10.10.61 ================= */
     body.dashboard-clean {
       background:
         radial-gradient(circle at 8% 0%, rgba(124,109,255,.18), transparent 28%),
@@ -5031,7 +5031,7 @@ function dashboardShell(content, title = "Pak RW Dashboard") {
 
   
 
-/* ================= PAK RW PREMIUM DASHBOARD ONLY v10.10.60 ================= */
+/* ================= PAK RW PREMIUM DASHBOARD ONLY v10.10.61 ================= */
 :root{
   --premium-bg:#070a14;
   --premium-bg2:#0b1021;
@@ -5138,7 +5138,7 @@ body.has-unsaved .unsaved-pill{display:block;}
 @media(max-width:860px){.premium-app{grid-template-columns:1fr}.premium-sidebar{position:fixed;left:0;top:0;bottom:0;width:min(86vw,320px);transform:translateX(-105%);transition:.2s ease;height:100vh}.nav-open .premium-sidebar{transform:translateX(0)}.mobile-nav-toggle{display:block}.premium-main{padding:16px 14px 78px}.premium-topbar,.premium-section-head{flex-direction:column}.premium-hero{padding:22px;border-radius:24px}.premium-hero h2{font-size:28px}.premium-grid,.premium-feature-grid,.premium-flow{grid-template-columns:1fr}.premium-pins{grid-template-columns:1fr 1fr}.premium-card,.premium-section{border-radius:22px}.carl-workspace,.carl-shell{grid-template-columns:1fr!important}.carl-preview-panel,.carl-side{position:relative!important;top:auto!important}}
 
 
-/* ================= PAK RW SPACIOUS PREMIUM DASHBOARD ONLY v10.10.60 ================= */
+/* ================= PAK RW SPACIOUS PREMIUM DASHBOARD ONLY v10.10.61 ================= */
 :root{
   --sp-bg:#070912;
   --sp-bg2:#0b1020;
@@ -5281,7 +5281,7 @@ body.ui-density-compact textarea{min-height:120px!important;}
 @media(max-width:860px){.premium-main{padding:18px!important;padding-bottom:100px!important}.premium-topbar{align-items:flex-start!important}.premium-toolbar{justify-content:flex-start!important}.premium-grid,.premium-feature-grid,.premium-flow,.premium-preview-grid{grid-template-columns:1fr!important}.premium-section{padding:20px!important}.premium-sidebar{width:min(88vw,340px)!important}.premium-card,.premium-section{border-radius:24px!important}body.focus-edit .premium-main,body.sidebar-collapsed .premium-main{padding:18px!important;padding-bottom:100px!important}}
 
 
-/* ===== v10.10.60 Control Center Premium Safe Polish ===== */
+/* ===== v10.10.61 Control Center Premium Safe Polish ===== */
 .premium-protect-note{border:1px solid rgba(255,120,215,.18);background:linear-gradient(135deg,rgba(120,168,255,.09),rgba(255,120,215,.07));border-radius:22px;padding:14px 16px;color:rgba(248,251,255,.76);font-weight:850;line-height:1.55;margin:14px 0;}
 .premium-feature.locked,.premium-card.locked{border-color:rgba(247,205,103,.18)!important;background:linear-gradient(180deg,rgba(247,205,103,.065),rgba(255,255,255,.035))!important;}
 .premium-feature.locked:after{content:"Locked Safe";position:absolute;right:14px;top:14px;padding:5px 8px;border-radius:999px;background:rgba(247,205,103,.12);border:1px solid rgba(247,205,103,.22);font-size:10px;font-weight:1000;color:#ffe8a0;}
@@ -5377,7 +5377,7 @@ function dashboardLayout(inner, active = "dashboard") {
         <div class="premium-brand">
           <div class="premium-logo">${dashboardLogoHtml()}</div>
           <div>
-            <h1>${escapeHtml(dash.brandTitle || "Pak RW v10.10.60")}</h1>
+            <h1>${escapeHtml(dash.brandTitle || "Pak RW v10.10.61")}</h1>
             <p>${escapeHtml(dash.brandSubtitle || "Premium Control Center")}</p>
           </div>
         </div>
@@ -5428,7 +5428,7 @@ function dashboardLayout(inner, active = "dashboard") {
             </div>
             <span class="premium-chip ${statusText === "Online" ? "ok" : "warn"}">● ${escapeHtml(statusText)}</span>
             <span class="premium-chip">${escapeHtml(cfg.serverName || "DESA TULUS")}</span>
-            <span class="premium-chip">v10.10.60</span>
+            <span class="premium-chip">v10.10.61</span>
           </div>
         </div>
         ${inner}
@@ -5529,7 +5529,7 @@ function renderDashboard(req) {
   return dashboardLayout(`
     <section class="${heroClass}"${heroStyle}>
       <div class="premium-hero-badge">🌾 DESA TULUS • Balai Warga Digital Premium</div>
-      <h2>${escapeHtml(cfg.embeds?.dashboard?.homeTitle || "Pak RW Premium Control Center v10.10.60")}</h2>
+      <h2>${escapeHtml(cfg.embeds?.dashboard?.homeTitle || "Pak RW Premium Control Center v10.10.61")}</h2>
       <p>${escapeHtml(cfg.embeds?.dashboard?.homeSubtitle || "Dashboard dibuat lebih rapi, adem, dan modern seperti panel bot Discord besar. Semua fitur lama tetap aman; update ini hanya merapikan web dashboard, navigasi, editor, preview, dan pengalaman edit.")}</p>
       <div class="premium-actions">
         <a class="btn" href="/embeds">🎨 Edit Embed</a>
@@ -5635,7 +5635,7 @@ function renderFeatureFlowDashboard(req) {
 
   return dashboardLayout(`
     <section class="suite-hero">
-      <span class="ot-badge">🧭 FULL FEATURE SUITE • v10.10.60</span>
+      <span class="ot-badge">🧭 FULL FEATURE SUITE • v10.10.61</span>
       <h2>Semua Fitur Pak RW, Satu Alur yang Jelas</h2>
       <p>Halaman ini dibuat supaya dashboard terasa seperti bot besar terkenal: fitur tidak numpuk, tiap modul punya tujuan, dan setelah edit kamu tahu harus preview, test, lalu backup.</p>
       <div class="ot-hero-actions">
@@ -5903,7 +5903,7 @@ function renderMaxtonMegaControl(req, saved = false, error = "") {
           ${maxtonChannelSelect(guild, "levelChannelId", "Channel Level Up", cfg.levelChannelId, "text")}
           ${maxtonChannelSelect(guild, "cekPoinChannelId", "Channel Cek Poin", cfg.cekPoinChannelId || cfg.level?.checkPointChannelId || cfg.levelChannelId, "text")}
           ${maxtonChannelSelect(guild, "topActiveChannelId", "Channel Top Aktif Bulanan", topCfg.channelId || cfg.levelChannelId, "text")}
-          ${maxtonChannelSelect(guild, "leaderboardActiveChannelId", "Channel Leaderboard Aktif / Papan Aktif", topCfg.leaderboardActiveChannelId || topCfg.channelId || cfg.levelChannelId, "text")}
+          ${maxtonChannelSelect(guild, "leaderboardActiveChannelId", "Channel Leaderboard Aktif / Papan Aktif", topCfg.leaderboardActiveChannelId || "", "text")}
           ${maxtonChannelSelect(guild, "boostChannelId", "Channel Boost / Juragan", cfg.juragan.boostChannelId, "text")}
           ${maxtonChannelSelect(guild, "ticketChannelId", "Channel Ticket", cfg.ticketChannelId, "text")}
           ${maxtonChannelSelect(guild, "logChannelId", "Channel Log", cfg.logChannelId, "text")}
@@ -6255,7 +6255,7 @@ function applyMaxtonControlPost(body = {}) {
 
   cfg.topActive.enabled = bool("topActiveEnabled");
   cfg.topActive.channelId = body.topActiveChannelId || cfg.topActive.channelId || cfg.levelChannelId || "";
-  cfg.topActive.leaderboardActiveChannelId = body.leaderboardActiveChannelId || cfg.topActive.leaderboardActiveChannelId || cfg.topActive.channelId || "";
+  cfg.topActive.leaderboardActiveChannelId = body.leaderboardActiveChannelId || cfg.topActive.leaderboardActiveChannelId || "";
   cfg.topActive.memberOfTheMonthRoleId = body.memberOfTheMonthRoleId || cfg.topActive.memberOfTheMonthRoleId || "";
   cfg.topActive.pointsThreshold = num(body.topActivePointsThreshold, cfg.topActive.pointsThreshold ?? 100000, 1);
   cfg.topActive.topLimit = num(body.topActiveLimit, cfg.topActive.topLimit ?? 10, 3, 50);
@@ -6492,11 +6492,12 @@ function renderTopActiveDashboard(req, saved = false, error = "") {
 
     <form method="post" action="/top-active" class="panel">
       <h3>⚙️ Setting Top Aktif</h3>
+      <p class="section-note">Top Aktif Bulanan dan Papan Aktif Lifetime sengaja dipisah. Isi channel Papan Aktif dengan channel khusus seperti <b>🏆│leaderboard-aktif</b>. Kalau kosong, Pak RW tidak akan menggabungkannya ke channel Top Aktif.</p>
       <div class="formgrid">
         <div><label>Status Fitur</label><select name="enabled"><option value="on" ${topCfg.enabled !== false ? "selected" : ""}>Aktif</option><option value="off" ${topCfg.enabled === false ? "selected" : ""}>Nonaktif</option></select></div>
         <div><label>Mode 1 Channel</label><select name="useOneChannel"><option value="on" ${topCfg.useOneChannel !== false ? "selected" : ""}>Aktif - Top Aktif/MOTM 1 channel</option><option value="off" ${topCfg.useOneChannel === false ? "selected" : ""}>Nonaktif</option></select></div>
         ${guild ? selectField("channelId", "Channel Top Aktif Bulanan", channelOptions(guild, topCfg.channelId || cfg.levelChannelId, "text")) : configInput("channelId", "Channel Top Aktif Bulanan ID", topCfg.channelId || cfg.levelChannelId || "")}
-        ${guild ? selectField("leaderboardActiveChannelId", "Channel Leaderboard Aktif / Papan Aktif Lifetime", channelOptions(guild, topCfg.leaderboardActiveChannelId || topCfg.channelId || cfg.levelChannelId, "text")) : configInput("leaderboardActiveChannelId", "Channel Leaderboard Aktif ID", topCfg.leaderboardActiveChannelId || topCfg.channelId || "")}
+        ${guild ? selectField("leaderboardActiveChannelId", "Channel Leaderboard Aktif / Papan Aktif Lifetime", channelOptions(guild, topCfg.leaderboardActiveChannelId || "", "text")) : configInput("leaderboardActiveChannelId", "Channel Leaderboard Aktif ID", topCfg.leaderboardActiveChannelId || "")}
         ${guild ? selectField("memberOfTheMonthRoleId", "Role Member Of The Month", roleOptions(guild, topCfg.memberOfTheMonthRoleId || "")) : configInput("memberOfTheMonthRoleId", "Role Member Of The Month ID", topCfg.memberOfTheMonthRoleId || "")}
         ${configInput("pointsThreshold", "Target Poin Member Of The Month + Reset Siklus", topCfg.pointsThreshold || 100000, "number")}
         ${configInput("topLimit", "Jumlah Ranking Ditampilkan", topCfg.topLimit || 10, "number")}
@@ -9903,6 +9904,460 @@ function renderCommands() {
   `, "commands");
 }
 
+
+/* ===================== PAK RW FULL PREMIUM DASHBOARD REBUILD v10.10.61 ===================== */
+const PAKRW_DASHBOARD_RELEASE = "10.10.61";
+const PAKRW_DASHBOARD_RELEASE_NAME = "Full Premium Dashboard Rebuild";
+
+const PAKRW_PLACEHOLDER_GROUPS = [
+  ["User", ["{user}", "{userId}", "{username}", "{displayName}", "{avatar}", "{joinedAt}"]],
+  ["Server", ["{server}", "{serverName}", "{memberCount}", "{ownerName}", "{botName}", "{prefix}"]],
+  ["Role", ["{memberRole}", "{memberTulusRole}", "{staffRole}", "{adminRole}", "{moderatorRole}", "{motmRole}", "{donaturRole}", "{juraganRole}"]],
+  ["Channel", ["{rulesChannel}", "{chatWargaChannel}", "{ticketChannel}", "{aiChannel}", "{curhatChannel}", "{anonymousCurhatChannel}", "{suggestionChannel}", "{levelChannel}", "{cekPoinChannel}", "{topActiveChannel}", "{leaderboardChannel}", "{mabarChannel}", "{boostPoinChannel}", "{welcomeChannel}"]],
+  ["Level/Poin", ["{level}", "{rank}", "{total}", "{chat}", "{voice}", "{lifetimeTotal}", "{cyclePoints}", "{motmThreshold}", "{nextLevel}", "{remainingPoints}"]],
+  ["Event/Boost", ["{eventName}", "{multiplier}", "{duration}", "{channels}", "{endsAt}", "{by}", "{status}"]],
+  ["Waktu", ["{month}", "{year}", "{date}", "{time}", "{today}", "{now}"]]
+];
+
+function pakRwFeatureCatalog(cfg = readConfigFile()) {
+  const topCfg = cfg.topActive || {};
+  const papanCfg = cfg.papanAktif || cfg.leaderboardAktif || {};
+  return [
+    { slug: "ai", icon: "🤖", group: "Core", name: "AI Pak RW", desc: "Intent router lokal, cache jawaban, fallback hemat OpenRouter, dan gaya Pak RW yang natural.", status: cfg.ai?.openRouterModel || "openai/gpt-4o-mini", enabled: cfg.features?.ai !== false, channelKey: "aiChannelId", embedKey: "aiFallback" },
+    { slug: "welcome", icon: "🏡", group: "Community", name: "Welcome Warga", desc: "Sambut warga anyar dengan mention user, role Member Tulus, rules, chat warga, ticket, dan banner.", status: cfg.welcome?.enabled !== false ? "Aktif" : "Mati", enabled: cfg.welcome?.enabled !== false, channelKey: "welcomeChannelId", roleKey: "memberTulusRoleId", embedKey: "welcome" },
+    { slug: "curhat", icon: "☁️", group: "Community", name: "Curhat", desc: "Panel curhat warga, respon empati, cooldown, dan template balasan Pak RW.", status: cfg.curhat?.enabled !== false ? "Aktif" : "Mati", enabled: cfg.curhat?.enabled !== false, channelKey: "curhatChannelId", embedKey: "curhatReply" },
+    { slug: "curhat-anonim", icon: "🕊️", group: "Community", name: "Curhat Anonim", desc: "Curhat tanpa menampilkan identitas warga, aman untuk ruang dengar warga.", status: cfg.anonymousCurhat?.enabled !== false ? "Aktif" : "Mati", enabled: cfg.anonymousCurhat?.enabled !== false, channelKey: "anonymousCurhatChannelId", embedKey: "anonimPanel" },
+    { slug: "saran", icon: "💡", group: "Community", name: "Kotak Saran", desc: "Saran warga, voting setuju/tidak, pilihan anonim, dan panel saran yang rapi.", status: cfg.suggestion?.enabled !== false ? "Aktif" : "Mati", enabled: cfg.suggestion?.enabled !== false, channelKey: "suggestionChannelId", embedKey: "suggestionResult" },
+    { slug: "level", icon: "📊", group: "Leveling", name: "Level & Poin", desc: "Poin chat/voice, rank, level-up, role level, dan siklus 100.000 poin tanpa reset lifetime.", status: `${cfg.level?.pointsPerLevel || 500} poin/level`, enabled: cfg.level?.enabled !== false, channelKey: "levelChannelId", embedKey: "levelUp" },
+    { slug: "cek-poin", icon: "🧾", group: "Leveling", name: "Cek Poin", desc: "Channel dan embed cek poin warga yang jelas untuk chat, voice, total, rank, dan sisa poin.", status: cfg.cekPoinChannelId ? "Channel siap" : "Belum channel", enabled: true, channelKey: "cekPoinChannelId", embedKey: "levelProfile" },
+    { slug: "top-aktif", icon: "🏆", group: "Leaderboard", name: "Top Aktif Bulanan", desc: "Auto post 00.00 WIB, judul otomatis bulan berjalan, top chat, top voice, dan top aktif.", status: topCfg.dailyAutoPost ? "Auto 00.00 WIB" : "Manual", enabled: topCfg.enabled !== false, channelKey: "topActive.channelId", embedKey: "topActiveBoard" },
+    { slug: "papan-aktif", icon: "🥇", group: "Leaderboard", name: "Papan Aktif Lifetime", desc: "Leaderboard seumur hidup, tidak reset walau poin siklus/MOTM reset.", status: papanCfg.channelId || topCfg.leaderboardActiveChannelId ? "Channel siap" : "Butuh channel", enabled: papanCfg.enabled !== false, channelKey: "papanAktif.channelId", embedKey: "papanAktif" },
+    { slug: "motm", icon: "👑", group: "Leaderboard", name: "MOTM", desc: "Member Of The Month otomatis saat 100.000 poin, role, reset siklus, dan lifetime lanjut.", status: `${topCfg.pointsThreshold || cfg.level?.cycleResetAtPoints || 100000} poin`, enabled: topCfg.announceMemberOfTheMonth !== false, roleKey: "topActive.memberOfTheMonthRoleId", embedKey: "memberOfTheMonth" },
+    { slug: "manual-motm", icon: "🖼️", group: "Leaderboard", name: "Manual Banner MOTM", desc: "Upload/isi URL banner leaderboard/MOTM manual dan preview sebelum kirim.", status: topCfg.bannerMode || "manual_image", enabled: topCfg.bannerEnabled !== false, channelKey: "topActive.channelId", embedKey: "memberOfTheMonth" },
+    { slug: "donatur", icon: "💚", group: "Role Premium", name: "Donatur Desa", desc: "Role Donatur, harga/durasi, embed benefit, dan grant role dari dashboard.", status: cfg.donaturRoleId ? "Role siap" : "Belum role", enabled: cfg.donatur?.enabled !== false, roleKey: "donaturRoleId", embedKey: "donatur" },
+    { slug: "juragan", icon: "💎", group: "Role Premium", name: "Juragan Desa", desc: "Role Juragan, boost channel, bonus poin, dan akses ruang khusus.", status: cfg.juragan?.enabled !== false ? "Aktif" : "Mati", enabled: cfg.juragan?.enabled !== false, channelKey: "juragan.boostChannelId", roleKey: "juragan.roleId", embedKey: "juragan" },
+    { slug: "mabar", icon: "🎮", group: "Activity", name: "Cari Mabar", desc: "Panel cari mabar, channel, tombol, dan embed ajakan main bareng warga.", status: cfg.mabar?.enabled !== false ? "Aktif" : "Mati", enabled: cfg.mabar?.enabled !== false, channelKey: "mabar.channelId", embedKey: "cariMabar" },
+    { slug: "boost-poin", icon: "⚡", group: "Activity", name: "Boost Poin", desc: "Event multiplier poin chat/voice, pengumuman aktif dan berakhir, channel target, durasi.", status: cfg.boostPoin?.eventActive ? "Event aktif" : "Standby", enabled: cfg.boostPoin?.enabled !== false, channelKey: "boostPoin.channelId", embedKey: "boostPoinActive" },
+    { slug: "embed", icon: "🎨", group: "Tools", name: "Embed Manager", desc: "Editor global semua embed: content, author, title, fields, image, footer, preview, copy JSON.", status: `${Object.keys(cfg.embeds || {}).length} template`, enabled: true, embedKey: "global" },
+    { slug: "channel-manager", icon: "#️⃣", group: "Tools", name: "Channel Manager", desc: "Pilih/input ID channel utama dan lihat label channel Discord yang mudah dibaca.", status: "ID Center", enabled: true },
+    { slug: "role-manager", icon: "🎭", group: "Tools", name: "Role Manager", desc: "Pilih/input ID role Member Tulus, Staff, Admin, MOTM, Donatur, Juragan.", status: "Role Center", enabled: true },
+    { slug: "command-center", icon: "⌨️", group: "Tools", name: "Command Center", desc: "Command publik prefix rw, bantuan, dan daftar perintah Pak RW.", status: "rw", enabled: true },
+    { slug: "permission-center", icon: "🛡️", group: "Tools", name: "Permission Center", desc: "Pengaturan izin command, role staff, command owner, dan pesan error permission.", status: "Aman", enabled: true },
+    { slug: "logs-health", icon: "📡", group: "Ops", name: "Logs & Health", desc: "Status bot, MongoDB, uptime, dashboard mode, dan link deploy.", status: isMongoActive() ? "MongoDB" : "Fallback", enabled: true },
+    { slug: "backup-center", icon: "💾", group: "Ops", name: "Backup Center", desc: "Export config, cek file penting, dan panduan backup sebelum deploy.", status: "Export", enabled: true }
+  ];
+}
+
+function pakRwGetByPath(obj, path, fallback = "") {
+  if (!path) return fallback;
+  const parts = String(path).split(".");
+  let cur = obj;
+  for (const p of parts) {
+    if (!cur || typeof cur !== "object" || !(p in cur)) return fallback;
+    cur = cur[p];
+  }
+  return cur ?? fallback;
+}
+
+function pakRwSetByPath(obj, path, value) {
+  if (!path) return;
+  const parts = String(path).split(".");
+  let cur = obj;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const p = parts[i];
+    if (!cur[p] || typeof cur[p] !== "object") cur[p] = {};
+    cur = cur[p];
+  }
+  cur[parts[parts.length - 1]] = value;
+}
+
+function pakRwSafeId(value = "") {
+  const raw = String(value || "").trim();
+  const match = raw.match(/\d{15,25}/);
+  return match ? match[0] : raw.replace(/@everyone|@here/gi, "").slice(0, 64);
+}
+
+function pakRwReadableChannel(guild, id = "") {
+  if (!id) return "Belum diisi";
+  const found = guild?.channels?.cache?.get?.(String(id));
+  return found ? `#${found.name}` : String(id);
+}
+
+function pakRwReadableRole(guild, id = "") {
+  if (!id) return "Belum diisi";
+  const found = guild?.roles?.cache?.get?.(String(id));
+  return found ? `@${found.name}` : String(id);
+}
+
+function pakRwChannelSelect(name, label, selected = "", guild, helper = "") {
+  const options = guild ? channelOptions(guild, selected || "", "text") : "";
+  if (options) {
+    return `<label class="prw-field"><span>${escapeHtml(label)}</span><select name="${escapeHtml(name)}"><option value="">Pilih channel...</option>${options}</select><small>${escapeHtml(helper || "Config tetap menyimpan Channel ID.")}</small></label>`;
+  }
+  return `<label class="prw-field"><span>${escapeHtml(label)}</span><input name="${escapeHtml(name)}" value="${escapeHtml(selected || "")}" placeholder="ISI_ID_CHANNEL"/><small>${escapeHtml(helper || "Bot belum membaca guild, isi Channel ID manual.")}</small></label>`;
+}
+
+function pakRwRoleSelect(name, label, selected = "", guild, helper = "") {
+  const roles = guild ? [...guild.roles.cache.values()].filter((r) => r && !r.managed).sort((a, b) => b.position - a.position) : [];
+  if (roles.length) {
+    return `<label class="prw-field"><span>${escapeHtml(label)}</span><select name="${escapeHtml(name)}"><option value="">Pilih role...</option>${roles.map((r) => `<option value="${escapeHtml(r.id)}" ${String(selected) === String(r.id) ? "selected" : ""}>@${escapeHtml(r.name)} • ${escapeHtml(r.id)}</option>`).join("")}</select><small>${escapeHtml(helper || "Config tetap menyimpan Role ID.")}</small></label>`;
+  }
+  return `<label class="prw-field"><span>${escapeHtml(label)}</span><input name="${escapeHtml(name)}" value="${escapeHtml(selected || "")}" placeholder="ISI_ID_ROLE"/><small>${escapeHtml(helper || "Bot belum membaca role, isi Role ID manual.")}</small></label>`;
+}
+
+function pakRwTextField(name, label, value = "", helper = "", type = "text") {
+  return `<label class="prw-field"><span>${escapeHtml(label)}</span><input type="${escapeHtml(type)}" name="${escapeHtml(name)}" value="${escapeHtml(value ?? "")}"/><small>${escapeHtml(helper || "")}</small></label>`;
+}
+
+function pakRwTextarea(name, label, value = "", helper = "", rows = 8) {
+  return `<label class="prw-field wide"><span>${escapeHtml(label)}</span><textarea name="${escapeHtml(name)}" rows="${rows}">${escapeHtml(value ?? "")}</textarea><small>${escapeHtml(helper || "")}</small></label>`;
+}
+
+function pakRwSwitch(name, label, checked = false, helper = "") {
+  return `<label class="prw-switch"><input type="checkbox" name="${escapeHtml(name)}" ${checked ? "checked" : ""}/><span></span><b>${escapeHtml(label)}</b><small>${escapeHtml(helper || "")}</small></label>`;
+}
+
+function pakRwPreviewData(cfg = readConfigFile()) {
+  return {
+    user: "<@123456789012345678>", userId: "123456789012345678", username: "warga.tulus", displayName: "Warga Tulus", avatar: "https://cdn.discordapp.com/embed/avatars/0.png", joinedAt: "16 Juni 2026",
+    server: cfg.serverName || "DESA TULUS", serverName: cfg.serverName || "DESA TULUS", memberCount: "1.234", ownerName: cfg.ownerName || "Pak RW", botName: cfg.botName || "Pak RW", prefix: cfg.prefix || "rw",
+    memberRole: "<@&111111111111111111>", memberTulusRole: "<@&111111111111111111>", staffRole: "<@&222222222222222222>", adminRole: "<@&333333333333333333>", moderatorRole: "<@&444444444444444444>", motmRole: "<@&555555555555555555>", donaturRole: "<@&666666666666666666>", juraganRole: "<@&777777777777777777>",
+    rulesChannel: "<#111111111111111111>", chatWargaChannel: "<#222222222222222222>", ticketChannel: "<#333333333333333333>", aiChannel: "<#444444444444444444>", curhatChannel: "<#555555555555555555>", anonymousCurhatChannel: "<#666666666666666666>", suggestionChannel: "<#777777777777777777>", levelChannel: "<#888888888888888888>", cekPoinChannel: "<#999999999999999999>", topActiveChannel: "<#101010101010101010>", leaderboardChannel: "<#202020202020202020>", mabarChannel: "<#303030303030303030>", boostPoinChannel: "<#404040404040404040>", welcomeChannel: "<#505050505050505050>",
+    level: "37", rank: "Warga Rukun", total: "18.500", chat: "9.900", voice: "8.600", lifetimeTotal: "100.001", cyclePoints: "1", motmThreshold: String(cfg.topActive?.pointsThreshold || cfg.level?.cycleResetAtPoints || 100000), nextLevel: "38", remainingPoints: "500",
+    eventName: "Ronda Aktif", multiplier: "x1.15", duration: "2 jam", channels: "chat-warga, voice", endsAt: "22.00 WIB", by: "Pak RW", status: "Aktif",
+    month: getMonthLabel ? getMonthLabel() : "JUNI 2026", year: "2026", date: "16 Juni 2026", time: "00.00 WIB", today: "16 Juni 2026", now: "16 Juni 2026 00.00 WIB"
+  };
+}
+
+function pakRwTemplate(text = "", data = pakRwPreviewData()) {
+  let out = String(text ?? "").replace(/@everyone|@here/gi, "[mention diblokir]");
+  for (const [key, value] of Object.entries(data)) out = out.replaceAll(`{${key}}`, String(value));
+  return out;
+}
+
+function pakRwEmbedForFeature(cfg = readConfigFile(), meta = {}) {
+  const embeds = cfg.embeds || {};
+  if (meta.embedKey && embeds[meta.embedKey]) return { key: meta.embedKey, data: embeds[meta.embedKey] };
+  if (meta.slug === "welcome") {
+    return { key: "welcome", data: embeds.welcome || {
+      color: "#8FBF7F",
+      content: cfg.welcome?.content || "🤍 Sambut warga anyar barudak {user} {memberTulusRole}",
+      authorName: "DESA TULUS • Warga Baru",
+      title: cfg.welcome?.title || "🏡 Wilujeung Sumping Warga Anyar! {user}",
+      description: cfg.welcome?.message || "Pak RW menyambut {user} sebagai bagian dari DESA TULUS.",
+      image: cfg.welcome?.imageUrl || "",
+      thumbnail: "avatar",
+      footer: "DESA TULUS • Tempat warga baik berkumpul",
+      fields: []
+    }};
+  }
+  return { key: meta.embedKey || meta.slug || "custom", data: { color: cfg.embedColor || "#7DBD77", content: "", authorName: "DESA TULUS • Pak RW", title: meta.name || "Pak RW Embed", description: meta.desc || "Template embed bisa diedit dari dashboard.", footer: "DESA TULUS • Balai Warga Digital", fields: [] } };
+}
+
+function pakRwDiscordPreview(embedCfg = {}, cfg = readConfigFile()) {
+  const data = pakRwPreviewData(cfg);
+  const color = embedCfg.color || cfg.embedColor || "#7DBD77";
+  const content = pakRwTemplate(embedCfg.content || "", data);
+  const author = pakRwTemplate(embedCfg.authorName || "", data);
+  const title = pakRwTemplate(embedCfg.title || "", data);
+  const desc = pakRwTemplate(embedCfg.description || embedCfg.message || "", data);
+  const footer = pakRwTemplate(embedCfg.footer || "", data);
+  const image = embedCfg.image || embedCfg.imageUrl || "";
+  const thumb = embedCfg.thumbnail || embedCfg.thumbnailUrl || "";
+  const fields = Array.isArray(embedCfg.fields) ? embedCfg.fields.slice(0, 8) : [];
+  return `<div class="discord-preview">
+    <div class="discord-label">Preview Discord</div>
+    ${content ? `<div class="discord-content">${escapeHtml(content)}</div>` : ""}
+    <div class="discord-embed" style="border-left-color:${escapeHtml(color)}">
+      <div class="discord-row">
+        <div class="discord-main">
+          ${author ? `<div class="discord-author">${escapeHtml(author)}</div>` : ""}
+          ${title ? `<div class="discord-title">${escapeHtml(title)}</div>` : ""}
+          ${desc ? `<div class="discord-desc">${escapeHtml(desc).replace(/\n/g, "<br>")}</div>` : `<div class="discord-desc muted">Description belum diisi.</div>`}
+          ${fields.length ? `<div class="discord-fields">${fields.map((f) => `<div><b>${escapeHtml(pakRwTemplate(f.name || "Field", data))}</b><span>${escapeHtml(pakRwTemplate(f.value || "-", data))}</span></div>`).join("")}</div>` : ""}
+          ${footer ? `<div class="discord-footer">${escapeHtml(footer)}</div>` : ""}
+        </div>
+        ${thumb && /^https?:\/\//i.test(String(thumb)) ? `<img class="discord-thumb" src="${escapeHtml(thumb)}" alt="thumbnail">` : ""}
+      </div>
+      ${image && /^https?:\/\//i.test(String(image)) ? `<img class="discord-image" src="${escapeHtml(image)}" alt="image">` : `<div class="discord-image empty">Field Image URL tersedia. Isi agar leaderboard/banner tidak kosong.</div>`}
+    </div>
+  </div>`;
+}
+
+function pakRwPlaceholderPanel() {
+  return `<aside class="placeholder-panel">
+    <div class="panel-title"><b>Placeholder Library</b><span>Klik untuk copy. Mention asli akan diproses saat dikirim Discord.</span></div>
+    ${PAKRW_PLACEHOLDER_GROUPS.map(([group, items]) => `<div class="ph-group"><h4>${escapeHtml(group)}</h4><div>${items.map((p) => `<button type="button" class="ph-chip" data-copy="${escapeHtml(p)}">${escapeHtml(p)}</button>`).join("")}</div></div>`).join("")}
+    <div class="warn-box">@everyone dan @here diblokir otomatis supaya dashboard tidak bikin spam mention.</div>
+  </aside>`;
+}
+
+function pakRwPremiumShell(content, active = "dashboard", title = "Pak RW Control Center") {
+  const cfg = readConfigFile();
+  const nav = [
+    ["dashboard", "🏠", "Dashboard", "/dashboard"],
+    ["welcome", "🏡", "Welcome", "/dashboard/manage/welcome"],
+    ["ai", "🤖", "AI Pak RW", "/dashboard/manage/ai"],
+    ["embed", "🎨", "Embed Manager", "/dashboard/manage/embed"],
+    ["level", "📊", "Level", "/dashboard/manage/level"],
+    ["top-aktif", "🏆", "Top Aktif", "/dashboard/manage/top-aktif"],
+    ["papan-aktif", "🥇", "Papan Aktif", "/dashboard/manage/papan-aktif"],
+    ["motm", "👑", "MOTM", "/dashboard/manage/motm"],
+    ["logs-health", "📡", "Logs", "/dashboard/manage/logs-health"],
+    ["backup-center", "💾", "Backup", "/dashboard/manage/backup-center"]
+  ];
+  return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style>
+    :root{--v-bg:#f4ecd9;--v-deep:#102035;--v-deeper:#07111f;--v-card:rgba(255,255,255,.70);--v-card2:rgba(255,255,255,.48);--v-line:rgba(26,45,70,.14);--v-text:#162033;--v-muted:rgba(22,32,51,.66);--v-soft:rgba(22,32,51,.48);--v-green:#5f8d5a;--v-leaf:#7eb77b;--v-bamboo:#c59a5b;--v-gold:#e7bd68;--v-blue:#6d9df7;--v-pink:#e879b6;--v-purple:#9d83e6;--v-shadow:0 24px 90px rgba(19,31,51,.18);--v-radius:28px;}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;min-height:100vh;color:var(--v-text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Arial,sans-serif;background:linear-gradient(180deg,#e9d9b7 0%,#d5e3c3 36%,#cad7e8 68%,#f4ecd9 100%);overflow-x:hidden}a{color:inherit;text-decoration:none}button,input,textarea,select{font:inherit}.village-bg{position:fixed;inset:0;z-index:-3;background:radial-gradient(circle at 12% 12%,rgba(255,232,176,.88),transparent 20%),radial-gradient(circle at 72% 14%,rgba(232,121,182,.22),transparent 24%),linear-gradient(180deg,rgba(105,153,190,.56),rgba(255,255,255,0) 39%),linear-gradient(135deg,#f0d7a5,#bdd6b2 44%,#a4bfd8 100%)}.village-bg:before{content:"";position:absolute;left:-8%;right:-8%;bottom:0;height:52%;background:linear-gradient(180deg,transparent 0%,rgba(40,86,62,.11) 18%,rgba(41,83,58,.24) 60%,rgba(27,58,42,.30) 100%),radial-gradient(ellipse at 20% 100%,rgba(67,113,70,.65) 0 18%,transparent 19%),radial-gradient(ellipse at 51% 95%,rgba(82,133,80,.58) 0 20%,transparent 21%),radial-gradient(ellipse at 81% 100%,rgba(48,93,69,.52) 0 17%,transparent 18%);filter:saturate(.9)}.village-bg:after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 0 35%,rgba(255,255,255,.20) 48%,transparent 62%),repeating-linear-gradient(90deg,rgba(255,255,255,.03) 0 1px,transparent 1px 7px);mix-blend-mode:soft-light}.floating-grain{position:fixed;inset:0;z-index:-2;pointer-events:none;background-image:radial-gradient(rgba(255,255,255,.38) 1px, transparent 1px);background-size:42px 42px;opacity:.22;animation:floatGrain 18s linear infinite}@keyframes floatGrain{to{transform:translate3d(-42px,42px,0)}}.app{display:grid;grid-template-columns:300px minmax(0,1fr);min-height:100vh}.side{position:sticky;top:0;height:100vh;padding:20px;border-right:1px solid rgba(255,255,255,.36);background:linear-gradient(180deg,rgba(255,255,255,.58),rgba(255,255,255,.30));backdrop-filter:blur(28px);box-shadow:20px 0 80px rgba(26,45,70,.08);overflow:auto}.brand{display:flex;gap:13px;align-items:center;padding:12px;margin-bottom:18px;border:1px solid rgba(255,255,255,.45);border-radius:24px;background:rgba(255,255,255,.42)}.brand-logo{width:52px;height:52px;border-radius:18px;display:grid;place-items:center;background:linear-gradient(135deg,var(--v-green),var(--v-gold));box-shadow:0 18px 48px rgba(95,141,90,.24);font-size:27px}.brand h1{font-size:18px;margin:0}.brand p{margin:4px 0 0;color:var(--v-muted);font-size:12px;line-height:1.35}.nav{display:flex;flex-direction:column;gap:8px}.nav a{display:flex;align-items:center;gap:10px;padding:13px 14px;border-radius:18px;color:rgba(22,32,51,.70);font-weight:850;border:1px solid transparent}.nav a:hover,.nav a.active{background:rgba(255,255,255,.58);border-color:rgba(255,255,255,.56);color:var(--v-text);box-shadow:0 12px 30px rgba(26,45,70,.08)}.main{padding:28px 32px 90px;max-width:1720px;width:100%;margin:0 auto}.top{display:flex;justify-content:space-between;gap:18px;align-items:center;margin-bottom:24px}.crumb{display:flex;flex-direction:column;gap:4px}.crumb b{font-size:20px}.crumb span{color:var(--v-muted);font-size:13px}.top-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}.btn{border:0;border-radius:17px;min-height:46px;padding:13px 18px;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:950;background:linear-gradient(135deg,var(--v-green),var(--v-blue));color:white;cursor:pointer;box-shadow:0 16px 34px rgba(73,121,127,.18)}.btn.secondary{background:rgba(255,255,255,.60);color:var(--v-text);border:1px solid rgba(255,255,255,.58);box-shadow:none}.btn.ghost{background:transparent;color:var(--v-muted);border:1px solid rgba(22,32,51,.12);box-shadow:none}.hero{position:relative;overflow:hidden;border-radius:38px;padding:34px;border:1px solid rgba(255,255,255,.56);background:linear-gradient(135deg,rgba(255,255,255,.68),rgba(255,255,255,.32)),radial-gradient(circle at 78% 18%,rgba(255,214,117,.32),transparent 28%),radial-gradient(circle at 10% 90%,rgba(95,141,90,.23),transparent 35%);box-shadow:var(--v-shadow);min-height:286px}.hero:before{content:"";position:absolute;left:0;right:0;bottom:0;height:48%;background:linear-gradient(180deg,transparent,rgba(95,141,90,.18)),repeating-linear-gradient(170deg,rgba(75,129,72,.18) 0 2px,transparent 2px 28px);clip-path:polygon(0 58%,15% 45%,33% 60%,51% 38%,70% 55%,86% 44%,100% 58%,100% 100%,0 100%)}.hero:after{content:"🏠";position:absolute;right:42px;bottom:38px;font-size:104px;opacity:.18;filter:blur(.2px)}.hero-content{position:relative;z-index:1;max-width:900px}.badge-row{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0}.badge{border:1px solid rgba(22,32,51,.10);background:rgba(255,255,255,.58);border-radius:999px;padding:9px 12px;color:rgba(22,32,51,.72);font-weight:850;font-size:13px}.badge.ok{color:#2e6840;background:rgba(119,184,112,.18);border-color:rgba(56,126,64,.16)}.badge.warn{color:#8a641c;background:rgba(231,189,104,.22);border-color:rgba(138,100,28,.18)}.hero h2{font-size:48px;letter-spacing:-1.8px;line-height:1.02;margin:0}.hero p{font-size:16px;line-height:1.7;color:var(--v-muted);max-width:780px}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;margin:22px 0}.stat{border:1px solid rgba(255,255,255,.56);background:linear-gradient(180deg,rgba(255,255,255,.66),rgba(255,255,255,.36));border-radius:26px;padding:22px;box-shadow:0 18px 55px rgba(26,45,70,.10)}.stat span{font-size:12px;font-weight:950;letter-spacing:.8px;text-transform:uppercase;color:var(--v-soft)}.stat b{display:block;font-size:29px;margin:8px 0 4px}.stat small{color:var(--v-muted);line-height:1.5}.section{border:1px solid rgba(255,255,255,.56);background:linear-gradient(180deg,rgba(255,255,255,.66),rgba(255,255,255,.36));border-radius:32px;padding:24px;margin:22px 0;box-shadow:0 18px 60px rgba(26,45,70,.09)}.section-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:18px}.section h3{margin:0;font-size:24px}.muted{color:var(--v-muted);line-height:1.62}.plugin-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}.plugin{position:relative;min-height:218px;display:flex;flex-direction:column;gap:10px;border:1px solid rgba(22,32,51,.10);background:linear-gradient(180deg,rgba(255,255,255,.62),rgba(255,255,255,.32));border-radius:26px;padding:19px;transition:.18s ease;overflow:hidden}.plugin:hover{transform:translateY(-4px);box-shadow:0 22px 65px rgba(26,45,70,.14);border-color:rgba(95,141,90,.24)}.plugin:after{content:"";position:absolute;right:-32px;top:-32px;width:110px;height:110px;border-radius:50%;background:radial-gradient(circle,rgba(109,157,247,.16),transparent 70%)}.plug-icon{width:54px;height:54px;border-radius:19px;display:grid;place-items:center;background:linear-gradient(135deg,rgba(95,141,90,.18),rgba(231,189,104,.23));font-size:27px}.plugin b{font-size:17px}.plugin p{margin:0;color:var(--v-muted);line-height:1.55;font-size:13.5px;flex:1}.plug-foot{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.mini{border:1px solid rgba(22,32,51,.10);background:rgba(255,255,255,.48);border-radius:999px;padding:7px 10px;color:rgba(22,32,51,.65);font-weight:850;font-size:12px}.dot{width:10px;height:10px;border-radius:99px;background:var(--v-leaf);box-shadow:0 0 0 4px rgba(126,183,123,.16)}.dot.off{background:#b58a4c}.workspace{display:grid;grid-template-columns:minmax(0,1.18fr) minmax(370px,.82fr);gap:22px;align-items:start}.form-card,.preview-card{border:1px solid rgba(255,255,255,.56);background:linear-gradient(180deg,rgba(255,255,255,.68),rgba(255,255,255,.38));border-radius:32px;padding:24px;box-shadow:0 18px 60px rgba(26,45,70,.09)}.preview-card{position:sticky;top:20px}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}.prw-field{display:flex;flex-direction:column;gap:8px}.prw-field.wide{grid-column:1/-1}.prw-field span{font-weight:900;color:rgba(22,32,51,.78);font-size:13px}.prw-field small{font-size:12px;color:var(--v-muted);line-height:1.45}.prw-field input,.prw-field textarea,.prw-field select{width:100%;border:1px solid rgba(22,32,51,.12);background:rgba(255,255,255,.66);border-radius:18px;padding:14px 14px;color:var(--v-text);outline:none}.prw-field textarea{min-height:170px;line-height:1.6}.prw-field input:focus,.prw-field textarea:focus,.prw-field select:focus{border-color:rgba(109,157,247,.50);box-shadow:0 0 0 4px rgba(109,157,247,.12)}.prw-switch{display:grid;grid-template-columns:56px 1fr;gap:12px;align-items:center;border:1px solid rgba(22,32,51,.10);background:rgba(255,255,255,.48);padding:13px;border-radius:20px}.prw-switch input{display:none}.prw-switch span{width:52px;height:30px;border-radius:999px;background:rgba(22,32,51,.16);position:relative}.prw-switch span:after{content:"";position:absolute;width:24px;height:24px;border-radius:50%;left:3px;top:3px;background:white;box-shadow:0 4px 10px rgba(0,0,0,.18);transition:.17s}.prw-switch input:checked+span{background:linear-gradient(135deg,var(--v-green),var(--v-blue))}.prw-switch input:checked+span:after{left:25px}.prw-switch b{font-size:14px}.prw-switch small{grid-column:2;color:var(--v-muted);font-size:12px}.discord-preview{background:#313338;border-radius:20px;padding:18px;color:#dbdee1;box-shadow:0 18px 60px rgba(0,0,0,.16)}.discord-label{color:#949ba4;font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px}.discord-content{margin-bottom:10px;line-height:1.45;white-space:pre-wrap}.discord-embed{background:#2b2d31;border-left:5px solid #7dbd77;border-radius:8px;padding:14px;max-width:680px}.discord-row{display:flex;gap:16px}.discord-main{min-width:0;flex:1}.discord-author{font-size:13px;font-weight:800;color:#fff;margin-bottom:7px}.discord-title{font-weight:900;color:#9fc5ff;margin-bottom:8px}.discord-desc{font-size:13.5px;line-height:1.55;color:#dbdee1;white-space:normal}.discord-desc.muted{color:#949ba4}.discord-footer{font-size:12px;color:#b5bac1;margin-top:12px}.discord-thumb{width:82px;height:82px;border-radius:12px;object-fit:cover}.discord-image{display:block;width:100%;max-height:280px;object-fit:cover;border-radius:12px;margin-top:14px}.discord-image.empty{border:1px dashed rgba(255,255,255,.18);min-height:88px;display:grid;place-items:center;color:#949ba4;text-align:center;padding:14px}.discord-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}.discord-fields div{background:rgba(255,255,255,.035);border-radius:8px;padding:8px}.discord-fields b,.discord-fields span{display:block;font-size:12px}.placeholder-panel{border:1px solid rgba(22,32,51,.10);background:rgba(255,255,255,.48);border-radius:24px;padding:16px;margin-top:16px}.panel-title b,.panel-title span{display:block}.panel-title span{font-size:12px;color:var(--v-muted);line-height:1.5;margin-top:4px}.ph-group{margin-top:13px}.ph-group h4{margin:0 0 8px;font-size:12px;color:var(--v-soft);text-transform:uppercase;letter-spacing:.7px}.ph-group div{display:flex;gap:7px;flex-wrap:wrap}.ph-chip{border:1px solid rgba(22,32,51,.10);background:rgba(255,255,255,.58);border-radius:999px;padding:7px 10px;color:rgba(22,32,51,.72);font-weight:850;font-size:12px;cursor:pointer}.warn-box{margin-top:13px;border:1px solid rgba(181,138,76,.24);background:rgba(231,189,104,.18);color:#6b4c16;border-radius:16px;padding:11px;font-size:12px;line-height:1.45}.alert{border:1px solid rgba(95,141,90,.22);background:rgba(126,183,123,.18);color:#2e6840;border-radius:18px;padding:13px 14px;margin:14px 0;font-weight:850}.alert.danger{border-color:rgba(200,82,82,.24);background:rgba(228,94,94,.14);color:#8a2b2b}.action-bar{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}.embed-list{display:grid;grid-template-columns:300px minmax(0,1fr);gap:18px}.template-list{display:flex;flex-direction:column;gap:8px;max-height:720px;overflow:auto}.template-list a{border:1px solid rgba(22,32,51,.10);background:rgba(255,255,255,.48);border-radius:17px;padding:12px;font-weight:850}.template-list a.active{background:linear-gradient(135deg,rgba(95,141,90,.18),rgba(109,157,247,.14));border-color:rgba(95,141,90,.22)}.toast{position:fixed;right:18px;bottom:18px;background:rgba(7,17,31,.94);color:white;border-radius:999px;padding:12px 15px;font-weight:900;opacity:0;transform:translateY(10px);transition:.18s;z-index:99}.toast.show{opacity:1;transform:translateY(0)}.mobile-toggle{display:none;position:fixed;left:14px;bottom:14px;z-index:80;border:0;border-radius:999px;background:var(--v-deeper);color:white;padding:12px 15px;font-weight:950}.helper-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.helper-strip div{border:1px solid rgba(22,32,51,.10);background:rgba(255,255,255,.42);border-radius:20px;padding:15px}.helper-strip b{display:block;margin-bottom:5px}.helper-strip span{font-size:12px;line-height:1.5;color:var(--v-muted)}@media(max-width:1280px){.grid,.plugin-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.workspace,.embed-list{grid-template-columns:1fr}.preview-card{position:relative;top:auto}.helper-strip{grid-template-columns:1fr}}@media(max-width:860px){.app{grid-template-columns:1fr}.side{position:fixed;left:0;top:0;bottom:0;width:min(86vw,320px);transform:translateX(-110%);transition:.2s;z-index:70}.nav-open .side{transform:translateX(0)}.mobile-toggle{display:block}.main{padding:18px 14px 80px}.top,.section-head{flex-direction:column;align-items:stretch}.hero{padding:24px;border-radius:28px}.hero h2{font-size:34px}.grid,.plugin-grid,.form-grid{grid-template-columns:1fr}.form-card,.preview-card,.section{border-radius:24px;padding:18px}.discord-row{flex-direction:column}.discord-thumb{width:72px;height:72px}.discord-fields{grid-template-columns:1fr}}
+  </style></head><body><div class="village-bg"></div><div class="floating-grain"></div><button class="mobile-toggle" type="button" onclick="document.body.classList.toggle('nav-open')">☰ Menu</button><div class="app"><aside class="side"><div class="brand"><div class="brand-logo">🌾</div><div><h1>Pak RW</h1><p>DESA TULUS<br>Balai Warga Digital</p></div></div><nav class="nav">${nav.map(([key, icon, label, href]) => `<a class="${active === key ? "active" : ""}" href="${href}"><span>${icon}</span>${label}</a>`).join("")}</nav><div class="warn-box" style="margin-top:16px">Prefix publik: <b>${escapeHtml(cfg.prefix || "rw")}</b><br>Branding publik: <b>Pak RW / DESA TULUS</b></div></aside><main class="main"><div class="top"><div class="crumb"><b>${escapeHtml(title)}</b><span>v${PAKRW_DASHBOARD_RELEASE} • ${escapeHtml(PAKRW_DASHBOARD_RELEASE_NAME)} • ${escapeHtml(cfg.serverName || "DESA TULUS")}</span></div><div class="top-actions"><a class="btn secondary" href="/dashboard/manage/embed">🎨 Embed</a><a class="btn secondary" href="/api/export-config">⬇️ Export Config</a><a class="btn ghost" href="/logout">Keluar</a></div></div>${content}</main></div><div id="toast" class="toast">Copied</div><script>
+    document.addEventListener('click', async (e) => { const chip = e.target.closest('[data-copy]'); if (!chip) return; const text = chip.getAttribute('data-copy') || chip.textContent || ''; try { await navigator.clipboard.writeText(text); } catch {} const toast = document.getElementById('toast'); if (toast) { toast.textContent = 'Disalin: ' + text; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 1300); } });
+    document.addEventListener('input', (e) => { if (e.target.closest('form')) document.body.classList.add('has-unsaved'); });
+  </script></body></html>`;
+}
+
+function renderPakRwPremiumDashboard(req, msg = "") {
+  const cfg = readConfigFile();
+  const guild = getDashboardGuild ? getDashboardGuild() : client.guilds.cache.first();
+  const features = pakRwFeatureCatalog(cfg);
+  const activeCount = features.filter((f) => f.enabled !== false).length;
+  const topCfg = cfg.topActive || {};
+  const papanCfg = cfg.papanAktif || cfg.leaderboardAktif || {};
+  const uptimeSec = Math.floor(process.uptime());
+  const up = `${Math.floor(uptimeSec / 3600)}j ${Math.floor((uptimeSec % 3600) / 60)}m`;
+  const badge = (text, cls = "") => `<span class="badge ${cls}">${escapeHtml(text)}</span>`;
+  const cards = features.map((f) => `<a class="plugin" href="/dashboard/manage/${escapeHtml(f.slug)}"><div class="plug-icon">${f.icon}</div><b>${escapeHtml(f.name)}</b><p>${escapeHtml(f.desc)}</p><div class="plug-foot"><span class="dot ${f.enabled === false ? "off" : ""}"></span><span class="mini">${escapeHtml(f.status || (f.enabled ? "Aktif" : "Mati"))}</span><span class="mini">Manage</span></div></a>`).join("");
+  return pakRwPremiumShell(`
+    ${msg ? `<div class="alert">${escapeHtml(msg)}</div>` : ""}
+    <section class="hero"><div class="hero-content"><div class="badge-row">${badge(client?.user?.tag ? "Online" : "Offline", client?.user?.tag ? "ok" : "warn")}${badge(`Server: ${guild?.name || cfg.serverName || "DESA TULUS"}`)}${badge(`Prefix: ${cfg.prefix || "rw"}`)}${badge(isMongoActive() ? "MongoDB Connected" : "Local JSON Fallback", isMongoActive() ? "ok" : "warn")}${badge("Dashboard Mode")}</div><h2>Pak RW Control Center</h2><p>Balai Warga Digital DESA TULUS. Dashboard ini dibangun ulang supaya terasa seperti panel bot Discord besar: cinematic village background, plugin cards, tombol Manage, form setting, preview Discord, placeholder klik-copy, logs, backup, dan alur edit yang jelas.</p><div class="top-actions"><a class="btn" href="/dashboard/manage/welcome">Manage Welcome</a><a class="btn secondary" href="/dashboard/manage/ai">Manage AI Pak RW</a><a class="btn secondary" href="/dashboard/manage/embed">Manage Embed</a><a class="btn secondary" href="/dashboard/manage/level">Manage Level</a><a class="btn secondary" href="/dashboard/manage/top-aktif">Top Aktif</a><a class="btn secondary" href="/dashboard/manage/papan-aktif">Papan Aktif</a><a class="btn ghost" href="/dashboard/manage/logs-health">Logs</a></div></div></section>
+    <section class="grid">
+      <div class="stat"><span>Status Bot</span><b>${client?.user?.tag ? "Online" : "Offline"}</b><small>${escapeHtml(client?.user?.tag || "Bot belum login")}</small></div>
+      <div class="stat"><span>Total Warga</span><b>${escapeHtml(guild?.memberCount || 0)}</b><small>${escapeHtml(guild?.name || cfg.serverName || "DESA TULUS")}</small></div>
+      <div class="stat"><span>Fitur Aktif</span><b>${activeCount}/${features.length}</b><small>Plugin & Manage Center</small></div>
+      <div class="stat"><span>AI Status</span><b>Hemat</b><small>${escapeHtml(cfg.ai?.openRouterModel || "openai/gpt-4o-mini")}</small></div>
+      <div class="stat"><span>MongoDB</span><b>${isMongoActive() ? "Connected" : "Fallback"}</b><small>${isMongoActive() ? "Database mode MongoDB" : "Cek MONGODB_URI/DNS"}</small></div>
+      <div class="stat"><span>Uptime</span><b>${escapeHtml(up)}</b><small>Runtime container aktif</small></div>
+      <div class="stat"><span>Top Aktif</span><b>${topCfg.dailyAutoPost ? "00.00" : "Manual"}</b><small>Auto post WIB</small></div>
+      <div class="stat"><span>Papan Lifetime</span><b>${papanCfg.enabled !== false ? "Aktif" : "Mati"}</b><small>${escapeHtml(papanCfg.channelId || topCfg.leaderboardActiveChannelId || "Butuh channel")}</small></div>
+      <div class="stat"><span>MOTM Threshold</span><b>${escapeHtml(topCfg.pointsThreshold || cfg.level?.cycleResetAtPoints || 100000)}</b><small>Poin siklus, lifetime lanjut</small></div>
+      <div class="stat"><span>Prefix</span><b>${escapeHtml(cfg.prefix || "rw")}</b><small>Semua command publik Pak RW</small></div>
+    </section>
+    <section class="section"><div class="section-head"><div><h3>Plugin & Manage Center</h3><div class="muted">Semua fitur tampil sebagai card. Klik Manage untuk masuk ke halaman khusus fitur: kiri form setting, kanan preview Discord, bawah Save/Test/Reset.</div></div><a class="btn secondary" href="/dashboard/manage/embed">Buka Embed Manager</a></div><div class="plugin-grid">${cards}</div></section>
+    <section class="section"><div class="section-head"><div><h3>Alur Dashboard Baru</h3><div class="muted">Pilih fitur → klik Manage → edit channel/role/embed → preview → simpan → test kirim. Dashboard tidak mengubah data level/poin user.</div></div></div><div class="helper-strip"><div><b>1. Manage Page</b><span>Setiap fitur punya route /dashboard/manage/nama-fitur supaya tidak terasa scroll acak.</span></div><div><b>2. Preview Discord</b><span>Content, author, title, description, fields, image, thumbnail, footer, dan mention dipreview dalam bentuk Discord.</span></div><div><b>3. Aman Deploy</b><span>.env, node_modules, data, logs, backups tidak ikut ZIP publik. DisCloud tetap RAM 100 MB.</span></div></div></section>
+  `, "dashboard", "Pak RW Control Center");
+}
+
+function renderPakRwManagePage(req, slug, opts = {}) {
+  const cfg = readConfigFile();
+  const guild = getDashboardGuild ? getDashboardGuild() : client.guilds.cache.first();
+  const meta = pakRwFeatureCatalog(cfg).find((f) => f.slug === slug) || pakRwFeatureCatalog(cfg).find((f) => f.slug === "welcome");
+  if (!meta) return pakRwPremiumShell(`<div class="alert danger">Fitur tidak ditemukan.</div>`, "dashboard", "Fitur tidak ditemukan");
+  if (slug === "embed") return renderPakRwGlobalEmbedManager(req, opts);
+  const embedPack = pakRwEmbedForFeature(cfg, meta);
+  const embed = embedPack.data || {};
+  const channelVal = meta.channelKey ? pakRwGetByPath(cfg, meta.channelKey, "") : "";
+  const roleVal = meta.roleKey ? pakRwGetByPath(cfg, meta.roleKey, "") : "";
+  const warning = (meta.channelKey && !channelVal) || (meta.roleKey && !roleVal) ? `<div class="alert danger">⚠️ Ada channel/role penting yang belum diisi. Preview tetap bisa tampil, tapi test kirim mungkin gagal.</div>` : "";
+  const featureSpecific = renderPakRwFeatureSpecificFields(slug, cfg, guild);
+  return pakRwPremiumShell(`
+    ${opts.saved ? `<div class="alert">✅ Setting ${escapeHtml(meta.name)} berhasil disimpan.</div>` : ""}
+    ${opts.error ? `<div class="alert danger">❌ ${escapeHtml(opts.error)}</div>` : ""}
+    <section class="hero" style="min-height:220px"><div class="hero-content"><div class="badge-row"><span class="badge">${escapeHtml(meta.group)}</span><span class="badge ${meta.enabled === false ? "warn" : "ok"}">${escapeHtml(meta.status || "Aktif")}</span><span class="badge">Route: /dashboard/manage/${escapeHtml(slug)}</span></div><h2>${meta.icon} ${escapeHtml(meta.name)}</h2><p>${escapeHtml(meta.desc)} Alur baru: edit setting, cek warning, preview sama seperti Discord, simpan, lalu test kirim dari fitur terkait.</p></div></section>
+    ${warning}
+    <div class="workspace"><form class="form-card" method="post" action="/dashboard/manage/${escapeHtml(slug)}"><h3>Setting ${escapeHtml(meta.name)}</h3><p class="muted">Config menyimpan ID asli. Dashboard menampilkan pilihan channel/role kalau bot sudah membaca server.</p><div class="form-grid">
+      ${pakRwSwitch("enabled", "Aktifkan fitur", meta.enabled !== false, "Toggle ini hanya mengubah setting fitur, tidak menghapus data lama.")}
+      ${meta.channelKey ? pakRwChannelSelect("channelId", "Channel Utama", channelVal, guild, `Sekarang: ${pakRwReadableChannel(guild, channelVal)}`) : ""}
+      ${meta.roleKey ? pakRwRoleSelect("roleId", "Role Utama", roleVal, guild, `Sekarang: ${pakRwReadableRole(guild, roleVal)}`) : ""}
+      ${featureSpecific}
+      ${pakRwTextField("embedColor", "Embed Color", embed.color || cfg.embedColor || "#7DBD77", "Contoh: #7DBD77", "text")}
+      ${pakRwTextField("content", "Content / teks atas embed", embed.content || "", "Bisa pakai placeholder dan mention aman.")}
+      ${pakRwTextField("authorName", "Author Name", embed.authorName || "", "Contoh: DESA TULUS • Warga Baru")}
+      ${pakRwTextField("authorIcon", "Author Icon URL", embed.authorIcon || embed.footerIcon || "", "Opsional URL icon")}
+      ${pakRwTextField("title", "Title", embed.title || cfg.welcome?.title || "", "Judul embed")}
+      ${pakRwTextarea("description", "Description", embed.description || cfg.welcome?.message || "", "Isi utama embed. Default Bahasa Indonesia jelas, boleh sedikit nuansa Sunda.", 9)}
+      ${pakRwTextField("thumbnail", "Thumbnail URL", embed.thumbnail || "", "Opsional. Untuk user avatar isi avatar/custom sesuai logic fitur.")}
+      ${pakRwTextField("image", "Image URL", embed.image || cfg.welcome?.imageUrl || "", "Untuk welcome/banner/leaderboard jangan dibiarkan kosong kalau ingin visual.")}
+      ${pakRwTextField("footer", "Footer Text", embed.footer || "DESA TULUS • Balai Warga Digital", "Footer embed")}
+    </div><div class="action-bar"><button class="btn" type="submit">💾 Simpan</button><button class="btn secondary" type="submit" name="testMode" value="1">📨 Simpan & Tandai Test</button><a class="btn ghost" href="/dashboard/manage/${escapeHtml(slug)}?reset=1">Reset ke Template</a><a class="btn ghost" href="/dashboard">Kembali</a></div></form><aside class="preview-card">${pakRwDiscordPreview({ ...embed, color: embed.color || cfg.embedColor, content: embed.content || req.body?.content || "", title: embed.title || cfg.welcome?.title, description: embed.description || cfg.welcome?.message, image: embed.image || cfg.welcome?.imageUrl }, cfg)}${pakRwPlaceholderPanel()}</aside></div>
+  `, slug, `Manage ${meta.name}`);
+}
+
+function renderPakRwFeatureSpecificFields(slug, cfg, guild) {
+  if (slug === "ai") {
+    return `${pakRwTextField("openRouterModel", "Model OpenRouter", cfg.ai?.openRouterModel || "openai/gpt-4o-mini", "Model hemat utama.")}${pakRwTextField("aiCooldownMs", "Cooldown per user (ms)", cfg.ai?.cooldownMs || 12000, "Aman biar tidak spam limit.", "number")}${pakRwTextField("aiGlobalCooldownMs", "Global cooldown (ms)", cfg.ai?.globalCooldownMs || 2500, "Menahan request OpenRouter global.", "number")}${pakRwTextField("aiMaxTokens", "Max output / message length", cfg.ai?.maxMessageLength || 1100, "Jawaban tetap pintar tapi tidak boros.", "number")}${pakRwSwitch("localCacheEnabled", "Local cache jawaban", cfg.ai?.localCacheEnabled !== false, "Pertanyaan mirip dijawab dari cache tanpa OpenRouter.")}`;
+  }
+  if (slug === "welcome") {
+    return `${pakRwRoleSelect("memberRoleId", "Role Member Tulus", cfg.welcome?.memberRoleId || cfg.memberTulusRoleId || "", guild, "Akan menjadi {memberTulusRole}")}${pakRwChannelSelect("rulesChannelId", "Rules Channel", cfg.rulesChannelId || "", guild, "Placeholder {rulesChannel}")}${pakRwChannelSelect("chatWargaChannelId", "Chat Warga Channel", cfg.chatWargaChannelId || "", guild, "Placeholder {chatWargaChannel}")}${pakRwChannelSelect("ticketChannelId", "Ticket Channel", cfg.ticketChannelId || "", guild, "Placeholder {ticketChannel}")}`;
+  }
+  if (slug === "top-aktif") {
+    return `${pakRwTextField("topLimit", "Limit Top", cfg.topActive?.topLimit || 10, "Jumlah warga yang tampil.", "number")}${pakRwTextField("dailyPostHourWIB", "Jam auto post WIB", cfg.topActive?.dailyPostHourWIB ?? 0, "0 = 00.00 WIB", "number")}${pakRwSwitch("dailyAutoPost", "Auto post harian", cfg.topActive?.dailyAutoPost !== false, "Judul bulan otomatis.")}${pakRwTextField("boardTitleTemplate", "Title Template", cfg.topActive?.boardTitleTemplate || "🏆 TOP AKTIF WARGA BULAN {month} {server}", "Bulan otomatis dari {month}.")}`;
+  }
+  if (slug === "papan-aktif") {
+    const papan = cfg.papanAktif || cfg.leaderboardAktif || {};
+    return `${pakRwChannelSelect("leaderboardChannelId", "Channel Leaderboard Lifetime", papan.channelId || cfg.topActive?.leaderboardActiveChannelId || "", guild, "Disarankan: 🏆│leaderboard-aktif")}${pakRwTextField("papanTitle", "Judul Papan Aktif", papan.title || "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU", "Tidak digabung dengan Top Aktif Bulanan.")}${pakRwTextField("papanTopLimit", "Top Limit Lifetime", papan.topLimit || 10, "Jumlah ranking lifetime.", "number")}${pakRwSwitch("papanAutoPost", "Auto post lifetime", papan.autoPost !== false, "Lifetime tidak reset.")}`;
+  }
+  if (slug === "motm") {
+    return `${pakRwRoleSelect("motmRoleId", "Role Member Of The Month", cfg.topActive?.memberOfTheMonthRoleId || cfg.level100RoleId || "", guild, "Bot role harus di atas role ini.")}${pakRwTextField("pointsThreshold", "Threshold Poin", cfg.topActive?.pointsThreshold || cfg.level?.cycleResetAtPoints || 100000, "Saat tercapai: role MOTM, cycle reset, lifetime tetap lanjut.", "number")}${pakRwSwitch("announceMemberOfTheMonth", "Umumkan MOTM", cfg.topActive?.announceMemberOfTheMonth !== false, "Kirim embed saat warga mencapai threshold.")}`;
+  }
+  if (slug === "donatur") {
+    return `${pakRwTextField("donaturRpPerDay", "Harga per hari", cfg.donaturRpPerDay || 10000, "Contoh 10000", "number")}${pakRwTextField("donaturDefaultDays", "Default hari", cfg.donaturDefaultDays || 10, "Durasi role default", "number")}${pakRwTextField("donaturMinimumAmount", "Minimum Donasi", cfg.donaturMinimumAmount || 100000, "Minimal donasi", "number")}`;
+  }
+  if (slug === "boost-poin") {
+    return `${pakRwTextField("eventName", "Nama Event", cfg.boostPoin?.eventName || "Ronda Aktif", "Nama event boost")}${pakRwTextField("multiplier", "Multiplier", cfg.boostPoin?.multiplier || "1.15", "Contoh 1.15", "number")}${pakRwTextField("duration", "Durasi", cfg.boostPoin?.duration || "2 jam", "Contoh 2 jam")}${pakRwSwitch("eventActive", "Event sedang aktif", cfg.boostPoin?.eventActive === true, "Hanya status dashboard/config.")}`;
+  }
+  return "";
+}
+
+function savePakRwManagePage(req, slug) {
+  const cfg = readConfigFile();
+  const meta = pakRwFeatureCatalog(cfg).find((f) => f.slug === slug);
+  if (!meta) throw new Error("Fitur tidak ditemukan.");
+  if (meta.channelKey && req.body.channelId !== undefined) pakRwSetByPath(cfg, meta.channelKey, pakRwSafeId(req.body.channelId));
+  if (meta.roleKey && req.body.roleId !== undefined) pakRwSetByPath(cfg, meta.roleKey, pakRwSafeId(req.body.roleId));
+  const enabled = req.body.enabled === "on";
+  if (slug === "welcome") {
+    cfg.welcome = cfg.welcome || {};
+    cfg.welcome.enabled = enabled;
+    cfg.welcome.content = String(req.body.content || cfg.welcome.content || "");
+    cfg.welcome.title = String(req.body.title || cfg.welcome.title || "");
+    cfg.welcome.message = String(req.body.description || cfg.welcome.message || "");
+    cfg.welcome.imageUrl = String(req.body.image || cfg.welcome.imageUrl || "");
+    cfg.welcome.memberRoleId = pakRwSafeId(req.body.memberRoleId || cfg.welcome.memberRoleId || "");
+    cfg.rulesChannelId = pakRwSafeId(req.body.rulesChannelId || cfg.rulesChannelId || "");
+    cfg.chatWargaChannelId = pakRwSafeId(req.body.chatWargaChannelId || cfg.chatWargaChannelId || "");
+    cfg.ticketChannelId = pakRwSafeId(req.body.ticketChannelId || cfg.ticketChannelId || "");
+  } else if (slug === "ai") {
+    cfg.ai = cfg.ai || {};
+    cfg.ai.openRouterModel = String(req.body.openRouterModel || cfg.ai.openRouterModel || "openai/gpt-4o-mini");
+    cfg.ai.cooldownMs = Number(req.body.aiCooldownMs || cfg.ai.cooldownMs || 12000);
+    cfg.ai.globalCooldownMs = Number(req.body.aiGlobalCooldownMs || cfg.ai.globalCooldownMs || 2500);
+    cfg.ai.maxMessageLength = Number(req.body.aiMaxTokens || cfg.ai.maxMessageLength || 1100);
+    cfg.ai.localCacheEnabled = req.body.localCacheEnabled === "on";
+  } else if (slug === "top-aktif") {
+    cfg.topActive = cfg.topActive || {};
+    cfg.topActive.enabled = enabled;
+    cfg.topActive.topLimit = Number(req.body.topLimit || cfg.topActive.topLimit || 10);
+    cfg.topActive.dailyPostHourWIB = Number(req.body.dailyPostHourWIB ?? cfg.topActive.dailyPostHourWIB ?? 0);
+    cfg.topActive.dailyAutoPost = req.body.dailyAutoPost === "on";
+    cfg.topActive.boardTitleTemplate = String(req.body.boardTitleTemplate || cfg.topActive.boardTitleTemplate || "🏆 TOP AKTIF WARGA BULAN {month} {server}");
+  } else if (slug === "papan-aktif") {
+    cfg.papanAktif = cfg.papanAktif || {};
+    cfg.leaderboardAktif = cfg.leaderboardAktif || {};
+    const channelId = pakRwSafeId(req.body.leaderboardChannelId || req.body.channelId || cfg.papanAktif.channelId || "");
+    cfg.papanAktif.enabled = enabled;
+    cfg.papanAktif.channelId = channelId;
+    cfg.papanAktif.title = String(req.body.papanTitle || cfg.papanAktif.title || "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU");
+    cfg.papanAktif.topLimit = Number(req.body.papanTopLimit || cfg.papanAktif.topLimit || 10);
+    cfg.papanAktif.autoPost = req.body.papanAutoPost === "on";
+    cfg.papanAktif.autoPostHourWIB = Number(cfg.papanAktif.autoPostHourWIB ?? 0);
+    cfg.leaderboardAktif = { ...cfg.papanAktif };
+    cfg.topActive = cfg.topActive || {};
+    cfg.topActive.leaderboardActiveChannelId = channelId;
+    cfg.topActive.useOneChannel = false;
+  } else if (slug === "motm") {
+    cfg.topActive = cfg.topActive || {};
+    cfg.level = cfg.level || {};
+    cfg.topActive.announceMemberOfTheMonth = req.body.announceMemberOfTheMonth === "on";
+    cfg.topActive.pointsThreshold = Number(req.body.pointsThreshold || cfg.topActive.pointsThreshold || 100000);
+    cfg.topActive.memberOfTheMonthRoleId = pakRwSafeId(req.body.motmRoleId || cfg.topActive.memberOfTheMonthRoleId || "");
+    cfg.level.cycleResetEnabled = true;
+    cfg.level.cycleResetAtPoints = cfg.topActive.pointsThreshold;
+  } else if (slug === "donatur") {
+    cfg.donatur = cfg.donatur || {};
+    cfg.donatur.enabled = enabled;
+    cfg.donaturRpPerDay = Number(req.body.donaturRpPerDay || cfg.donaturRpPerDay || 10000);
+    cfg.donaturDefaultDays = Number(req.body.donaturDefaultDays || cfg.donaturDefaultDays || 10);
+    cfg.donaturMinimumAmount = Number(req.body.donaturMinimumAmount || cfg.donaturMinimumAmount || 100000);
+  } else if (slug === "boost-poin") {
+    cfg.boostPoin = cfg.boostPoin || {};
+    cfg.boostPoin.enabled = enabled;
+    cfg.boostPoin.eventName = String(req.body.eventName || cfg.boostPoin.eventName || "Ronda Aktif");
+    cfg.boostPoin.multiplier = Number(req.body.multiplier || cfg.boostPoin.multiplier || 1.15);
+    cfg.boostPoin.duration = String(req.body.duration || cfg.boostPoin.duration || "2 jam");
+    cfg.boostPoin.eventActive = req.body.eventActive === "on";
+  } else {
+    if (slug === "curhat") cfg.curhat = { ...(cfg.curhat || {}), enabled };
+    if (slug === "curhat-anonim") cfg.anonymousCurhat = { ...(cfg.anonymousCurhat || {}), enabled };
+    if (slug === "saran") cfg.suggestion = { ...(cfg.suggestion || {}), enabled };
+    if (slug === "level") cfg.level = { ...(cfg.level || {}), enabled };
+    if (slug === "mabar") cfg.mabar = { ...(cfg.mabar || {}), enabled };
+    if (slug === "juragan") cfg.juragan = { ...(cfg.juragan || {}), enabled };
+  }
+  const pack = pakRwEmbedForFeature(cfg, meta);
+  cfg.embeds = cfg.embeds || {};
+  cfg.embeds[pack.key] = {
+    ...(cfg.embeds[pack.key] || pack.data || {}),
+    color: String(req.body.embedColor || pack.data?.color || cfg.embedColor || "#7DBD77"),
+    content: String(req.body.content ?? pack.data?.content ?? ""),
+    authorName: String(req.body.authorName ?? pack.data?.authorName ?? ""),
+    authorIcon: String(req.body.authorIcon ?? pack.data?.authorIcon ?? ""),
+    title: String(req.body.title ?? pack.data?.title ?? ""),
+    description: String(req.body.description ?? pack.data?.description ?? ""),
+    thumbnail: String(req.body.thumbnail ?? pack.data?.thumbnail ?? ""),
+    image: String(req.body.image ?? pack.data?.image ?? ""),
+    footer: String(req.body.footer ?? pack.data?.footer ?? "DESA TULUS • Balai Warga Digital"),
+    dashboardEditable: true,
+    previewMustMatchDiscord: true
+  };
+  cfg.dashboard = cfg.dashboard || {};
+  cfg.dashboard.releaseVersion = PAKRW_DASHBOARD_RELEASE;
+  cfg.dashboard.releaseName = PAKRW_DASHBOARD_RELEASE_NAME;
+  cfg.dashboard.homeMode = "full_premium_dashboard_rebuild";
+  cfg.dashboard.theme = "cinematic_desa_tulus_railway_inspired";
+  cfg.dashboard.manageRoutesEnabled = true;
+  writeConfigFile(cfg);
+}
+
+function renderPakRwGlobalEmbedManager(req, opts = {}) {
+  const cfg = readConfigFile();
+  const embeds = cfg.embeds || {};
+  const keys = Object.keys(embeds).sort();
+  const selectedKey = String(req.query.template || req.body?.templateKey || keys[0] || "welcome");
+  const selected = embeds[selectedKey] || pakRwEmbedForFeature(cfg, { slug: "welcome", embedKey: "welcome", name: "Welcome" }).data;
+  const list = keys.map((k) => `<a class="${k === selectedKey ? "active" : ""}" href="/dashboard/manage/embed?template=${encodeURIComponent(k)}"><b>${escapeHtml(k)}</b><br><span class="muted">${escapeHtml(embeds[k]?.dashboardGroup || "Embed Pak RW")}</span></a>`).join("");
+  return pakRwPremiumShell(`
+    ${opts.saved ? `<div class="alert">✅ Template embed berhasil disimpan.</div>` : ""}
+    ${opts.error ? `<div class="alert danger">❌ ${escapeHtml(opts.error)}</div>` : ""}
+    <section class="hero" style="min-height:220px"><div class="hero-content"><div class="badge-row"><span class="badge ok">Global Embed Manager</span><span class="badge">${keys.length} template</span><span class="badge">Preview sama seperti Discord</span></div><h2>🎨 Embed Manager Global</h2><p>Edit semua embed yang tampil di Discord: Welcome, Curhat, Saran, Level Up, Cek Poin, Top Aktif, Papan Aktif, MOTM, Donatur, Juragan, Mabar, Boost Poin, command help, error permission, dan logs.</p></div></section>
+    <div class="embed-list"><aside class="template-list">${list || `<div class="muted">Belum ada template.</div>`}</aside><div class="workspace" style="grid-template-columns:minmax(0,1.05fr) minmax(360px,.95fr)"><form class="form-card" method="post" action="/dashboard/manage/embed"><input type="hidden" name="templateKey" value="${escapeHtml(selectedKey)}"><h3>Template: ${escapeHtml(selectedKey)}</h3><div class="form-grid">${pakRwTextField("content", "Content", selected.content || "", "Teks di atas embed.")}${pakRwTextField("color", "Color", selected.color || cfg.embedColor || "#7DBD77", "Hex color")}${pakRwTextField("authorName", "Author Name", selected.authorName || "", "Nama author")}${pakRwTextField("authorIcon", "Author Icon", selected.authorIcon || selected.footerIcon || "", "URL icon")}${pakRwTextField("title", "Title", selected.title || "", "Judul embed")}${pakRwTextField("titleUrl", "Title URL", selected.titleUrl || "", "Opsional")}${pakRwTextarea("description", "Description", selected.description || "", "Isi embed", 10)}${pakRwTextField("thumbnail", "Thumbnail URL", selected.thumbnail || "", "Opsional")}${pakRwTextField("image", "Image URL", selected.image || "", "Opsional")}${pakRwTextField("footer", "Footer Text", selected.footer || "", "Footer")}${pakRwTextField("footerIcon", "Footer Icon", selected.footerIcon || "", "URL icon footer")}${pakRwTextField("buttonLabel", "Button Label", selected.buttonLabel || "", "Opsional")}${pakRwTextField("buttonUrl", "Button URL / Channel", selected.buttonUrl || "", "Opsional")}${pakRwTextarea("fieldsJson", "Fields JSON", JSON.stringify(selected.fields || [], null, 2), "Array field embed. Contoh: [{\"name\":\"Info\",\"value\":\"Isi\",\"inline\":false}]", 7)}</div><div class="action-bar"><button class="btn" type="submit">💾 Save Template</button><button class="btn secondary" type="submit" name="duplicate" value="1">Duplicate</button><button class="btn secondary" type="button" data-copy='${escapeHtml(JSON.stringify(selected, null, 2))}'>Copy JSON</button><a class="btn ghost" href="/embed-sync?template=${encodeURIComponent(selectedKey)}">Advanced Sync</a></div></form><aside class="preview-card">${pakRwDiscordPreview(selected, cfg)}${pakRwPlaceholderPanel()}</aside></div></div>
+  `, "embed", "Embed Manager Global");
+}
+
+function savePakRwGlobalEmbedManager(req) {
+  const cfg = readConfigFile();
+  cfg.embeds = cfg.embeds || {};
+  const key = safeEmbedKey ? safeEmbedKey(req.body.templateKey || "custom") : String(req.body.templateKey || "custom").replace(/[^a-z0-9_-]/gi, "-");
+  let fields = [];
+  try { fields = JSON.parse(String(req.body.fieldsJson || "[]")); if (!Array.isArray(fields)) fields = []; } catch { fields = []; }
+  const base = cfg.embeds[key] || {};
+  cfg.embeds[key] = {
+    ...base,
+    color: String(req.body.color || base.color || cfg.embedColor || "#7DBD77"),
+    content: String(req.body.content || ""),
+    authorName: String(req.body.authorName || ""),
+    authorIcon: String(req.body.authorIcon || ""),
+    title: String(req.body.title || ""),
+    titleUrl: String(req.body.titleUrl || ""),
+    description: String(req.body.description || ""),
+    thumbnail: String(req.body.thumbnail || ""),
+    image: String(req.body.image || ""),
+    footer: String(req.body.footer || ""),
+    footerIcon: String(req.body.footerIcon || ""),
+    buttonLabel: String(req.body.buttonLabel || ""),
+    buttonUrl: String(req.body.buttonUrl || ""),
+    fields: fields.slice(0, 25),
+    dashboardEditable: true,
+    previewMustMatchDiscord: true,
+    lastDashboardEditAt: new Date().toISOString()
+  };
+  if (req.body.duplicate === "1") {
+    const copyKey = safeEmbedKey ? safeEmbedKey(`${key}-copy-${Date.now()}`) : `${key}-copy-${Date.now()}`;
+    cfg.embeds[copyKey] = { ...cfg.embeds[key], title: `${cfg.embeds[key].title || key} Copy`, lastDashboardEditAt: new Date().toISOString() };
+  }
+  writeConfigFile(cfg);
+}
+/* =================== END PAK RW FULL PREMIUM DASHBOARD REBUILD v10.10.61 =================== */
+
+
 app.get("/motm-banner.svg", (req, res) => {
   res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
   res.setHeader("Cache-Control", "no-store, max-age=0");
@@ -9959,7 +10414,26 @@ app.get("/logout", (req, res) => {
 });
 
 app.get("/", requireDashboardAuth, (req, res) => {
-  res.send(renderDashboard(req));
+  res.redirect("/dashboard");
+});
+
+app.get("/dashboard", requireDashboardAuth, (req, res) => {
+  res.send(renderPakRwPremiumDashboard(req));
+});
+
+app.get("/dashboard/manage/:feature", requireDashboardAuth, (req, res) => {
+  res.send(renderPakRwManagePage(req, req.params.feature, {}));
+});
+
+app.post("/dashboard/manage/:feature", requireDashboardAuth, (req, res) => {
+  try {
+    const slug = String(req.params.feature || "");
+    if (slug === "embed") savePakRwGlobalEmbedManager(req);
+    else savePakRwManagePage(req, slug);
+    res.send(renderPakRwManagePage(req, slug, { saved: true }));
+  } catch (err) {
+    res.status(500).send(renderPakRwManagePage(req, req.params.feature, { error: err.message || String(err) }));
+  }
 });
 
 app.get("/feature-flow", requireDashboardAuth, (req, res) => {
@@ -10314,7 +10788,7 @@ app.post("/embeds", requireDashboardAuth, (req, res) => {
     }
 
     cfg.embeds.dashboard = cfg.embeds.dashboard || {};
-    cfg.embeds.dashboard.brandTitle = "Pak RW v10.10.60";
+    cfg.embeds.dashboard.brandTitle = "Pak RW v10.10.61";
     cfg.embeds.dashboard.brandSubtitle = "Ultra Premium + Cari Mabar Embed";
     cfg.dashboard = cfg.dashboard || {};
     cfg.dashboard.releaseVersion = "10.10.32";
@@ -10348,7 +10822,7 @@ app.post("/embeds/send/:key", requireDashboardAuth, async (req, res) => {
 
     cfg.embeds[originalKey] = updatedEmbed;
     cfg.embeds.dashboard = cfg.embeds.dashboard || {};
-    cfg.embeds.dashboard.brandTitle = "Pak RW v10.10.60";
+    cfg.embeds.dashboard.brandTitle = "Pak RW v10.10.61";
     cfg.embeds.dashboard.brandSubtitle = "Ultra Premium + Cari Mabar Embed";
     cfg.dashboard = cfg.dashboard || {};
     cfg.dashboard.releaseVersion = "10.10.32";
@@ -10538,7 +11012,7 @@ app.post("/top-active", requireDashboardAuth, (req, res) => {
 
     cfg.topActive.enabled = req.body.enabled !== "off";
     cfg.topActive.channelId = req.body.channelId || cfg.levelChannelId || "";
-    cfg.topActive.leaderboardActiveChannelId = req.body.leaderboardActiveChannelId || cfg.topActive.leaderboardActiveChannelId || cfg.topActive.channelId || "";
+    cfg.topActive.leaderboardActiveChannelId = req.body.leaderboardActiveChannelId || cfg.topActive.leaderboardActiveChannelId || "";
     cfg.topActive.memberOfTheMonthRoleId = req.body.memberOfTheMonthRoleId || "";
     cfg.topActive.pointsThreshold = Number(req.body.pointsThreshold || 100000);
     cfg.topActive.useOneChannel = req.body.useOneChannel !== "off";
@@ -11344,7 +11818,7 @@ app.get("/api/export-config", requireDashboardAuth, (req, res) => {
 
 
 app.get("/studio", requireDashboardAuth, (req, res) => {
-  res.send(renderDashboard(req));
+  res.redirect("/dashboard");
 });
 
 app.get("/source", requireDashboardAuth, (req, res) => {
@@ -12864,7 +13338,7 @@ function getTopActiveConfig() {
     pointsThreshold: Number(t.pointsThreshold || 100000),
     useOneChannel: t.useOneChannel !== false,
     topLimit: Math.max(3, Math.min(25, Number(t.topLimit || 10))),
-    leaderboardActiveChannelId: t.leaderboardActiveChannelId || t.papanAktifChannelId || t.channelId || config.levelChannelId || "",
+    leaderboardActiveChannelId: t.leaderboardActiveChannelId || t.papanAktifChannelId || "",
     leaderboardActiveTopLimit: Math.max(3, Math.min(25, Number(t.leaderboardActiveTopLimit || t.topLimit || 10))),
     leaderboardActiveTitleTemplate: t.leaderboardActiveTitleTemplate || "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU",
     leaderboardActiveSubtitle: t.leaderboardActiveSubtitle || "Papan ini mencatat total poin warga dari awal bergabung sampai seterusnya. Data ini tidak di-reset meskipun siklus level kembali dari awal setelah 100.000 poin.",
@@ -13153,7 +13627,7 @@ function buildLeaderboardActiveEmbed(guild, reason = "update") {
 
 async function getLeaderboardActiveChannel(guild) {
   const cfg = getTopActiveConfig();
-  const channelId = cfg.leaderboardActiveChannelId || cfg.channelId;
+  const channelId = cfg.leaderboardActiveChannelId;
   if (!cfg.enabled || !isFilledId(channelId)) return null;
   return getTextChannel(guild, channelId);
 }
@@ -14700,12 +15174,28 @@ function applyTemplate(text = "", data = {}) {
     suggestionChannelId: config.suggestionChannelId || "",
     chatWargaChannelId: config.chatWargaChannelId || "",
     levelChannelId: config.levelChannelId || "",
+    cekPoinChannelId: config.cekPoinChannelId || "",
+    topActiveChannelId: config.topActive?.channelId || "",
+    leaderboardChannelId: config.topActive?.leaderboardActiveChannelId || config.topActive?.papanAktifChannelId || "",
     ticketChannelId: config.ticketChannelId || "",
     rulesChannel: channelTag(config.rulesChannelId, "#aturan-desa"),
     chatWargaChannel: channelTag(config.chatWargaChannelId, "#chat-warga"),
     ticketChannel: channelTag(config.ticketChannelId, "#ticket"),
+    aiChannel: channelTag(config.aiChannelId, "#ai-pak-rw"),
+    curhatChannel: channelTag(config.curhatChannelId, "#curhat"),
+    anonymousCurhatChannel: channelTag(config.anonymousCurhatChannelId, "#curhat-anonim"),
+    suggestionChannel: channelTag(config.suggestionChannelId, "#kotak-saran"),
+    levelChannel: channelTag(config.levelChannelId, "#level"),
+    cekPoinChannel: channelTag(config.cekPoinChannelId, "#cek-poin"),
+    topActiveChannel: channelTag(config.topActive?.channelId, "#top-aktif"),
+    leaderboardChannel: channelTag(config.topActive?.leaderboardActiveChannelId || config.topActive?.papanAktifChannelId, "#leaderboard-aktif"),
+    mabarChannel: channelTag(config.mabar?.channelId, "#cari-mabar"),
+    boostPoinChannel: channelTag(config.boostPoin?.channelId || config.juragan?.boostChannelId, "#boost-poin"),
     memberRole: welcomeMemberRoleTag(),
     memberTulusRole: welcomeMemberRoleTag(),
+    staffRole: mentionListFromIds(config.commandPermissions?.staffRoleIds || [], "role") || roleTag(config.staffRoleId || "", "@Staff"),
+    adminRole: mentionListFromIds(config.commandPermissions?.adminRoleIds || [], "role") || roleTag(config.adminRoleId || "", "@Admin"),
+    moderatorRole: roleTag(config.moderatorRoleId || "", "@Moderator"),
     boostChannelId: config.juragan?.boostChannelId || "",
     donaturRoleId: config.donaturRoleId || "",
     juraganRoleId: config.juragan?.roleId || "",
@@ -14723,9 +15213,13 @@ function applyTemplate(text = "", data = {}) {
     separator: "────────────────"
   };
 
-  return String(text || "").replace(/\{(\w+)\}/g, (_, key) => {
+  const rendered = String(text || "").replace(/\{(\w+)\}/g, (_, key) => {
     return data[key] ?? defaults[key] ?? `{${key}}`;
   });
+
+  return rendered
+    .replace(/@everyone/gi, "everyone")
+    .replace(/@here/gi, "here");
 }
 
 function embedCfg(name) {
@@ -15366,13 +15860,22 @@ client.on(Events.GuildMemberAdd, async (member) => {
     const welcomeData = {
       user: `${member}`,
       username: member.user.username,
+      displayName: member.displayName || member.user.globalName || member.user.username,
+      userId: member.id,
       server: config.serverName || member.guild.name,
+      serverName: config.serverName || member.guild.name,
       memberCount: `${member.guild.memberCount}`,
       memberRole: welcomeMemberRoleTag(),
       memberTulusRole: welcomeMemberRoleTag(),
       rulesChannel: channelTag(config.rulesChannelId, "#aturan-desa"),
       chatWargaChannel: channelTag(config.chatWargaChannelId, "#chat-warga"),
-      ticketChannel: channelTag(config.ticketChannelId, "#ticket")
+      ticketChannel: channelTag(config.ticketChannelId, "#ticket"),
+      aiChannel: channelTag(config.aiChannelId, "#ai-pak-rw"),
+      curhatChannel: channelTag(config.curhatChannelId, "#curhat"),
+      anonymousCurhatChannel: channelTag(config.anonymousCurhatChannelId, "#curhat-anonim"),
+      suggestionChannel: channelTag(config.suggestionChannelId, "#kotak-saran"),
+      topActiveChannel: channelTag(config.topActive?.channelId, "#top-aktif"),
+      leaderboardChannel: channelTag(config.topActive?.leaderboardActiveChannelId || config.topActive?.papanAktifChannelId, "#leaderboard-aktif")
     };
 
     const description = applyTemplate(
@@ -16555,7 +17058,7 @@ client.on(Events.MessageCreate, async (message) => {
 
 
 
-// ================= PAK RW COMMAND CENTER v10.10.60 =================
+// ================= PAK RW COMMAND CENTER v10.10.61 =================
 // Update ini sengaja tidak menyentuh logic Level, Top Aktif/MOTM, dan Cek Poin.
 const COMMAND_THEME_COLOR = 0x7c6dff;
 const COMMAND_SAFE_FEATURES = ["ai", "curhat", "anonim", "saran", "welcome", "juragan", "donatur", "mabar"];
@@ -18236,7 +18739,7 @@ client.on(Events.MessageCreate, async (message) => {
 
       if (cmd === "premium" || cmd === "mahal" || cmd === "suitepremium") {
         return safeReply(message, [
-          "💎 **Pak RW v10.10.60 — Big Bot DESA TULUS**",
+          "💎 **Pak RW v10.10.61 — Big Bot DESA TULUS**",
           "",
           "Pak RW sekarang jadi bot besar DESA TULUS: satu balai warga digital yang rapi untuk AI, curhat, saran, welcome, level, top aktif, voice, donatur, juragan, boost poin, dashboard, dan pengumuman desa.",
           "",
@@ -18260,7 +18763,7 @@ client.on(Events.MessageCreate, async (message) => {
       if (cmd === "fitur" || cmd === "alur" || cmd === "features" || cmd === "suite") {
         const p = config.prefix || "rw";
         return safeReply(message, [
-          "🧭 **Pak RW Big Bot Balai Warga v10.10.60**",
+          "🧭 **Pak RW Big Bot Balai Warga v10.10.61**",
           "",
           "Alurnya sekarang dibuat seperti bot besar balai warga digital:",
           "**warga butuh bantuan → Pak RW baca konteks → pilih fitur → eksekusi/preview → data tetap aman**.",
@@ -18508,7 +19011,7 @@ async function handlePakRwVisibleSlashCommand(interaction) {
   if (cmd === "fitur") {
     await interaction.reply({
       content: [
-        "🧭 **Pak RW Big Bot Balai Warga v10.10.60**",
+        "🧭 **Pak RW Big Bot Balai Warga v10.10.61**",
         "",
         "**Alur bot besar:** pilih fitur → edit setting → preview → test → backup.",
         "",
@@ -18533,7 +19036,7 @@ async function handlePakRwVisibleSlashCommand(interaction) {
   if (cmd === "premium") {
     await interaction.reply({
       content: [
-        "💎 **Pak RW v10.10.60 — Big Bot DESA TULUS**",
+        "💎 **Pak RW v10.10.61 — Big Bot DESA TULUS**",
         "",
         "**Alur utama:** edit → preview → test aman → backup.",
         "",

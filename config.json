@@ -26,9 +26,9 @@
     "enabled": true,
     "sendToChatWarga": true,
     "title": "🏡 Wilujeung Sumping Warga Anyar! {user}",
-    "message": "Sambut warga anyar barudak {memberTulusRole}\n\nPak RW menyambut {user} sebagai bagian dari **DESA TULUS**. Semoga betah, rukun, dan saling menghargai.\n\n📌 Baca aturan desa: {rulesChannel}\n💬 Kenalan di chat warga: {chatWargaChannel}\n🎫 Butuh bantuan? Buka ticket: {ticketChannel}\n\nKamu warga ke-**{memberCount}** di desa ini. Wilujeung sumping, semoga betah di lembur urang 🤍",
-    "style": "desa_tulus_simple_sync_with_dashboard_v10_10_60",
-    "dashboardHelp": "Welcome singkat dan sinkron: content, author, title, description, image, role Member Tulus, channel aturan, chat warga, dan ticket sama persis antara dashboard dan Discord.",
+    "message": "Sambut warga anyar barudak {memberTulusRole}\n\nPak RW menyambut {user} sebagai bagian dari DESA TULUS. Semoga betah, rukun, dan saling menghargai.\n\n📌 Baca aturan desa: {rulesChannel}\n💬 Kenalan di chat warga: {chatWargaChannel}\n🎫 Butuh bantuan? Buka ticket: {ticketChannel}\n\nKamu warga ke-{memberCount} di desa ini. Wilujeung sumping, semoga betah di lembur urang 🤍",
+    "style": "desa_tulus_indonesia_jelas_wilujeung_sumping",
+    "dashboardHelp": "Welcome sinkron dashboard baru: channel welcome, role Member Tulus, rules, chat warga, ticket, content, embed, image, preview, dan test send.",
     "content": "🤍 Sambut warga anyar barudak {user} {memberTulusRole}",
     "memberRoleId": "",
     "memberRoleName": "Member Tulus",
@@ -39,7 +39,7 @@
     "cooldownMs": 12000,
     "maxMessageLength": 1100,
     "openRouterModel": "openai/gpt-4o-mini",
-    "styleMode": "pak_rw_context_engine_nak_natural_v10_10_60",
+    "styleMode": "pak_rw_natural_nak_contextual_hemat_dashboard_rebuild_v10_10_61",
     "pronounMode": "auto",
     "allowMildProfanity": false,
     "safeMirror": true,
@@ -87,7 +87,11 @@
       "Jika user minta bantuan teknis, pembuka yang cocok: “Pak RW cek dulu ya nak…”, “Baik nak, kita urutkan…”, atau “Siap nak, ini alurnya…”.",
       "Jika user curhat, pembuka yang cocok: “Ada apa nak?”, “Kenapa nak?”, “Sini nak, Pak RW dengarkan dulu.”",
       "Welcome embed harus simpel, jelas, dapat tag user, tag role Member Tulus, dan tag channel rules/chat/ticket asli jika ID tersedia.",
-      "Preview dashboard untuk embed harus memakai template yang sama dengan Discord agar tidak berbeda."
+      "Preview dashboard untuk embed harus memakai template yang sama dengan Discord agar tidak berbeda.",
+      "Jika pertanyaan sama berulang dalam waktu dekat, gunakan cache lokal supaya OpenRouter tidak boros.",
+      "Top Aktif Bulanan dan Papan Aktif Lifetime wajib dibedakan. Jangan arahkan keduanya ke channel yang sama kecuali owner sengaja mengisinya.",
+      "Saat membahas dashboard, gunakan alur Arcane/Carl/Dyno: plugin list, Manage, edit, preview, simpan, test.",
+      "Saat membahas embed, jelaskan bahwa dashboard preview harus sama dengan hasil Discord."
     ],
     "fallbackMessage": "Maaf nak, Pak RW sedang belum bisa menghubungi AI sebentar. Coba lagi nanti ya. Kalau perlu, Pak RW tetap bisa bantu dengan jawaban dasar 🤍",
     "antiSpamNote": "AI hanya menjawab di channel yang diatur dan memakai cooldown supaya tidak spam.",
@@ -103,9 +107,9 @@
       "Untuk curhat, awali dengan sapaan random seperti “Iya nak...”, dengarkan dulu, lalu bantu urutkan masalah dengan lembut.",
       "Untuk fitur server, beri alur praktis step-by-step dan gunakan mention asli user/channel jika diperlukan."
     ],
-    "globalCooldownMs": 3500,
-    "dailyLimit": 180,
-    "maxTokens": 480,
+    "globalCooldownMs": 6500,
+    "dailyLimit": 120,
+    "maxTokens": 460,
     "limitSafeMode": true,
     "noLimitModeNote": "Mode hemat OpenRouter aktif: model murah, cooldown lebih panjang, max token lebih kecil, fallback lokal saat limit/error, dan fallback model mahal dimatikan.",
     "mentionMode": "real_discord_mentions",
@@ -119,7 +123,7 @@
     "languagePolicy": "Default Bahasa Indonesia yang sopan dan jelas. Jangan membuat semua embed/chat full Sunda. Gunakan Basa Sunda formal hanya jika user meminta Bahasa Sunda. Frasa khas seperti Wilujeung Sumping boleh dipakai untuk judul welcome saja atau aksen kecil yang mudah dipahami.",
     "botScale": "big_bot",
     "fastLocalForGreeting": true,
-    "antiLimitMode": "sapaan_dan_pertanyaan_sederhana_dijawab_lokal_openrouter_hanya_untuk_jawaban_berat",
+    "antiLimitMode": "hemat_agresif_local_first_v4_cache_context_v10_10_61",
     "dashboardMode": "ot_unified_inspired_all_in_one_clear_flow",
     "openingVariationEnabled": true,
     "openingRule": "Panggil user dengan kata “nak” secara natural, tetapi jangan semua jawaban diawali “Iya nak”. Pembuka harus nyambung konteks: kalau bertanya pakai “Baik nak, Pak RW jelaskan…”, kalau curhat pakai “Ada apa nak…”, kalau error pakai “Pak RW cek dulu ya nak…”, kalau minta dibuatkan pakai “Bisa nak, Pak RW susun…”. Jangan repetitif.",
@@ -201,7 +205,13 @@
         "embed publik full Sunda",
         "jawaban panjang tapi tidak menjawab inti"
       ]
-    }
+    },
+    "localCacheEnabled": true,
+    "cacheTtlMs": 120000,
+    "cacheMaxEntries": 80,
+    "contextSync": "Pak RW memahami DESA TULUS, dashboard Arcane/Carl/Dyno, embed sync, welcome, curhat, saran, level, cek poin, top aktif bulanan, papan aktif lifetime, MOTM 100000 poin, Donatur, Juragan, Mabar, Boost Poin, GitHub, Railway, DisCloud, MongoDB, dan permission Discord.",
+    "intentRouterEnabled": true,
+    "dashboardContextMode": "pak_rw_dashboard_level_embed_discord_deploy_contextual"
   },
   "panels": {
     "sendSuggestionPanelOnReady": false
@@ -302,7 +312,7 @@
       "previewMustMatchDiscord": true
     },
     "dashboard": {
-      "brandTitle": "Pak RW Control Center",
+      "brandTitle": "Pak RW v10.10.61",
       "brandSubtitle": "DESA TULUS • Balai Warga Digital Premium",
       "homeTitle": "Pak RW Unified Control Center DESA TULUS",
       "homeSubtitle": "Dashboard all-in-one dengan alur jelas, modul rapi, preview mudah, dan bahasa embed yang mudah dipahami warga.",
@@ -319,7 +329,57 @@
       },
       "themeMode": "ot_unified_inspired_village_premium_readable_id",
       "accentColor": "#8B7CFF",
-      "accentColor2": "#FF78D7"
+      "accentColor2": "#FF78D7",
+      "releaseVersion": "10.10.61",
+      "flow": "pilih fitur → Manage → edit channel/role/embed → preview → simpan → kirim/test",
+      "placeholderGuide": [
+        "{user}",
+        "{userId}",
+        "{username}",
+        "{displayName}",
+        "{server}",
+        "{serverName}",
+        "{memberCount}",
+        "{memberTulusRole}",
+        "{rulesChannel}",
+        "{chatWargaChannel}",
+        "{ticketChannel}",
+        "{aiChannel}",
+        "{curhatChannel}",
+        "{anonymousCurhatChannel}",
+        "{suggestionChannel}",
+        "{levelChannel}",
+        "{cekPoinChannel}",
+        "{topActiveChannel}",
+        "{leaderboardChannel}",
+        "{mabarChannel}",
+        "{boostPoinChannel}",
+        "{staffRole}",
+        "{adminRole}",
+        "{moderatorRole}",
+        "{ownerName}",
+        "{botName}",
+        "{prefix}",
+        "{level}",
+        "{rank}",
+        "{total}",
+        "{chat}",
+        "{voice}",
+        "{lifetimeTotal}",
+        "{cyclePoints}",
+        "{motmThreshold}",
+        "{eventName}",
+        "{multiplier}",
+        "{duration}",
+        "{channels}",
+        "{endsAt}",
+        "{by}",
+        "{status}",
+        "{month}",
+        "{year}",
+        "{date}",
+        "{time}"
+      ]
     },
     "memberOfTheMonth": {
       "color": "#F1C75B",
@@ -411,6 +471,82 @@
       "dashboardGroup": "Embed Pak RW",
       "dashboardEditable": true,
       "previewMustMatchDiscord": true
+    },
+    "welcome": {
+      "color": "#7DBD77",
+      "content": "🤍 Sambut warga anyar barudak {user} {memberTulusRole}",
+      "authorName": "DESA TULUS • Warga Baru",
+      "authorIcon": "",
+      "title": "🏡 Wilujeung Sumping Warga Anyar! {user}",
+      "description": "Sambut warga anyar barudak {memberTulusRole}\n\nPak RW menyambut {user} sebagai bagian dari DESA TULUS. Semoga betah, rukun, dan saling menghargai.\n\n📌 Baca aturan desa: {rulesChannel}\n💬 Kenalan di chat warga: {chatWargaChannel}\n🎫 Butuh bantuan? Buka ticket: {ticketChannel}\n\nKamu warga ke-{memberCount} di desa ini. Wilujeung sumping, semoga betah di lembur urang 🤍",
+      "thumbnail": "avatar",
+      "image": "",
+      "footer": "DESA TULUS • Tempat warga baik berkumpul",
+      "footerIcon": "",
+      "fields": [],
+      "dashboardGroup": "Welcome Warga",
+      "dashboardEditable": true,
+      "previewMustMatchDiscord": true
+    },
+    "papanAktif": {
+      "color": "#D7A84F",
+      "content": "",
+      "authorName": "DESA TULUS • Papan Aktif Lifetime",
+      "title": "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU",
+      "description": "Peringkat keaktifan warga berdasarkan lifetime point. Data ini tidak reset walaupun poin/level siklus reset setelah MOTM.",
+      "thumbnail": "",
+      "image": "",
+      "footer": "DESA TULUS • Lifetime leaderboard",
+      "footerIcon": "",
+      "fields": [],
+      "dashboardGroup": "Leaderboard",
+      "dashboardEditable": true,
+      "previewMustMatchDiscord": true
+    },
+    "boostPoinActive": {
+      "color": "#7DBD77",
+      "content": "⚡ Boost Poin aktif di DESA TULUS.",
+      "authorName": "DESA TULUS • Boost Poin",
+      "title": "⚡ Boost Poin Aktif: {eventName}",
+      "description": "Multiplier: **{multiplier}**\nDurasi: **{duration}**\nChannel: {channels}\nBerakhir: **{endsAt}**\n\nTetap aktif dengan sopan, jangan spam, dan jaga suasana desa.",
+      "thumbnail": "",
+      "image": "",
+      "footer": "DESA TULUS • Event warga aktif",
+      "footerIcon": "",
+      "fields": [],
+      "dashboardGroup": "Boost Poin",
+      "dashboardEditable": true,
+      "previewMustMatchDiscord": true
+    },
+    "boostPoinEnd": {
+      "color": "#7DBD77",
+      "content": "Boost Poin DESA TULUS sudah berakhir.",
+      "authorName": "DESA TULUS • Boost Poin",
+      "title": "⚡ Boost Poin Berakhir: {eventName}",
+      "description": "Event **{eventName}** sudah selesai. Terima kasih warga yang sudah aktif dengan tertib.",
+      "thumbnail": "",
+      "image": "",
+      "footer": "DESA TULUS • Boost selesai",
+      "footerIcon": "",
+      "fields": [],
+      "dashboardGroup": "Boost Poin",
+      "dashboardEditable": true,
+      "previewMustMatchDiscord": true
+    },
+    "aiFallback": {
+      "color": "#6D9DF7",
+      "content": "",
+      "authorName": "DESA TULUS • AI Pak RW",
+      "title": "🤖 Pak RW sedang hemat limit",
+      "description": "AI utama sedang cooldown/limit, jadi Pak RW menjawab dengan fallback lokal yang tetap sopan dan jelas.",
+      "thumbnail": "",
+      "image": "",
+      "footer": "DESA TULUS • AI hemat OpenRouter",
+      "footerIcon": "",
+      "fields": [],
+      "dashboardGroup": "AI Pak RW",
+      "dashboardEditable": true,
+      "previewMustMatchDiscord": true
     }
   },
   "topActive": {
@@ -431,7 +567,7 @@
     "footer": "DESA TULUS • Papan Keaktifan Warga",
     "bannerTitle": "MEMBER OF THE MONTH",
     "bannerSubtitle": "TOP CHAT • TOP VOICE • TOP AKTIF",
-    "useOneChannel": true,
+    "useOneChannel": false,
     "autoImageThreadEnabled": true,
     "autoImageThreadArchiveMinutes": 1440,
     "autoImageThreadName": "🖼️ Diskusi Gambar • {username}",
@@ -489,14 +625,16 @@
     "motmAwardMode": "auto_cycle_100k",
     "autoMotmRole": true,
     "manualMotmDashboardEnabled": true,
-    "leaderboardActiveChannelId": "1512730320665972837",
+    "leaderboardActiveChannelId": "",
     "leaderboardActiveTopLimit": 10,
     "leaderboardActiveTitleTemplate": "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU",
     "leaderboardActiveSubtitle": "Papan ini mencatat total poin warga dari awal bergabung sampai seterusnya. Data ini tidak di-reset meskipun siklus level kembali dari awal setelah 100.000 poin.",
     "leaderboardActiveFooter": "DESA TULUS • Leaderboard Aktif Warga",
     "leaderboardActiveImageUrl": "",
     "dashboardEditable": true,
-    "imageUploadNote": "Jika ingin tampilan seperti contoh TOP 1/2/3, isi Image Board URL dari dashboard. Jika kosong, Pak RW tetap mengirim embed teks yang rapi."
+    "imageUploadNote": "Jika ingin tampilan seperti contoh TOP 1/2/3, isi Image Board URL dari dashboard. Jika kosong, Pak RW tetap mengirim embed teks yang rapi.",
+    "leaderboardActiveSetupNote": "Buat channel text khusus bernama 🏆│leaderboard-aktif, copy Channel ID, lalu isi leaderboardActiveChannelId di dashboard/config. Jangan digabung dengan channel Top Aktif bulanan.",
+    "dashboardHelp": "Top Aktif Bulanan dipisah dari Papan Aktif Lifetime. Judul bulan otomatis mengikuti {month}."
   },
   "texts": {
     "motmContentTemplate": "🏆 Selamat {user}! Kamu menjadi {role} TOP CHAT BULAN {month} di DESA TULUS.",
@@ -542,32 +680,36 @@
     "totalLevelFormula": "chatVoiceSum",
     "cycleResetEnabled": true,
     "cycleResetAtPoints": 100000,
-    "cycleResetNote": "Saat warga mencapai 100.000 poin aktif, Pak RW memberi role Member Of The Month otomatis lalu poin/level siklus kembali dari awal. Papan Aktif lifetime tetap lanjut dan tidak di-reset."
+    "cycleResetNote": "Saat warga mencapai 100.000 poin aktif, Pak RW memberi role Member Of The Month otomatis lalu poin/level siklus kembali dari awal. Papan Aktif lifetime tetap lanjut dan tidak di-reset.",
+    "lifetimeNeverReset": true
   },
   "dashboard": {
-    "homeMode": "arcane_manage_cards",
-    "theme": "desa_tulus_soft_village_premium",
+    "homeMode": "full_premium_dashboard_rebuild",
+    "theme": "cinematic_desa_tulus_railway_inspired_soft_village",
     "easyEditMode": true,
     "showFeatureFlow": true,
     "showAiStylePanel": true,
-    "releaseVersion": "10.10.60",
-    "releaseName": "Arcane Manage Dashboard + Unified Embed Sync",
+    "releaseVersion": "10.10.61",
+    "releaseName": "Full Premium Dashboard Rebuild",
     "premiumMode": true,
     "comfortMode": true,
-    "quickActionMode": "edit_preview_test_backup",
+    "quickActionMode": "manage_edit_preview_save_test_backup",
     "uiDensity": "spacious",
     "focusEditModeEnabled": true,
     "collapsibleSidebar": true,
     "protectedSystemsLocked": [],
     "runtime": "disabled_by_default_discloud",
     "enabledByEnv": "DASHBOARD_ENABLED=true",
-    "brandTitle": "Pak RW v10.10.60",
-    "brandSubtitle": "DESA TULUS • Dashboard Balai Warga Premium",
-    "homeTitle": "Pak RW Control Center DESA TULUS",
-    "homeSubtitle": "Dashboard all-in-one bergaya bot besar: pilih fitur, klik Manage, edit embed, preview sama seperti Discord, lalu simpan atau kirim. Semua embed memakai tema DESA TULUS yang rapi dan mudah dipahami.",
+    "brandTitle": "Pak RW Control Center",
+    "brandSubtitle": "Balai Warga Digital DESA TULUS",
+    "homeTitle": "Pak RW Control Center",
+    "homeSubtitle": "Balai Warga Digital DESA TULUS dengan dashboard premium all-in-one: plugin cards, Manage Page per fitur, preview Discord, placeholder klik-copy, logs, backup, dan visual cinematic perdesaan Sunda modern.",
     "accentText": "DESA TULUS 🌾 • All Embed Sync",
-    "responsiveMode": "desktop_tablet_mobile_sync",
-    "animationMode": "soft_village_motion"
+    "responsiveMode": "desktop_laptop_tablet_mobile",
+    "animationMode": "soft_grain_light_beam_village_cinematic",
+    "manageRoutesEnabled": true,
+    "globalEmbedManagerEnabled": true,
+    "oldDashboardArchivedAt": "dashboard_archive/"
   },
   "featureFlow": {
     "step1": "Pilih modul dari Suite Fitur: Tanya Pak RW, Curhat, Saran, Welcome, Juragan, Donatur, Level, Top Aktif, Embed Builder, Banner Manual, atau Discord Manager.",
@@ -827,7 +969,22 @@
     },
     "mabar": {
       "enabled": true
-    }
+    },
+    "anonymousCurhat": true,
+    "suggestion": true,
+    "level": true,
+    "cekPoin": true,
+    "topActive": true,
+    "papanAktif": true,
+    "motm": true,
+    "boostPoin": true,
+    "embedManager": true,
+    "channelManager": true,
+    "roleManager": true,
+    "commandCenter": true,
+    "permissionCenter": true,
+    "logsHealth": true,
+    "backupCenter": true
   },
   "dashboardRoleDisplay": {
     "enabled": true,
@@ -912,7 +1069,7 @@
     "allowEveryone": false,
     "maxUserMentionsPerReply": 5,
     "maxChannelMentionsPerReply": 20,
-    "note": "Pak RW bisa mengubah #channel, @user, dan @role tertentu menjadi mention Discord asli. @everyone/@here tetap diblokir.",
+    "note": "Pak RW bisa mengubah #channel, @user, dan @role tertentu menjadi mention Discord asli. @everyone/@here tetap diblokir. v10.10.61 menambah placeholder channel/role yang lebih lengkap.",
     "realRoleMentions": true,
     "maxRoleMentionsPerReply": 4,
     "blockedRoleNames": [
@@ -966,7 +1123,7 @@
       "Discord Manager"
     ]
   },
-  "version": "10.10.60",
+  "version": "10.10.61",
   "bigBot": {
     "releaseName": "Pak RW AI Natural + Welcome Mention v10.10.59"
   },
@@ -1047,54 +1204,62 @@
     ]
   },
   "placeholderLibrary": {
-    "note": "Placeholder ini bisa dipakai di semua embed dashboard. Dashboard menampilkan preview, Discord mengirim mention asli jika ID/role/channel tersedia.",
-    "user": [
+    "note": "Placeholder ini bisa dipakai di semua embed dashboard. Dashboard menampilkan preview, Discord mengirim mention asli jika ID/role/channel tersedia. @everyone dan @here diblokir otomatis.",
+    "User": [
       "{user}",
+      "{userId}",
       "{username}",
       "{displayName}",
-      "{userId}",
       "{avatar}",
-      "{memberCount}"
+      "{joinedAt}"
     ],
-    "server": [
+    "Server": [
       "{server}",
       "{serverName}",
+      "{memberCount}",
       "{ownerName}",
-      "{prefix}",
-      "{date}",
-      "{time}",
-      "{datetime}"
+      "{botName}",
+      "{prefix}"
     ],
-    "mentions": [
+    "Role": [
       "{memberRole}",
       "{memberTulusRole}",
+      "{staffRole}",
+      "{adminRole}",
+      "{moderatorRole}",
+      "{motmRole}",
+      "{donaturRole}",
+      "{juraganRole}"
+    ],
+    "Channel": [
       "{rulesChannel}",
       "{chatWargaChannel}",
       "{ticketChannel}",
       "{aiChannel}",
       "{curhatChannel}",
+      "{anonymousCurhatChannel}",
       "{suggestionChannel}",
       "{levelChannel}",
       "{cekPoinChannel}",
       "{topActiveChannel}",
-      "{leaderboardChannel}"
+      "{leaderboardChannel}",
+      "{mabarChannel}",
+      "{boostPoinChannel}",
+      "{welcomeChannel}"
     ],
-    "level": [
+    "Level/Poin": [
       "{level}",
       "{rank}",
-      "{badge}",
       "{total}",
       "{chat}",
       "{voice}",
-      "{nextLevel}",
-      "{nextRank}",
-      "{chatNeed}",
-      "{voiceNeed}",
       "{lifetimeTotal}",
       "{cyclePoints}",
-      "{motmThreshold}"
+      "{motmThreshold}",
+      "{nextLevel}",
+      "{remainingPoints}"
     ],
-    "event": [
+    "Event/Boost": [
       "{eventName}",
       "{multiplier}",
       "{duration}",
@@ -1103,14 +1268,37 @@
       "{by}",
       "{status}"
     ],
-    "general": [
-      "{content}",
-      "{message}",
-      "{reply}",
-      "{reason}",
-      "{count}",
-      "{newline}",
-      "{separator}"
+    "Time": [
+      "{month}",
+      "{year}",
+      "{date}",
+      "{time}",
+      "{today}",
+      "{now}"
     ]
+  },
+  "papanAktif": {
+    "enabled": true,
+    "channelId": "",
+    "title": "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU",
+    "description": "Leaderboard lifetime DESA TULUS. Tidak reset walaupun poin siklus level/MOTM reset.",
+    "topLimit": 10,
+    "autoPost": true,
+    "autoPostHourWIB": 0,
+    "imageUrl": "",
+    "doNotResetLifetime": true,
+    "separateFromMonthlyTopActive": true
+  },
+  "leaderboardAktif": {
+    "enabled": true,
+    "channelId": "",
+    "title": "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU",
+    "description": "Leaderboard lifetime DESA TULUS. Tidak reset walaupun poin siklus level/MOTM reset.",
+    "topLimit": 10,
+    "autoPost": true,
+    "autoPostHourWIB": 0,
+    "imageUrl": "",
+    "doNotResetLifetime": true,
+    "separateFromMonthlyTopActive": true
   }
 }
