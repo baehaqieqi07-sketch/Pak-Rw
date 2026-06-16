@@ -101,6 +101,17 @@ Jangan upload `.env`, `node_modules`, `data`, `logs`, `runtime-logs`, atau `back
 - Level Up dan Cek Poin tidak lagi memasang thumbnail/image.
 - Preview dashboard menampilkan blockquote dan custom emoji dengan format yang sama seperti Discord.
 
-## Update v10.10.70
+## Update v10.10.71
 
 Dashboard dirapikan lagi: embed editor sekarang mendukung autocomplete `@` untuk role/member dan `#` untuk channel/category/voice, picker Discord menjadi modal rapi, preview memakai nama asli dari server, dan background diganti menjadi ilustrasi 2D DESA TULUS yang lebih adem.
+
+## Update v10.10.71
+
+Dashboard difinishing ulang untuk mengunci simetri layout, merapikan modal picker Discord, mengurangi transparansi berlebihan, menstabilkan editor embed, dan membuat tampilan lebih clean serta mudah dipahami.
+
+## Update v10.10.72
+
+- Save bar dashboard sekarang hanya muncul saat ada perubahan.
+- Tulisan “Semua perubahan tersimpan” dihapus agar UI tidak ramai.
+- Tombol Batal dan Simpan muncul otomatis setelah user mengubah setting.
+- Channel Manager, Role Manager, Settings, Banner Manager, dan Manage Page memakai alur simpan yang sama.

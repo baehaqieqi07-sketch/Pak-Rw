@@ -295,6 +295,7 @@ export function ManagePage() {
 
   const cancelChanges = async () => {
     await refresh();
+    setDirty(false);
     notify("Perubahan yang belum disimpan dibatalkan.", "info");
   };
 
@@ -472,7 +473,7 @@ export function ManagePage() {
 
       {tab === "activity" ? <Card><CardHeader title="Aktivitas terbaru" description={`Perubahan yang berkaitan dengan ${feature.name}.`} /><div className="activity-list">{data.activity?.length ? data.activity.slice(0, 12).map((item, index) => <div className="activity-item" key={`${item.at}-${index}`}><span className="activity-marker" /><div><strong>{item.title}</strong><small>{item.detail || "Perubahan dashboard"}</small></div><time>{new Date(item.at).toLocaleString("id-ID")}</time></div>) : <div className="empty-inline">Belum ada aktivitas.</div>}</div></Card> : null}
 
-      {tab !== "embed" ? <div className="page-save-bar"><div><strong>{dirty ? "Ada perubahan belum disimpan" : "Semua perubahan tersimpan"}</strong><span>Hanya field yang dipilih yang diperbarui. Data warga tidak disentuh.</span></div><div><Button variant="secondary" icon={<RefreshCcw size={16} />} onClick={cancelChanges}>Batalkan</Button><Button icon={<Save size={16} />} disabled={!dirty || saving} onClick={saveSettings}>{saving ? "Menyimpan" : "Simpan perubahan"}</Button></div></div> : null}
+      {tab !== "embed" && dirty ? <div className="page-save-bar page-save-bar-dirty"><div><strong>Perubahan belum disimpan</strong><span>Klik Simpan untuk menerapkan setting, atau Batal untuk mengembalikan seperti semula.</span></div><div><Button variant="secondary" icon={<RefreshCcw size={16} />} onClick={cancelChanges} disabled={saving}>Batal</Button><Button icon={<Save size={16} />} disabled={saving} onClick={saveSettings}>{saving ? "Menyimpan" : "Simpan"}</Button></div></div> : null}
     </div>
   );
 }

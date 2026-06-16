@@ -1,6 +1,6 @@
 {
   "name": "pak-rw-desa-tulus",
-  "version": "10.10.70",
+  "version": "10.10.72",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -19,5 +19,5 @@
   "engines": {
     "node": ">=18"
   },
-  "description": "Pak RW DESA TULUS v10.10.70 - dashboard clean finishing, autocomplete @/#, picker rapi, dan background 2D premium"
+  "description": "Pak RW DESA TULUS v10.10.72 - auto save action bar, tombol simpan/batal muncul hanya saat ada perubahan, dashboard lebih bersih"
 }
