@@ -31,5 +31,8 @@ export const api = {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ channelId, embed })
   })),
-  health: async () => parseJson<any>(await fetch("/api/dashboard/health", { credentials: "same-origin", cache: "no-store" }))
+  health: async () => parseJson<any>(await fetch("/api/dashboard/health", { credentials: "same-origin", cache: "no-store" })),
+  boostStatus: async () => parseJson<any>(await fetch("/api/dashboard/boost-poin/status", { credentials: "same-origin", cache: "no-store" })),
+  startBoost: async () => parseJson<{ ok: boolean; message: string; config?: Record<string, any> }>(await fetch("/api/dashboard/boost-poin/start", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: "{}" })),
+  stopBoost: async () => parseJson<{ ok: boolean; message: string; config?: Record<string, any> }>(await fetch("/api/dashboard/boost-poin/stop", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: "{}" }))
 };

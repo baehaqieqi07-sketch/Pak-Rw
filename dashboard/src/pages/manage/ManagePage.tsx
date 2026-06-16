@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
-  Activity, CheckCircle2, CircleAlert, FileText, Info, Layers3, RefreshCcw, Save,
-  Settings2, ShieldCheck, SlidersHorizontal, Sparkles, Wand2
+  Activity, CheckCircle2, CircleAlert, Clock3, FileText, Gauge, Info, Layers3, Play,
+  RefreshCcw, Save, Settings2, ShieldCheck, SlidersHorizontal, Sparkles, Square, Wand2
 } from "lucide-react";
 import { useDashboard } from "../../app/DashboardContext";
 import type { EmbedDraft } from "../../app/types";
@@ -33,6 +33,7 @@ type Binding = {
   helper: string;
   required?: boolean;
   persist?: boolean;
+  accept?: "text" | "voice" | "any";
 };
 
 const TARGETS: Record<string, Binding[]> = {
@@ -60,11 +61,18 @@ const TARGETS: Record<string, Binding[]> = {
   motm: [{ key: "motmRole", path: "topActive.memberOfTheMonthRoleId", kind: "role", label: "Role Member Of The Month", helper: "Role Pak RW harus berada di atas role ini.", required: true }],
   donatur: [{ key: "donaturRole", path: "donaturRoleId", kind: "role", label: "Role Donatur Desa", helper: "Role benefit donatur yang dikelola Pak RW.", required: true }],
   juragan: [
-    { key: "juraganRole", path: "juragan.roleId", kind: "role", label: "Role Juragan Desa", helper: "Role utama untuk anggota Juragan.", required: true },
-    { key: "juraganChannel", path: "juragan.boostChannelId", kind: "channel", label: "Channel Juragan", helper: "Channel benefit atau boost khusus Juragan." }
+    { key: "juraganRole", path: "juragan.roleId", kind: "role", label: "Role Juragan Desa", helper: "Role yang disebut dan diberikan kepada Juragan.", required: true },
+    { key: "juraganChannel", path: "juragan.boostChannelId", kind: "channel", label: "Channel Pengumuman Juragan", helper: "Embed selamat datang Juragan dikirim ke channel ini.", required: true, accept: "text" },
+    { key: "juraganVipVoice", path: "juragan.vipVoiceChannelId", kind: "channel", label: "Voice VIP Juragan", helper: "Channel voice VIP yang akan ditag sebagai benefit Juragan.", accept: "voice" },
+    { key: "juraganChat", path: "juragan.chatChannelId", kind: "channel", label: "Chat Khusus Juragan", helper: "Channel text khusus Juragan yang akan ditag pada embed.", accept: "text" }
   ],
   mabar: [{ key: "mabarChannel", path: "mabar.channelId", kind: "channel", label: "Channel Cari Mabar", helper: "Tempat panel cari teman bermain dikirim.", required: true }],
-  "boost-poin": [{ key: "boostChannel", path: "boostPoin.channelId", kind: "channel", label: "Channel Pengumuman Boost", helper: "Pengumuman boost poin dikirim ke channel ini.", required: true }],
+  "boost-poin": [
+    { key: "boostChannel", path: "boostPoin.channelId", kind: "channel", label: "Channel Pengumuman Boost", helper: "Embed mulai dan selesai dikirim ke channel ini.", required: true, accept: "text" },
+    { key: "boostChatChannel", path: "boostPoin.chatChannelId", kind: "channel", label: "Channel Chat yang Diboost", helper: "Poin chat akan dikalikan hanya di channel ini.", accept: "text" },
+    { key: "boostVoiceChannel", path: "boostPoin.voiceChannelId", kind: "channel", label: "Voice Channel yang Diboost", helper: "Poin voice akan dikalikan hanya di voice ini.", accept: "voice" },
+    { key: "boostOwner", path: "boostPoin.eventByUserId", kind: "user", label: "Pengaktif Event", helper: "User ini tampil sebagai mention asli pada bagian Oleh." }
+  ],
   embed: [{ key: "testChannel", kind: "channel", label: "Channel Kirim Tes", helper: "Hanya dipakai untuk uji kirim. Tidak mengubah channel fitur lain.", required: true, persist: false }]
 };
 
@@ -107,6 +115,16 @@ export function ManagePage() {
   const [aiModel, setAiModel] = useState("openai/gpt-4o-mini");
   const [aiMaxTokens, setAiMaxTokens] = useState(460);
   const [motmThreshold, setMotmThreshold] = useState(100000);
+  const [boostMultiplier, setBoostMultiplier] = useState(10);
+  const [boostDuration, setBoostDuration] = useState(60);
+  const [boostEventName, setBoostEventName] = useState("Boost Poin DESA TULUS");
+  const [boostMode, setBoostMode] = useState("chat_voice");
+  const [boostEventActive, setBoostEventActive] = useState(false);
+  const [boostEndsAt, setBoostEndsAt] = useState(0);
+  const [boostAutoEnd, setBoostAutoEnd] = useState(true);
+  const [boostAnnounceStart, setBoostAnnounceStart] = useState(true);
+  const [boostAnnounceEnd, setBoostAnnounceEnd] = useState(true);
+  const [boostActionLoading, setBoostActionLoading] = useState<"start" | "stop" | "">("");
 
   const bindings = TARGETS[slug] || [];
   const availableEmbedKeys = useMemo(() => Object.keys(data.embeds || {}).filter((key) => key !== "dashboard"), [data.embeds]);
@@ -132,6 +150,15 @@ export function ManagePage() {
     setAiModel(String(readPath(cfg, "ai.openRouterModel") || "openai/gpt-4o-mini"));
     setAiMaxTokens(Number(readPath(cfg, "ai.maxTokens") || 460));
     setMotmThreshold(Number(readPath(cfg, "level.cycleResetAtPoints") || readPath(cfg, "topActive.pointsThreshold") || 100000));
+    setBoostMultiplier(Number(readPath(cfg, "boostPoin.multiplier") || 10));
+    setBoostDuration(Number(readPath(cfg, "boostPoin.durationMinutes") || 60));
+    setBoostEventName(String(readPath(cfg, "boostPoin.eventName") || "Boost Poin DESA TULUS"));
+    setBoostMode(String(readPath(cfg, "boostPoin.eventMode") || "chat_voice"));
+    setBoostEventActive(readPath(cfg, "boostPoin.eventActive") === true);
+    setBoostEndsAt(Number(readPath(cfg, "boostPoin.endsAt") || 0));
+    setBoostAutoEnd(readPath(cfg, "boostPoin.autoEndEnabled") !== false);
+    setBoostAnnounceStart(readPath(cfg, "boostPoin.announceOnStart") !== false);
+    setBoostAnnounceEnd(readPath(cfg, "boostPoin.announceOnEnd") !== false);
     setDirty(false);
   }, [data, slug, feature, availableEmbedKeys]);
 
@@ -170,6 +197,19 @@ export function ManagePage() {
         patches.push({ path: "ai.openRouterModel", value: aiModel });
         patches.push({ path: "ai.maxTokens", value: aiMaxTokens });
       }
+      if (slug === "boost-poin") {
+        const safeMultiplier = Math.max(1, Math.min(100, Number(boostMultiplier || 1)));
+        patches.push({ path: "boostPoin.multiplier", value: safeMultiplier });
+        patches.push({ path: "boostPoin.boostPercent", value: Number(((safeMultiplier - 1) * 100).toFixed(4)) });
+        patches.push({ path: "boostPoin.durationMinutes", value: Math.max(1, Number(boostDuration || 60)) });
+        patches.push({ path: "boostPoin.eventName", value: boostEventName.trim() || "Boost Poin DESA TULUS" });
+        patches.push({ path: "boostPoin.eventMode", value: boostMode });
+        patches.push({ path: "boostPoin.autoEndEnabled", value: boostAutoEnd });
+        patches.push({ path: "boostPoin.announceOnStart", value: boostAnnounceStart });
+        patches.push({ path: "boostPoin.announceOnEnd", value: boostAnnounceEnd });
+        patches.push({ path: "boostPoin.chatChannelIds", value: targets.boostChatChannel ? [targets.boostChatChannel] : [] });
+        patches.push({ path: "boostPoin.voiceChannelIds", value: targets.boostVoiceChannel ? [targets.boostVoiceChannel] : [] });
+      }
       if (patches.length) await api.savePatches(patches);
       if (embedKey) await api.saveEmbed(embedKey, embed as Record<string, any>);
       await refresh();
@@ -179,6 +219,54 @@ export function ManagePage() {
       notify(error instanceof Error ? error.message : String(error), "error");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const runBoostAction = async (action: "start" | "stop") => {
+    if (action === "start" && !targets.boostChannel) {
+      notify("Pilih Channel Pengumuman Boost terlebih dahulu.", "error");
+      setTab("targets");
+      return;
+    }
+    if (action === "start" && boostMode !== "voice" && !targets.boostChatChannel) {
+      notify("Pilih Channel Chat yang Diboost atau ubah mode menjadi Voice saja.", "error");
+      setTab("targets");
+      return;
+    }
+    if (action === "start" && boostMode !== "chat" && !targets.boostVoiceChannel) {
+      notify("Pilih Voice Channel yang Diboost atau ubah mode menjadi Chat saja.", "error");
+      setTab("targets");
+      return;
+    }
+    setBoostActionLoading(action);
+    try {
+      const safeMultiplier = Math.max(1, Math.min(100, Number(boostMultiplier || 1)));
+      await api.savePatches([
+        { path: "boostPoin.enabled", value: true },
+        { path: "boostPoin.channelId", value: targets.boostChannel || "" },
+        { path: "boostPoin.chatChannelId", value: targets.boostChatChannel || "" },
+        { path: "boostPoin.voiceChannelId", value: targets.boostVoiceChannel || "" },
+        { path: "boostPoin.eventByUserId", value: targets.boostOwner || "" },
+        { path: "boostPoin.chatChannelIds", value: targets.boostChatChannel ? [targets.boostChatChannel] : [] },
+        { path: "boostPoin.voiceChannelIds", value: targets.boostVoiceChannel ? [targets.boostVoiceChannel] : [] },
+        { path: "boostPoin.multiplier", value: safeMultiplier },
+        { path: "boostPoin.boostPercent", value: Number(((safeMultiplier - 1) * 100).toFixed(4)) },
+        { path: "boostPoin.durationMinutes", value: Math.max(1, Number(boostDuration || 60)) },
+        { path: "boostPoin.eventName", value: boostEventName.trim() || "Boost Poin DESA TULUS" },
+        { path: "boostPoin.eventMode", value: boostMode },
+        { path: "boostPoin.autoEndEnabled", value: boostAutoEnd },
+        { path: "boostPoin.announceOnStart", value: boostAnnounceStart },
+        { path: "boostPoin.announceOnEnd", value: boostAnnounceEnd }
+      ]);
+      await api.saveEmbed("boostPoinActive", embed as Record<string, any>);
+      const result = action === "start" ? await api.startBoost() : await api.stopBoost();
+      await refresh();
+      setDirty(false);
+      notify(result.message || (action === "start" ? "Boost Poin berhasil dimulai." : "Boost Poin berhasil dihentikan."));
+    } catch (error) {
+      notify(error instanceof Error ? error.message : String(error), "error");
+    } finally {
+      setBoostActionLoading("");
     }
   };
 
@@ -246,6 +334,41 @@ export function ManagePage() {
           {slug === "ai" ? <Card><CardHeader title="AI hemat OpenRouter" description="Pengaturan aman yang sudah didukung core bot." /><div className="form-grid two-columns"><div className="form-field"><label>Model utama</label><input value={aiModel} onChange={(event) => { setAiModel(event.target.value); setDirty(true); }} /><small className="field-helper">Gunakan openai/gpt-4o-mini untuk mode hemat.</small></div><div className="form-field"><label>Max token</label><input type="number" min={100} max={1000} value={aiMaxTokens} onChange={(event) => { setAiMaxTokens(Number(event.target.value)); setDirty(true); }} /><small className="field-helper">Batas aman rekomendasi: 300–600.</small></div></div></Card> : null}
           {slug === "top-aktif" || slug === "papan-aktif" ? <Card><CardHeader title="Jadwal leaderboard" description="Scheduler core bot tidak diubah; dashboard hanya menyimpan setting yang didukung." /><div className="form-grid two-columns"><div className="form-field"><label>Jumlah peringkat</label><input type="number" min={3} max={25} value={topLimit} onChange={(event) => { setTopLimit(Number(event.target.value)); setDirty(true); }} /></div><div className="form-field"><label>Jam post WIB</label><input type="number" min={0} max={23} value={postHour} onChange={(event) => { setPostHour(Number(event.target.value)); setDirty(true); }} /><small className="field-helper">Gunakan 0 untuk pukul 00.00 WIB.</small></div></div></Card> : null}
           {slug === "motm" ? <Card><CardHeader title="Threshold MOTM" description="Lifetime point tetap lanjut dan tidak ikut reset." /><div className="form-field"><label>Target poin siklus</label><input type="number" min={1000} value={motmThreshold} onChange={(event) => { setMotmThreshold(Number(event.target.value)); setDirty(true); }} /><small className="field-helper">Default DESA TULUS: 100.000 poin.</small></div></Card> : null}
+          {slug === "boost-poin" ? <>
+            <Card className="full-span-card boost-control-card">
+              <CardHeader title="Kontrol Event Boost Poin" description="Atur pengali poin, durasi, channel target, lalu mulai atau hentikan event dari satu tempat." action={<StatusBadge label={boostEventActive ? "Event berjalan" : "Standby"} tone={boostEventActive ? "success" : "warning"} />} />
+              <div className="boost-status-strip">
+                <div><Gauge size={20} /><span>Multiplier</span><strong>x{boostMultiplier.toLocaleString("id-ID")}</strong></div>
+                <div><Clock3 size={20} /><span>Durasi</span><strong>{boostDuration} menit</strong></div>
+                <div><Activity size={20} /><span>Status</span><strong>{boostEventActive ? "Aktif" : "Normal x1"}</strong></div>
+                <div><Clock3 size={20} /><span>Berakhir</span><strong>{boostEventActive && boostEndsAt ? new Date(boostEndsAt).toLocaleString("id-ID") : "Belum dimulai"}</strong></div>
+              </div>
+              <div className="form-grid two-columns">
+                <div className="form-field"><label>Nama event</label><input value={boostEventName} onChange={(event) => { setBoostEventName(event.target.value); setDirty(true); }} /><small className="field-helper">Tampil pada placeholder {`{eventName}`}.</small></div>
+                <div className="form-field"><label>Multiplier poin</label><div className="input-prefix"><span>x</span><input type="number" min={1} max={100} step={0.1} value={boostMultiplier} onChange={(event) => { setBoostMultiplier(Number(event.target.value)); setDirty(true); }} /></div><small className="field-helper">Contoh x10: poin dasar 5 menjadi total 50 poin.</small></div>
+                <div className="form-field"><label>Durasi event</label><input type="number" min={1} max={10080} value={boostDuration} onChange={(event) => { setBoostDuration(Number(event.target.value)); setDirty(true); }} /><small className="field-helper">Dalam menit. Setelah waktunya habis, event berhenti dan embed selesai dikirim otomatis.</small></div>
+                <div className="form-field"><label>Aktivitas yang diboost</label><select value={boostMode} onChange={(event) => { setBoostMode(event.target.value); setDirty(true); }}><option value="chat_voice">Chat dan Voice</option><option value="chat">Chat saja</option><option value="voice">Voice saja</option></select><small className="field-helper">Channel target dipilih pada tab Channel & Role.</small></div>
+              </div>
+              <div className="boost-option-grid">
+                <div className="boost-option-row"><div><strong>Selesai otomatis</strong><small>Event berhenti saat durasi habis dan poin kembali x1.</small></div><Toggle checked={boostAutoEnd} onChange={(value) => { setBoostAutoEnd(value); setDirty(true); }} label="Selesai otomatis" /></div>
+                <div className="boost-option-row"><div><strong>Kirim embed saat mulai</strong><small>Pengumuman aktif dikirim ke Channel Pengumuman Boost.</small></div><Toggle checked={boostAnnounceStart} onChange={(value) => { setBoostAnnounceStart(value); setDirty(true); }} label="Pengumuman mulai" /></div>
+                <div className="boost-option-row"><div><strong>Kirim embed saat selesai</strong><small>Dikirim saat event berakhir otomatis maupun dihentikan owner.</small></div><Toggle checked={boostAnnounceEnd} onChange={(value) => { setBoostAnnounceEnd(value); setDirty(true); }} label="Pengumuman selesai" /></div>
+              </div>
+              <div className="boost-flow-guide">
+                <div><span>1</span><strong>Isi multiplier dan durasi</strong><small>Owner menentukan x poin event.</small></div>
+                <div><span>2</span><strong>Pilih channel Discord</strong><small>Pengumuman, chat, dan voice dipilih berdasarkan nama.</small></div>
+                <div><span>3</span><strong>Mulai event</strong><small>Embed aktif dikirim dan pengali langsung berjalan.</small></div>
+                <div><span>4</span><strong>Selesai otomatis/manual</strong><small>Poin kembali x1 dan embed berakhir dikirim.</small></div>
+              </div>
+              <div className="boost-action-row">
+                <Button icon={<Play size={17} />} disabled={boostActionLoading !== "" || boostEventActive} onClick={() => runBoostAction("start")}>{boostActionLoading === "start" ? "Memulai event" : "Mulai event dan kirim embed"}</Button>
+                <Button variant="danger" icon={<Square size={17} />} disabled={boostActionLoading !== "" || !boostEventActive} onClick={() => runBoostAction("stop")}>{boostActionLoading === "stop" ? "Menghentikan event" : "Hentikan sekarang"}</Button>
+                <Button variant="secondary" icon={<Save size={17} />} disabled={saving || !dirty} onClick={saveSettings}>Simpan tanpa memulai</Button>
+              </div>
+            </Card>
+            <Card><CardHeader title="Embed saat dimulai" description="Template boostPoinActive dapat diedit pada tab Embed & Preview." /><div className="template-summary"><span>Template aktif</span><strong>boostPoinActive</strong><small>Berisi Oleh, Multiplier, Durasi, Channel, dan waktu berakhir.</small></div></Card>
+            <Card><CardHeader title="Embed saat selesai" description="Template boostPoinEnd tersedia di Embed Manager global." /><div className="template-summary"><span>Template akhir</span><strong>boostPoinEnd</strong><small>Dikirim otomatis saat durasi habis atau saat owner menekan Hentikan sekarang.</small></div></Card>
+          </> : null}
         </div>
       ) : null}
 
@@ -261,7 +384,7 @@ export function ManagePage() {
               {bindings.length ? bindings.map((binding, index) => (
                 <div className="target-picker-row" key={binding.key}>
                   <span className="target-number">{String(index + 1).padStart(2, "0")}</span>
-                  <DiscordPicker kind={binding.kind} label={binding.label} helper={binding.helper} items={picker[binding.kind] || []} value={targets[binding.key] || ""} onChange={(id) => updateTarget(binding.key, id)} loading={pickerLoading} required={binding.required} />
+                  <DiscordPicker kind={binding.kind} label={binding.label} helper={binding.helper} items={binding.kind === "channel" && binding.accept && binding.accept !== "any" ? (picker.channel || []).filter((channel) => binding.accept === "voice" ? String(channel.typeLabel || "").toLowerCase().includes("voice") || String(channel.typeLabel || "").toLowerCase().includes("stage") : !String(channel.typeLabel || "").toLowerCase().includes("voice") && !String(channel.typeLabel || "").toLowerCase().includes("stage") && !String(channel.typeLabel || "").toLowerCase().includes("category")) : picker[binding.kind] || []} value={targets[binding.key] || ""} onChange={(id) => updateTarget(binding.key, id)} loading={pickerLoading} required={binding.required} />
                 </div>
               )) : <div className="empty-state compact"><Layers3 size={24} /><strong>Tidak ada target yang perlu dipilih</strong><span>Fitur ini dapat langsung diedit melalui tab Embed & Preview.</span></div>}
             </div>

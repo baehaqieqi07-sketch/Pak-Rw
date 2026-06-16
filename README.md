@@ -1,21 +1,64 @@
-# Pak RW / DESA TULUS v10.10.65
+# Pak RW / DESA TULUS v10.10.66
 
-Versi final dashboard **Pak RW Control Center — Balai Warga Digital DESA TULUS**.
+Pak RW adalah bot dan Balai Warga Digital untuk server **DESA TULUS**. Versi ini menyelesaikan alur **Boost Poin Event** dan menyinkronkan ulang embed Level, Cek Poin, Top Aktif, Papan Aktif Lifetime, Juragan, serta footer DESA TULUS.
 
-Update ini berfokus pada perapihan dan penyelesaian dashboard web. Core bot Discord, command, level, poin, voice tracker, scheduler Top Aktif, Papan Aktif Lifetime, MOTM, MongoDB, serta data warga tidak dirombak.
+## Update v10.10.66
 
-## Perbaikan final
+### Boost Poin Event
 
-- Shell React/Vite baru dengan sidebar, topbar, Feature Center, Manage Page, dan responsive drawer.
-- Background perdesaan realistis yang sudah dioptimasi menjadi WebP.
-- Channel picker dan role picker searchable dengan nama Discord yang mudah dibaca; ID tetap disimpan internal.
-- Halaman Welcome memiliki pilihan jelas untuk channel Welcome, role Member Tulus, channel Aturan, Chat Warga, dan Ticket.
-- Embed Builder memiliki pilihan sisipkan placeholder/channel/role/user tanpa mengetik manual.
-- Mention aman: Content dan Description dapat memakai mention asli; Title, Author, dan Footer otomatis memakai nama biasa.
-- Preview Discord, validasi config, status koneksi, peringatan setup, toast, loading, dan save bar dirapikan.
-- Route dashboard lama dialihkan ke dashboard React baru agar tidak membuka UI lama yang berantakan.
-- UI dashboard tidak menggunakan emoji Unicode; icon memakai Lucide SVG.
-- Dashboard dapat dimatikan sepenuhnya dengan `DASHBOARD_ENABLED=false`.
+Halaman:
+
+```txt
+/dashboard/manage/boost-poin
+```
+
+Alur dashboard:
+
+1. Tentukan nama event.
+2. Isi multiplier, misalnya `x10`.
+3. Isi durasi dalam menit.
+4. Pilih mode Chat, Voice, atau Chat dan Voice.
+5. Pilih Channel Pengumuman, Channel Chat, Voice Channel, dan user pengaktif langsung dari data Discord.
+6. Pilih apakah event selesai otomatis dan apakah embed awal/akhir dikirim.
+7. Tekan **Mulai event dan kirim embed**.
+8. Saat durasi habis, multiplier kembali ke `x1` dan embed selesai dikirim. Owner juga dapat menekan **Hentikan sekarang**.
+
+Contoh perhitungan:
+
+```txt
+Poin dasar: 5
+Multiplier: x10
+Bonus event: 45
+Total masuk: 50 poin
+```
+
+Event hanya memengaruhi channel dan tipe aktivitas yang dipilih. Data level, poin lifetime, Top Aktif, Papan Aktif, dan MongoDB tidak direset.
+
+### Embed Discord
+
+Template yang diperbarui:
+
+- `levelUp`
+- `levelProfile`
+- `topActiveBoard`
+- `papanAktif`
+- `juragan`
+- `boostPoinActive`
+- `boostPoinEnd`
+
+Semua footer aktif memakai:
+
+```txt
+DESA TULUS • Nama Fitur
+```
+
+Dengan footer icon animasi Discord:
+
+```txt
+https://cdn.discordapp.com/emojis/1516424353934348299.gif
+```
+
+Custom emoji animasi di Title/Description ditampilkan sebagai GIF pada Discord dan pada live preview dashboard. User, role, dan channel dikirim sebagai mention Discord asli menggunakan ID yang dipilih dari dashboard.
 
 ## Menjalankan project
 
@@ -34,79 +77,50 @@ npm.cmd install
 npm.cmd run build
 ```
 
-## Environment dashboard
+## Environment
+
+Gunakan Variables Railway/hosting, jangan commit `.env`:
 
 ```env
+DISCORD_TOKEN=ISI_TOKEN_BOT_DISCORD
+CLIENT_ID=ISI_CLIENT_ID_BOT
+GUILD_ID=ISI_ID_SERVER_DESA_TULUS
+MONGODB_URI=ISI_MONGODB_URI_ATLAS
+OPENROUTER_API_KEY=ISI_OPENROUTER_API_KEY
+AI_KEY=ISI_OPENROUTER_API_KEY
 DASHBOARD_ENABLED=true
 DASHBOARD_PASSWORD=ISI_PASSWORD_DASHBOARD
+NODE_ENV=production
 PORT=3000
 OT_PORT=3000
 ```
 
-Discord picker membutuhkan:
-
-```env
-DISCORD_TOKEN=ISI_TOKEN_BOT_DISCORD
-GUILD_ID=ISI_ID_SERVER_DESA_TULUS
-```
-
-Dashboard menampilkan nama channel/role, tetapi config tetap menyimpan Discord ID.
-
-## Route utama
+Buka dashboard:
 
 ```txt
-/dashboard
-/dashboard/activity
-/dashboard/manage/welcome
-/dashboard/manage/ai
-/dashboard/manage/curhat
-/dashboard/manage/curhat-anonim
-/dashboard/manage/saran
-/dashboard/manage/level
-/dashboard/manage/cek-poin
-/dashboard/manage/top-aktif
-/dashboard/manage/papan-aktif
-/dashboard/manage/motm
-/dashboard/manage/donatur
-/dashboard/manage/juragan
-/dashboard/manage/mabar
-/dashboard/manage/boost-poin
-/dashboard/manage/embed
-/dashboard/channel-manager
-/dashboard/role-manager
-/dashboard/placeholder-center
-/dashboard/banner-manager
-/dashboard/command-center
-/dashboard/permission-center
-/dashboard/logs
-/dashboard/backup
-/dashboard/settings
+http://localhost:3000/dashboard
 ```
 
-## GitHub
+## Push GitHub
 
 ```powershell
 cd "D:\Pak Rw"
 git status
 git add .
-git commit -m "finish Pak RW dashboard v10.10.65"
+git commit -m "update Pak RW boost poin dan embed final v10.10.66"
 git push
 ```
 
-## Railway
-
-- Repository: `baehaqieqi07-sketch/Pak-Rw`
-- Branch: `main`
-- Root Directory: kosong
-- Start Command: `npm start`
-- Isi rahasia melalui Railway Variables, bukan file `.env` di GitHub.
-
-## DisCloud
-
-`discloud.config` tetap menggunakan `RAM=100` dan `START=npm start`.
-
 ## Keamanan data
 
-ZIP publik tidak menyertakan `.env`, `node_modules`, `data`, `logs`, `runtime-logs`, `backups`, atau rahasia. Jangan menghapus collection MongoDB lama karena dapat memutus data warga yang sudah ada.
+Jangan upload:
 
-Laporan lengkap tersedia di `DASHBOARD_FINAL_v10.10.65.md`.
+- `.env`
+- `node_modules`
+- `data`
+- `logs`
+- `runtime-logs`
+- `backups`
+- token/API key/password
+
+Update ini mempertahankan MongoDB, level, poin, lifetime point, voice, Top Aktif, Papan Aktif, MOTM, Donatur, Juragan, dan konfigurasi server yang sudah aktif.

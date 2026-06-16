@@ -20,7 +20,10 @@
     "boostChannelId": "1508899914946707456",
     "categoryName": "💎｜JURAGAN DESA",
     "aiChannelName": "🤖・pak-rw-juragan",
-    "autoSetupChannels": false
+    "autoSetupChannels": false,
+    "vipVoiceChannelId": "",
+    "chatChannelId": "",
+    "bonusPercent": 15
   },
   "welcome": {
     "enabled": true,
@@ -205,42 +208,69 @@
   "donaturMinimumAmount": 100000,
   "embeds": {
     "juragan": {
-      "color": "#FF4FD8",
-      "title": "<a:Boost:1512485430887714866> JURAGAN DESA TULUS AKTIF <a:Boost:1512485430887714866>",
-      "description": "Terima kasih sudah mendukung DESA TULUS, {user}.\n\nRole <@&1508912271852572733> sekarang aktif untuk kamu. Berikut benefit yang bisa digunakan:\n\n• Mendapatkan role <@&1508912271852572733>\n• Display role di daftar member\n• Bonus ekstra poin +15%\n• Akses fitur Soundboard\n• Akses voice channel VIP <#1512435808194400347>\n\nGunakan benefit dengan sopan dan tetap jaga suasana warga.",
+      "color": "#D7A84F",
+      "title": "<a:Boost:1512485430887714866> SELAMAT DATANG JURAGAN! <a:Boost:1512485430887714866>",
+      "description": "Terima kasih sudah mendukung server ini {user}.\nSekarang kamu dapat menikmati benefit dari role {juraganRole}.\n\n**Benefit utama:**\n\n• Mendapatkan role {juraganRole}\n• Display role di member list\n• Bonus ekstra poin +{bonusPercent}%\n• Akses ke fitur Soundboard\n• Akses ke voice channel VIP {vipVoiceChannel}\n• Akses text channel khusus donatur {juraganChatChannel}\n\nGunakan benefit dengan sopan dan tetap jaga suasana warga.",
       "footer": "DESA TULUS • Juragan Desa",
-      "content": "<a:Boost:1512485430887714866> {user} resmi menjadi **Juragan Desa**.",
+      "content": "<a:Boost:1512485430887714866> {user} resmi menjadi Juragan Desa di DESA TULUS.",
       "thumbnail": "avatar",
       "image": "",
-      "footerIcon": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
+      "footerIcon": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless",
+      "authorName": "DESA TULUS • Juragan Desa",
+      "fields": [],
+      "dashboardGroup": "Membership",
+      "dashboardEditable": true,
+      "previewMustMatchDiscord": true
     },
     "levelUp": {
-      "color": "#2ECC71",
-      "title": "<a:rocket_animated:1512884173453529288> WARGA NAIK LEVEL!",
-      "description": "Sekarang menjadi **{rank} (Lvl. {level})** 🔥",
-      "footer": "DESA TULUS • Gunakan rwcekpoin untuk melihat level",
-      "footerIcon": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
+      "color": "#7DBD77",
+      "title": "<a:rocket_animated:1512884173453529288> Warga Naik Level",
+      "description": "{user} naik menjadi **{rank} — Level {level}**.\n\nTotal poin aktif: **{total} poin**. Tetap rukun dan aktif di desa.",
+      "footer": "DESA TULUS • Level Warga",
+      "footerIcon": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless",
+      "content": "🆙 Selamat {user} berhasil naik level!",
+      "authorName": "",
+      "fields": [
+        {
+          "name": "📈 Menuju Level {nextLevel} ({nextRank})",
+          "value": "Butuh:\n**{remainingPoints} poin total lagi**\nChat: **{chat} poin**\nVoice: **{voice} poin**",
+          "inline": false
+        }
+      ],
+      "thumbnail": "avatar",
+      "image": "",
+      "dashboardGroup": "Level & Poin",
+      "dashboardEditable": true,
+      "previewMustMatchDiscord": true
     },
     "levelProfile": {
-      "color": "#22D3EE",
-      "title": "📊 Level Warga",
-      "description": "{user}",
-      "footer": "DESA TULUS • Level Warga",
-      "footerIcon": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
+      "color": "#7DBD77",
+      "title": "<a:loading:1490575251405406299> Data Keaktifan Warga",
+      "description": "{user}\n\n💬 **Chat**\nLevel: **{chatLevel}**\nPoin: **{chat}**\nNaik Lv.{nextChatLevel}: **{chatRemaining} poin lagi**\n{chatProgress} **{chatPercent}%**\n\n🎙️ **Voice**\nLevel: **{voiceLevel}**\nPoin: **{voice}**\nNaik Lv.{nextVoiceLevel}: **{voiceRemaining} poin lagi**\n{voiceProgress} **{voicePercent}%**\n\n⭐ **Total Level:** {rank} (Lvl. {level})\nTotal Poin: **{total}**",
+      "footer": "DESA TULUS • Cek Poin",
+      "footerIcon": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless",
+      "content": "{user}",
+      "authorName": "",
+      "fields": [],
+      "thumbnail": "avatar",
+      "image": "",
+      "dashboardGroup": "Level & Poin",
+      "dashboardEditable": true,
+      "previewMustMatchDiscord": true
     },
     "donatur": {
       "color": "#2F6BFF",
       "title": "💎 Akses Donatur Desa",
       "description": "Halo {user}, ini menu khusus untuk role **Donatur DESA TULUS** 🤍\n\nStatus role kamu: **Aktif**\n{expiredText}\n\nTerima kasih sudah membantu menjaga DESA TULUS tetap hidup, rapi, dan nyaman untuk warga.",
       "footer": "DESA TULUS • Donatur Desa",
-      "footerIcon": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
+      "footerIcon": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
     },
     "anonimPanel": {
       "color": "#FFFFFF",
       "title": "☁️ Curhat Anonim ke Pak RW",
       "description": "Ada hal yang ingin kamu ceritakan tanpa menampilkan identitas?\n\nKlik tombol **☁️ Curhat ke Pak RW** di bawah. Curhatan kamu dikirim anonim, lalu Pak RW akan membantu mendengarkan dengan sopan, aman, dan tidak menghakimi 🤍",
       "footer": "DESA TULUS • Curhat Anonim Pak RW",
-      "footerIcon": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
+      "footerIcon": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
     },
     "dashboard": {
       "brandTitle": "Pak RW v10.10.63",
@@ -317,7 +347,7 @@
       "title": "🏆 MEMBER OF THE MONTH DESA TULUS",
       "description": "{user} resmi menjadi **Member Of The Month** bulan ini.\n\n⭐ Total Poin Bulan Ini: **{total}** poin\n💬 Top Chat: **{chat}** poin\n🎙️ Top Voice: **{voice}** poin\n\nTerima kasih sudah aktif dan ikut menghidupkan server **{server}** 🤍",
       "footer": "DESA TULUS • Member Of The Month",
-      "footerIcon": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
+      "footerIcon": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
     },
     "suggestionResult": {
       "color": "#FFFFFF",
@@ -327,7 +357,7 @@
       "image": "",
       "thumbnail": "avatar",
       "content": "",
-      "footerIcon": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
+      "footerIcon": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
     },
     "curhatReply": {
       "color": "#FFFFFF",
@@ -337,17 +367,21 @@
       "image": "",
       "thumbnail": "avatar",
       "content": "",
-      "footerIcon": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
+      "footerIcon": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
     },
     "topActiveBoard": {
-      "color": "#F5C542",
+      "color": "#E2B456",
       "title": "🏆 TOP AKTIF WARGA BULAN {month} {server}",
       "description": "Update otomatis setiap hari pukul 00.00 WIB",
-      "footer": "DESA TULUS • Gunakan perintah rapihin untuk melihat poin top aktifnya",
+      "footer": "DESA TULUS • Gunakan perintah rwcekpoin untuk melihat poin warga",
       "image": "",
       "thumbnail": "",
       "content": "",
-      "footerIcon": "https://cdn.discordapp.com/emojis/1513686597584031804.gif?size=44&quality=lossless"
+      "footerIcon": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless",
+      "authorName": "DESA TULUS • Papan peringkat warga aktif",
+      "dashboardGroup": "Leaderboard",
+      "dashboardEditable": true,
+      "previewMustMatchDiscord": true
     },
     "cariMabar": {
       "color": "#5865F2",
@@ -373,7 +407,7 @@
       "image": "",
       "thumbnail": "avatar",
       "footer": "DESA TULUS • Mabar Warga",
-      "footerIcon": "",
+      "footerIcon": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless",
       "timestamp": true,
       "destinationChannelId": "1504495053400441081"
     },
@@ -387,7 +421,7 @@
       "thumbnail": "avatar",
       "image": "",
       "footer": "DESA TULUS • Tempat warga baik berkumpul",
-      "footerIcon": "",
+      "footerIcon": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless",
       "fields": [],
       "dashboardGroup": "Welcome Warga",
       "dashboardEditable": true,
@@ -396,43 +430,43 @@
     "papanAktif": {
       "color": "#D7A84F",
       "content": "",
-      "authorName": "DESA TULUS • Papan Aktif Lifetime",
+      "authorName": "",
       "title": "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU",
-      "description": "Peringkat keaktifan warga berdasarkan lifetime point. Data ini tidak reset walaupun poin/level siklus reset setelah MOTM.",
+      "description": "Papan ini mencatat total poin warga dari awal bergabung sampai seterusnya. Data ini tidak di-reset meskipun siklus level kembali dari awal setelah 100.000 poin.\n\nAlur jelas: poin chat/voice masuk ke siklus level. Saat warga mencapai 100.000 poin, Pak RW memberi role Member Of The Month, lalu poin siklus level kembali dari awal. Poin di Papan Aktif ini tetap lanjut dan tidak di-reset.",
       "thumbnail": "",
       "image": "",
-      "footer": "DESA TULUS • Lifetime leaderboard",
-      "footerIcon": "",
+      "footer": "DESA TULUS • Leaderboard Aktif Warga",
+      "footerIcon": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless",
       "fields": [],
       "dashboardGroup": "Leaderboard",
       "dashboardEditable": true,
       "previewMustMatchDiscord": true
     },
     "boostPoinActive": {
-      "color": "#7DBD77",
-      "content": "⚡ Boost Poin aktif di DESA TULUS.",
+      "color": "#34D399",
+      "content": "",
       "authorName": "DESA TULUS • Boost Poin",
-      "title": "⚡ Boost Poin Aktif: {eventName}",
-      "description": "Multiplier: **{multiplier}**\nDurasi: **{duration}**\nChannel: {channels}\nBerakhir: **{endsAt}**\n\nTetap aktif dengan sopan, jangan spam, dan jaga suasana desa.",
+      "title": "<a:Boost:1512485430887714866> BOOST POIN DIAKTIFKAN",
+      "description": "Boost poin dimulai:\n\n👤 Oleh: {by}\n💥 Multiplier: {multiplier}\n⏱️ Durasi: {duration} menit\n📍 Channel: {channels}\n🕒 Berakhir: {endsAt}",
       "thumbnail": "",
       "image": "",
-      "footer": "DESA TULUS • Event warga aktif",
-      "footerIcon": "",
+      "footer": "DESA TULUS • Boost Poin",
+      "footerIcon": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless",
       "fields": [],
       "dashboardGroup": "Boost Poin",
       "dashboardEditable": true,
       "previewMustMatchDiscord": true
     },
     "boostPoinEnd": {
-      "color": "#7DBD77",
-      "content": "Boost Poin DESA TULUS sudah berakhir.",
+      "color": "#FF5C7A",
+      "content": "",
       "authorName": "DESA TULUS • Boost Poin",
-      "title": "⚡ Boost Poin Berakhir: {eventName}",
-      "description": "Event **{eventName}** sudah selesai. Terima kasih warga yang sudah aktif dengan tertib.",
+      "title": "<a:Boost:1512485430887714866> BOOST POIN BERAKHIR",
+      "description": "Boost poin untuk channel {channels} telah selesai.\n\n🔄 Status: Kembali ke normal (x1)",
       "thumbnail": "",
       "image": "",
-      "footer": "DESA TULUS • Boost selesai",
-      "footerIcon": "",
+      "footer": "DESA TULUS • Boost Poin",
+      "footerIcon": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless",
       "fields": [],
       "dashboardGroup": "Boost Poin",
       "dashboardEditable": true,
@@ -447,7 +481,7 @@
       "thumbnail": "",
       "image": "",
       "footer": "DESA TULUS • AI hemat OpenRouter",
-      "footerIcon": "",
+      "footerIcon": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless",
       "fields": [],
       "dashboardGroup": "AI Pak RW",
       "dashboardEditable": true,
@@ -593,7 +627,7 @@
     "showFeatureFlow": true,
     "showAiStylePanel": true,
     "releaseVersion": "10.10.63",
-    "releaseName": "Live Discord Channel & Role Picker",
+    "releaseName": "Final Boost Event & Embed Sync",
     "premiumMode": true,
     "comfortMode": true,
     "quickActionMode": "manage_edit_preview_save_test_backup",
@@ -618,7 +652,7 @@
     "placeholderSelectionMode": "channel_role_user_server_bot_live_from_discord",
     "discordPickerMode": "live_api",
     "discordPickerAutoRefresh": true,
-    "uiVersion": "10.10.65",
+    "uiVersion": "10.10.66",
     "architecture": "react_vite_static_dashboard_only"
   },
   "featureFlow": {
@@ -946,7 +980,7 @@
     "eventId": "boost-event-1",
     "eventName": "Boost Poin DESA TULUS",
     "eventMode": "chat_voice",
-    "boostPercent": 5,
+    "boostPercent": 900,
     "channelId": "ISI_ID_CHANNEL_BOOST_POIN",
     "channelName": "⚡・boost-poin",
     "chatChannelIds": [],
@@ -956,19 +990,31 @@
     "autoRegisterParticipants": true,
     "sendNotice": false,
     "logToConsole": true,
-    "announcementTitle": "⚡ BOOST POIN DIAKTIFKAN",
-    "announcementDescription": "Boost poin diperbarui:\n\n👤 Oleh: {by}\n💥 Multiplier: {multiplier}\n⏱️ Durasi: {duration} menit\n📍 Channel: {channels}\n🕒 Berakhir: {endsAt}",
+    "announcementTitle": "<a:Boost:1512485430887714866> BOOST POIN DIAKTIFKAN",
+    "announcementDescription": "Boost poin dimulai:\n\n👤 Oleh: {by}\n💥 Multiplier: {multiplier}\n⏱️ Durasi: {duration} menit\n📍 Channel: {channels}\n🕒 Berakhir: {endsAt}",
     "mentionText": "",
     "roleMentionIds": [],
-    "endTitle": "⚠️ BOOST POIN BERAKHIR",
-    "endDescription": "Boost poin telah selesai.\n\n🔄 Status: Kembali ke normal (x1)",
-    "announcementColor": "#F5C542",
+    "endTitle": "<a:Boost:1512485430887714866> BOOST POIN BERAKHIR",
+    "endDescription": "Boost poin untuk channel {channels} telah selesai.\n\n🔄 Status: Kembali ke normal (x1)",
+    "announcementColor": "#34D399",
     "endColor": "#FF5C7A",
-    "showJoinButton": true,
-    "joinButtonLabel": "Join Event",
+    "showJoinButton": false,
+    "joinButtonLabel": "Buka Channel Event",
     "durationMinutes": 60,
     "eventByText": "@Pak RW",
-    "eventByUserId": ""
+    "eventByUserId": "",
+    "multiplier": 10,
+    "chatChannelId": "",
+    "voiceChannelId": "",
+    "startedAt": 0,
+    "endsAt": 0,
+    "lastStartedAt": 0,
+    "lastEndedAt": 0,
+    "lastEndReason": "",
+    "status": "standby",
+    "autoEndEnabled": true,
+    "announceOnStart": true,
+    "announceOnEnd": true
   },
   "botName": "Pak RW",
   "botRole": "Pak RW DESA TULUS",
@@ -1033,7 +1079,7 @@
       "Discord Manager"
     ]
   },
-  "version": "10.10.65",
+  "version": "10.10.66",
   "bigBot": {
     "releaseName": "Pak RW AI Natural + Welcome Mention v10.10.59"
   },
@@ -1191,7 +1237,7 @@
     "enabled": true,
     "channelId": "ISI_ID_CHANNEL_LEADERBOARD_AKTIF",
     "title": "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU",
-    "description": "Leaderboard lifetime DESA TULUS. Tidak reset walaupun poin siklus level/MOTM reset.",
+    "description": "Papan ini mencatat total poin warga dari awal bergabung sampai seterusnya. Data ini tidak di-reset meskipun siklus level kembali dari awal setelah 100.000 poin.",
     "topLimit": 10,
     "autoPost": true,
     "autoPostHourWIB": 0,
@@ -1203,7 +1249,7 @@
     "enabled": true,
     "channelId": "ISI_ID_CHANNEL_LEADERBOARD_AKTIF",
     "title": "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU",
-    "description": "Leaderboard lifetime DESA TULUS. Tidak reset walaupun poin siklus level/MOTM reset.",
+    "description": "Papan ini mencatat total poin warga dari awal bergabung sampai seterusnya. Data ini tidak di-reset meskipun siklus level kembali dari awal setelah 100.000 poin.",
     "topLimit": 10,
     "autoPost": true,
     "autoPostHourWIB": 0,

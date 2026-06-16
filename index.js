@@ -160,8 +160,8 @@ function escapeHtml(input = "") {
 
 // Discord tidak merender custom animated emoji jika ditulis sebagai teks di embed footer.
 // Solusi aman: footer text tetap rapi, emoji DESA TULUS dipasang sebagai footer icon dari CDN emoji Discord.
-const OT_FOOTER_EMOJI = "<a:desatulus:1513686597584031804>";
-const OT_FOOTER_EMOJI_ID = "1513686597584031804";
+const OT_FOOTER_EMOJI = "<a:Desa_Tulus:1516424353934348299>";
+const OT_FOOTER_EMOJI_ID = "1516424353934348299";
 const OT_FOOTER_ICON_URL = `https://cdn.discordapp.com/emojis/${OT_FOOTER_EMOJI_ID}.gif?size=44&quality=lossless`;
 const OT_FOOTER_PREFIX = "DESA TULUS";
 
@@ -10912,7 +10912,7 @@ function savePakRwGlobalEmbedManager(req) {
 /* =================== END PAK RW FULL PREMIUM DASHBOARD REBUILD v10.10.63 =================== */
 
 
-/* =================== PAK RW DASHBOARD-ONLY REBUILD v10.10.65 =================== */
+/* =================== PAK RW DASHBOARD-ONLY REBUILD v10.10.66 =================== */
 const pakRwDashboardDist = path.join(__dirname, "dashboard", "dist");
 const pakRwDashboardIndex = path.join(pakRwDashboardDist, "index.html");
 
@@ -11051,7 +11051,7 @@ app.get("/api/dashboard/bootstrap", requireDashboardAuth, (req, res) => {
       dashboardEnabled: isDashboardEnabled,
       activeFeatureCount: featureCount.active,
       totalFeatureCount: featureCount.total,
-      version: String(cfg.version || "10.10.65"),
+      version: String(cfg.version || "10.10.66"),
       prefix: String(cfg.prefix || "rw"),
       environment: String(process.env.NODE_ENV || "development")
     },
@@ -11073,7 +11073,7 @@ app.put("/api/dashboard/settings", requireDashboardAuth, (req, res) => {
       if (!isSafeDashboardPath(pathText)) return res.status(400).json({ ok: false, error: `Path config tidak diizinkan: ${pathText}` });
       setDashboardPath(cfg, pathText, patch.value);
     }
-    cfg.version = "10.10.65";
+    cfg.version = "10.10.66";
     writeConfigFile(cfg);
     appendDashboardActivity("settings", "Setting dashboard disimpan", `${patches.length} field diperbarui melalui adapter aman.`);
     return res.json({ ok: true, config: cfg });
@@ -11089,7 +11089,7 @@ app.put("/api/dashboard/embed/:key", requireDashboardAuth, (req, res) => {
     const cfg = readConfigFile();
     cfg.embeds = cfg.embeds || {};
     cfg.embeds[key] = mergeDashboardEmbed(cfg.embeds[key] || {}, req.body?.embed || {});
-    cfg.version = "10.10.65";
+    cfg.version = "10.10.66";
     writeConfigFile(cfg);
     appendDashboardActivity("embed", "Template embed disimpan", `Template ${key} diperbarui dari Embed Builder.`);
     return res.json({ ok: true, embed: cfg.embeds[key] });
@@ -11140,7 +11140,42 @@ app.get("/api/dashboard/health", requireDashboardAuth, (req, res) => {
     uptimeSeconds: Math.floor(process.uptime())
   });
 });
-/* ================= END PAK RW DASHBOARD-ONLY REBUILD v10.10.65 ================= */
+
+app.get("/api/dashboard/boost-poin/status", requireDashboardAuth, (req, res) => {
+  const cfg = getBoostPoinConfig();
+  res.set("Cache-Control", "no-store");
+  return res.json({
+    ok: true,
+    event: cfg,
+    remainingMs: cfg.eventActive && cfg.endsAt ? Math.max(0, cfg.endsAt - Date.now()) : 0
+  });
+});
+
+app.post("/api/dashboard/boost-poin/start", requireDashboardAuth, async (req, res) => {
+  try {
+    if (!client.isReady()) return res.status(503).json({ ok: false, error: "Bot Pak RW belum online di Discord." });
+    const guild = getDashboardGuild ? getDashboardGuild() : client.guilds.cache.first();
+    if (!guild) return res.status(503).json({ ok: false, error: "Server DESA TULUS belum terbaca." });
+    const result = await startBoostPoinEvent(guild, { actorUserId: req.body?.actorUserId || "" });
+    return res.status(result.ok ? 200 : 502).json(result);
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message || String(err) });
+  }
+});
+
+app.post("/api/dashboard/boost-poin/stop", requireDashboardAuth, async (req, res) => {
+  try {
+    if (!client.isReady()) return res.status(503).json({ ok: false, error: "Bot Pak RW belum online di Discord." });
+    const guild = getDashboardGuild ? getDashboardGuild() : client.guilds.cache.first();
+    if (!guild) return res.status(503).json({ ok: false, error: "Server DESA TULUS belum terbaca." });
+    const result = await stopBoostPoinEvent(guild, { reason: "manual", sendAnnouncement: true });
+    return res.status(result.ok ? 200 : 502).json(result);
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message || String(err) });
+  }
+});
+
+/* ================= END PAK RW DASHBOARD-ONLY REBUILD v10.10.66 ================= */
 
 
 app.get("/motm-banner.svg", (req, res) => {
@@ -12194,7 +12229,7 @@ function renderBoostPoinDashboard(req, saved = false, error = "", notice = "") {
             ${guild ? `<div class="easy-field">${selectField("voiceChannelPrimary", "Voice Channel Event", channelOptions(guild, voiceIds[0] || "", "voice"), "Pilih voice event")}<small>Member harus voice di channel ini supaya dapat bonus.</small></div>` : ""}
           </div>
 
-          <div class="easy-field"><label>Judul Panel Manual</label><input name="announcementTitle" value="${escapeHtml(applyBoostPoinTemplate(boost.announcementTitle || "⚡ BOOST POIN DIAKTIFKAN", guild))}"><small>Bisa kamu tulis bebas. Contoh: ⚡ BOOST POIN DIAKTIFKAN</small></div>
+          <div class="easy-field"><label>Judul Panel Manual</label><input name="announcementTitle" value="${escapeHtml(applyBoostPoinTemplate(boost.announcementTitle || "<a:Boost:1512485430887714866> BOOST POIN DIAKTIFKAN", guild))}"><small>Bisa kamu tulis bebas. Contoh: ⚡ BOOST POIN DIAKTIFKAN</small></div>
           <div class="easy-field"><label>Teks Panel Manual</label><textarea name="announcementDescription" style="min-height:210px">${escapeHtml(boost.announcementDescription || "Boost poin {multiplier} khusus event **{eventName}**.\n\nLets go yang mau ngejar poin keaktifan buat jadi **Member Of The Month** 🏆\n\nChannel event:\n{channels}")}</textarea><small>Boleh pakai {multiplier}, {eventName}, {channels}, {server}. Ini teks yang muncul di embed.</small></div>
           <div class="easy-field"><label>Mention / Teks atas embed (opsional)</label><textarea name="mentionText" style="min-height:82px">${escapeHtml(boost.mentionText || "")}</textarea><small>Boleh kosong supaya tidak spam. Isi role mention kalau mau, contoh: &lt;@&ROLE_ID&gt;</small></div>
 
@@ -12214,7 +12249,7 @@ function renderBoostPoinDashboard(req, saved = false, error = "", notice = "") {
               <div class="easy-field"><label>All Chat Channel</label><select name="includeAllChatChannels"><option value="off" ${boost.includeAllChatChannels !== true ? "selected" : ""}>Tidak</option><option value="on" ${boost.includeAllChatChannels === true ? "selected" : ""}>Ya</option></select></div>
               <div class="easy-field"><label>All Voice Channel</label><select name="includeAllVoiceChannels"><option value="off" ${boost.includeAllVoiceChannels !== true ? "selected" : ""}>Tidak</option><option value="on" ${boost.includeAllVoiceChannels === true ? "selected" : ""}>Ya</option></select></div>
             </div>
-            <div class="easy-field"><label>Panel Berakhir</label><input name="endTitle" value="${escapeHtml(boost.endTitle || "⚠️ BOOST POIN BERAKHIR")}"><textarea name="endDescription" style="min-height:100px;margin-top:10px">${escapeHtml(boost.endDescription || "Boost poin telah selesai.\n\n🔄 Status: Kembali ke normal (x1)")}</textarea></div>
+            <div class="easy-field"><label>Panel Berakhir</label><input name="endTitle" value="${escapeHtml(boost.endTitle || "<a:Boost:1512485430887714866> BOOST POIN BERAKHIR")}"><textarea name="endDescription" style="min-height:100px;margin-top:10px">${escapeHtml(boost.endDescription || "Boost poin telah selesai.\n\n🔄 Status: Kembali ke normal (x1)")}</textarea></div>
             <input type="hidden" name="channelName" value="${escapeHtml(boost.channelName || "⚡・boost-poin")}">
             <textarea name="roleMentionIds" style="display:none">${escapeHtml(idListText(Array.isArray(boost.roleMentionIds) ? boost.roleMentionIds : []))}</textarea>
           </details>
@@ -12273,14 +12308,17 @@ function saveBoostPoinDashboardConfigFromBody(body = {}) {
   cfg.boostPoin.eventName = String(body.eventName || cfg.boostPoin.eventName || "Boost Poin DESA TULUS").trim();
   cfg.boostPoin.eventId = String(body.eventId || cfg.boostPoin.eventId || getJakartaMonthKey(new Date()).replace("-", "") + "-boost").trim();
   cfg.boostPoin.eventMode = ["chat", "voice", "chat_voice"].includes(body.eventMode) ? body.eventMode : "chat_voice";
-  cfg.boostPoin.boostPercent = Math.max(0, Number(body.boostPercent || 5));
+  cfg.boostPoin.multiplier = Math.max(1, Math.min(100, Number(body.multiplier || cfg.boostPoin.multiplier || (1 + Number(body.boostPercent || cfg.boostPoin.boostPercent || 5) / 100))));
+  cfg.boostPoin.boostPercent = Number(((cfg.boostPoin.multiplier - 1) * 100).toFixed(4));
   cfg.boostPoin.durationMinutes = Math.max(1, Number(body.durationMinutes || cfg.boostPoin.durationMinutes || 60));
   cfg.boostPoin.eventByText = String(body.eventByText || cfg.boostPoin.eventByText || cfg.boostPoin.eventBy || config.ownerName || "PAK RW").trim();
   cfg.boostPoin.eventByUserId = parseDiscordId(body.eventByText || cfg.boostPoin.eventByUserId || "");
   cfg.boostPoin.channelId = parseDiscordId(body.channelId || cfg.boostPoin.channelId || "");
   cfg.boostPoin.channelName = String(body.channelName || cfg.boostPoin.channelName || "⚡・boost-poin").trim();
   cfg.boostPoin.chatChannelIds = [...new Set(chatIds.filter(Boolean))];
+  cfg.boostPoin.chatChannelId = cfg.boostPoin.chatChannelIds[0] || "";
   cfg.boostPoin.voiceChannelIds = [...new Set(voiceIds.filter(Boolean))];
+  cfg.boostPoin.voiceChannelId = cfg.boostPoin.voiceChannelIds[0] || "";
   cfg.boostPoin.includeAllChatChannels = body.includeAllChatChannels === "on";
   cfg.boostPoin.includeAllVoiceChannels = body.includeAllVoiceChannels === "on";
   cfg.boostPoin.autoRegisterParticipants = true;
@@ -12290,7 +12328,7 @@ function saveBoostPoinDashboardConfigFromBody(body = {}) {
   cfg.boostPoin.announcementDescription = String(body.announcementDescription || cfg.boostPoin.announcementDescription || "Boost poin {multiplier} khusus event **{eventName}**.\n\nChannel event:\n{channels}").trim();
   cfg.boostPoin.mentionText = String(body.mentionText || cfg.boostPoin.mentionText || "").trim();
   cfg.boostPoin.roleMentionIds = csvIds(body.roleMentionIds);
-  cfg.boostPoin.endTitle = String(body.endTitle || cfg.boostPoin.endTitle || "⚠️ BOOST POIN BERAKHIR").trim();
+  cfg.boostPoin.endTitle = String(body.endTitle || cfg.boostPoin.endTitle || "<a:Boost:1512485430887714866> BOOST POIN BERAKHIR").trim();
   cfg.boostPoin.endDescription = String(body.endDescription || cfg.boostPoin.endDescription || "Boost poin telah selesai.\n\n🔄 Status: Kembali ke normal (x1)").trim();
   cfg.boostPoin.showJoinButton = body.showJoinButton !== "off";
   cfg.boostPoin.joinButtonLabel = String(body.joinButtonLabel || cfg.boostPoin.joinButtonLabel || "Join Event").trim();
@@ -12338,14 +12376,17 @@ app.post("/boost-poin", requireDashboardAuth, async (req, res) => {
     cfg.boostPoin.eventName = String(req.body.eventName || cfg.boostPoin.eventName || "Boost Poin DESA TULUS").trim();
     cfg.boostPoin.eventId = String(req.body.eventId || cfg.boostPoin.eventId || getJakartaMonthKey(new Date()).replace("-", "") + "-boost").trim();
     cfg.boostPoin.eventMode = ["chat", "voice", "chat_voice"].includes(req.body.eventMode) ? req.body.eventMode : "chat_voice";
-    cfg.boostPoin.boostPercent = Math.max(0, Number(req.body.boostPercent || 5));
+    cfg.boostPoin.multiplier = Math.max(1, Math.min(100, Number(req.body.multiplier || cfg.boostPoin.multiplier || (1 + Number(req.body.boostPercent || cfg.boostPoin.boostPercent || 5) / 100))));
+    cfg.boostPoin.boostPercent = Number(((cfg.boostPoin.multiplier - 1) * 100).toFixed(4));
     cfg.boostPoin.durationMinutes = Math.max(1, Number(req.body.durationMinutes || cfg.boostPoin.durationMinutes || 60));
     cfg.boostPoin.eventByText = String(req.body.eventByText || cfg.boostPoin.eventByText || cfg.boostPoin.eventBy || config.ownerName || "PAK RW").trim();
     cfg.boostPoin.eventByUserId = parseDiscordId(req.body.eventByText || cfg.boostPoin.eventByUserId || "");
     cfg.boostPoin.channelId = parseDiscordId(req.body.channelId || cfg.boostPoin.channelId || "");
     cfg.boostPoin.channelName = String(req.body.channelName || cfg.boostPoin.channelName || "⚡・boost-poin").trim();
     cfg.boostPoin.chatChannelIds = [...new Set(chatIds.filter(Boolean))];
+    cfg.boostPoin.chatChannelId = cfg.boostPoin.chatChannelIds[0] || "";
     cfg.boostPoin.voiceChannelIds = [...new Set(voiceIds.filter(Boolean))];
+    cfg.boostPoin.voiceChannelId = cfg.boostPoin.voiceChannelIds[0] || "";
     cfg.boostPoin.includeAllChatChannels = req.body.includeAllChatChannels === "on";
     cfg.boostPoin.includeAllVoiceChannels = req.body.includeAllVoiceChannels === "on";
     cfg.boostPoin.autoRegisterParticipants = true;
@@ -12355,7 +12396,7 @@ app.post("/boost-poin", requireDashboardAuth, async (req, res) => {
     cfg.boostPoin.announcementDescription = String(req.body.announcementDescription || cfg.boostPoin.announcementDescription || "Boost poin {multiplier} khusus event **{eventName}**.\n\nLets go yang mau ngejar poin keaktifan buat jadi **Member Of The Month** 🏆").trim();
     cfg.boostPoin.mentionText = String(req.body.mentionText || cfg.boostPoin.mentionText || "").trim();
     cfg.boostPoin.roleMentionIds = csvIds(req.body.roleMentionIds);
-    cfg.boostPoin.endTitle = String(req.body.endTitle || cfg.boostPoin.endTitle || "⚠️ BOOST POIN BERAKHIR").trim();
+    cfg.boostPoin.endTitle = String(req.body.endTitle || cfg.boostPoin.endTitle || "<a:Boost:1512485430887714866> BOOST POIN BERAKHIR").trim();
     cfg.boostPoin.endDescription = String(req.body.endDescription || cfg.boostPoin.endDescription || "Boost poin telah selesai.\n\n🔄 Status: Kembali ke normal (x1)").trim();
     cfg.boostPoin.showJoinButton = req.body.showJoinButton !== "off";
     cfg.boostPoin.joinButtonLabel = String(req.body.joinButtonLabel || cfg.boostPoin.joinButtonLabel || "Join Event").trim();
@@ -13638,27 +13679,45 @@ function calculateLevelBonus(member, baseAmount) {
 function getBoostPoinConfig() {
   const raw = config.boostPoin || {};
   const channelId = parseDiscordId(raw.channelId || "");
-  const chatChannelIds = Array.isArray(raw.chatChannelIds) ? raw.chatChannelIds.map(parseDiscordId).filter(Boolean) : [];
-  const voiceChannelIds = Array.isArray(raw.voiceChannelIds) ? raw.voiceChannelIds.map(parseDiscordId).filter(Boolean) : [];
+  const primaryChatId = parseDiscordId(raw.chatChannelId || "");
+  const primaryVoiceId = parseDiscordId(raw.voiceChannelId || "");
+  const chatChannelIds = [
+    primaryChatId,
+    ...(Array.isArray(raw.chatChannelIds) ? raw.chatChannelIds.map(parseDiscordId) : [])
+  ].filter(Boolean);
+  const voiceChannelIds = [
+    primaryVoiceId,
+    ...(Array.isArray(raw.voiceChannelIds) ? raw.voiceChannelIds.map(parseDiscordId) : [])
+  ].filter(Boolean);
+  const legacyPercent = Math.max(0, Number(raw.boostPercent ?? 5));
+  const multiplier = Math.max(1, Math.min(100, Number(raw.multiplier ?? (1 + legacyPercent / 100)) || 1));
+  const boostPercent = Number(((multiplier - 1) * 100).toFixed(4));
   return {
     enabled: raw.enabled !== false,
     eventActive: raw.eventActive === true,
     eventId: String(raw.eventId || getJakartaMonthKey(new Date()).replace("-", "") + "-boost").trim(),
     eventName: String(raw.eventName || "Boost Poin DESA TULUS").trim(),
-    eventMode: String(raw.eventMode || "chat_voice").trim(),
-    boostPercent: Math.max(0, Number(raw.boostPercent ?? 5)),
+    eventMode: ["chat", "voice", "chat_voice"].includes(raw.eventMode) ? raw.eventMode : "chat_voice",
+    multiplier,
+    boostPercent,
     durationMinutes: Math.max(1, Number(raw.durationMinutes || 60)),
-    eventByText: String(raw.eventByText || raw.eventBy || config.ownerName || "PAK RW").trim(),
+    startedAt: Math.max(0, Number(raw.startedAt || 0)),
+    endsAt: Math.max(0, Number(raw.endsAt || 0)),
+    eventByText: String(raw.eventByText || raw.eventBy || config.ownerName || "Pak RW").trim(),
     eventByUserId: parseDiscordId(raw.eventByUserId || ""),
     channelId,
-    channelName: String(raw.channelName || "⚡・boost-poin").trim(),
-    chatChannelIds: chatChannelIds.length ? chatChannelIds : (channelId ? [channelId] : []),
-    voiceChannelIds,
+    channelName: String(raw.channelName || "boost-poin").trim(),
+    chatChannelIds: [...new Set(chatChannelIds.length ? chatChannelIds : (channelId ? [channelId] : []))],
+    voiceChannelIds: [...new Set(voiceChannelIds)],
     includeAllChatChannels: raw.includeAllChatChannels === true,
     includeAllVoiceChannels: raw.includeAllVoiceChannels === true,
     autoRegisterParticipants: raw.autoRegisterParticipants !== false,
+    autoEndEnabled: raw.autoEndEnabled !== false,
+    announceOnStart: raw.announceOnStart !== false,
+    announceOnEnd: raw.announceOnEnd !== false,
     logToConsole: raw.logToConsole !== false,
-    sendNotice: raw.sendNotice === true
+    sendNotice: raw.sendNotice === true,
+    status: raw.eventActive === true ? "Aktif" : "Nonaktif"
   };
 }
 
@@ -13748,26 +13807,21 @@ function registerBoostPoinParticipant(member, type, sourceChannelId, baseAmount,
 function getBoostPoinBonusInfo(member, type, baseAmount, sourceChannelId) {
   const cfg = getBoostPoinConfig();
   const base = Number(baseAmount || 0);
-  if (!cfg.enabled || !cfg.eventActive || cfg.boostPercent <= 0 || base <= 0) {
-    return { active: false, percent: cfg.boostPercent, bonusAmount: 0, sourceText: "Boost Poin nonaktif" };
+  if (!cfg.enabled || !cfg.eventActive || cfg.multiplier <= 1 || base <= 0) {
+    return { active: false, multiplier: cfg.multiplier, percent: cfg.boostPercent, bonusAmount: 0, sourceText: "Boost Poin nonaktif" };
   }
   if (!isBoostPoinTypeAllowed(type, cfg) || !isBoostPoinChannelAllowed(type, sourceChannelId, cfg)) {
-    return { active: false, percent: cfg.boostPercent, bonusAmount: 0, sourceText: "Aktivitas bukan channel event" };
+    return { active: false, multiplier: cfg.multiplier, percent: cfg.boostPercent, bonusAmount: 0, sourceText: "Aktivitas bukan channel event" };
   }
-  const bonus = Number((base * (cfg.boostPercent / 100)).toFixed(1));
+  const bonus = Number((base * (cfg.multiplier - 1)).toFixed(1));
   registerBoostPoinParticipant(member, type, sourceChannelId, base, bonus);
-  if (cfg.logToConsole) console.log(`⚡ BOOST POIN +${cfg.boostPercent}%: ${member.user?.tag || member.id} ${type} +${bonus} poin (${cfg.eventName})`);
-  return { active: true, percent: cfg.boostPercent, bonusAmount: bonus, sourceText: `Event ${cfg.eventName}` };
+  if (cfg.logToConsole) console.log(`⚡ BOOST POIN x${formatNumber(cfg.multiplier)}: ${member.user?.tag || member.id} ${type} +${bonus} poin (${cfg.eventName})`);
+  return { active: true, multiplier: cfg.multiplier, percent: cfg.boostPercent, bonusAmount: bonus, sourceText: `Event ${cfg.eventName}` };
 }
 
-
-function getBoostPoinMultiplierText(boostPercent = 5) {
-  const percent = Number(boostPercent || 5);
-  if (percent >= 100) {
-    const multiplier = 1 + (percent / 100);
-    return `${formatNumber(multiplier)}x`;
-  }
-  return `+${formatNumber(percent)}%`;
+function getBoostPoinMultiplierText(multiplier = getBoostPoinConfig().multiplier) {
+  const value = Math.max(1, Number(multiplier || 1));
+  return `x${formatNumber(value)}`;
 }
 
 function getBoostPoinModeText(mode = "chat_voice") {
@@ -13797,8 +13851,8 @@ function getBoostPoinByText(cfg = getBoostPoinConfig()) {
 
 function getBoostPoinEndsAtText(cfg = getBoostPoinConfig()) {
   const duration = Math.max(1, Number(cfg.durationMinutes || 60));
-  const unix = Math.floor((Date.now() + duration * 60 * 1000) / 1000);
-  return `<t:${unix}:R>`;
+  const endAt = Number(cfg.endsAt || 0) > 0 ? Number(cfg.endsAt) : (Date.now() + duration * 60 * 1000);
+  return `<t:${Math.floor(endAt / 1000)}:R>`;
 }
 
 function getBoostPoinTargetChannelsText(cfg = getBoostPoinConfig()) {
@@ -13816,16 +13870,17 @@ function getBoostPoinAnnouncementConfig() {
   const raw = config.boostPoin || {};
   const cfg = getBoostPoinConfig();
   return {
-    title: String(raw.announcementTitle || `BOOST POIN ${getBoostPoinMultiplierText(cfg.boostPercent)} LEBIH CEPAT! 🚀`).trim(),
-    description: String(raw.announcementDescription || `Boost poin ${getBoostPoinMultiplierText(cfg.boostPercent)} khusus event **{eventName}**.\n\nLets go yang mau ngejar poin keaktifan buat jadi **Member Of The Month** 🏆`).trim(),
-    endTitle: String(raw.endTitle || "⚠️ BOOST POIN BERAKHIR").trim(),
-    endDescription: String(raw.endDescription || "Boost poin telah selesai. Terima kasih buat warga yang sudah ikut event.").trim(),
+    title: String(raw.announcementTitle || "<a:Boost:1512485430887714866> BOOST POIN DIAKTIFKAN").trim(),
+    description: String(raw.announcementDescription || "Boost poin dimulai:\n\n👤 Oleh: {by}\n💥 Multiplier: {multiplier}\n⏱️ Durasi: {duration} menit\n📍 Channel: {channels}\n🕒 Berakhir: {endsAt}").trim(),
+    endTitle: String(raw.endTitle || "<a:Boost:1512485430887714866> BOOST POIN BERAKHIR").trim(),
+    endDescription: String(raw.endDescription || "Boost poin untuk channel {channels} telah selesai.\n\n🔄 Status: Kembali ke normal (x1)").trim(),
     mentionText: String(raw.mentionText || "").trim(),
     roleMentionIds: Array.isArray(raw.roleMentionIds) ? raw.roleMentionIds.map(parseDiscordId).filter(Boolean) : [],
-    color: String(raw.announcementColor || "#F5C542").trim(),
+    color: String(raw.announcementColor || "#34D399").trim(),
     endColor: String(raw.endColor || "#FF5C7A").trim(),
-    showJoinButton: raw.showJoinButton !== false,
-    joinButtonLabel: String(raw.joinButtonLabel || "Join Event").trim()
+    showJoinButton: raw.showJoinButton === true,
+    joinButtonLabel: String(raw.joinButtonLabel || "Buka Channel Event").trim(),
+    multiplier: cfg.multiplier
   };
 }
 
@@ -13836,12 +13891,13 @@ function applyBoostPoinTemplate(text = "", guild = null) {
     eventName: cfg.eventName,
     eventId: cfg.eventId,
     boostPercent: formatNumber(cfg.boostPercent),
-    multiplier: getBoostPoinMultiplierText(cfg.boostPercent),
+    multiplier: getBoostPoinMultiplierText(cfg.multiplier),
     mode: getBoostPoinModeText(cfg.eventMode),
     channels: getBoostPoinTargetChannelsText(cfg),
     by: getBoostPoinByText(cfg),
     duration: formatNumber(cfg.durationMinutes || 60),
-    endsAt: getBoostPoinEndsAtText(cfg)
+    endsAt: getBoostPoinEndsAtText(cfg),
+    status: cfg.eventActive ? "Aktif" : "Nonaktif"
   };
   return String(text || "")
     .replaceAll("{server}", data.server)
@@ -13853,26 +13909,46 @@ function applyBoostPoinTemplate(text = "", guild = null) {
     .replaceAll("{channels}", data.channels)
     .replaceAll("{by}", data.by)
     .replaceAll("{duration}", data.duration)
-    .replaceAll("{endsAt}", data.endsAt);
+    .replaceAll("{endsAt}", data.endsAt)
+    .replaceAll("{status}", data.status);
 }
 
 function buildBoostPoinPublicPayload(guild, state = "active") {
   const cfg = getBoostPoinConfig();
   const ac = getBoostPoinAnnouncementConfig();
   const isEnd = state === "end";
-  const title = applyBoostPoinTemplate(isEnd ? ac.endTitle : ac.title, guild);
-  const description = applyBoostPoinTemplate(isEnd ? ac.endDescription : ac.description, guild);
+  const template = embedCfg(isEnd ? "boostPoinEnd" : "boostPoinActive");
+  const fallbackTitle = isEnd ? ac.endTitle : ac.title;
+  const fallbackDescription = isEnd ? ac.endDescription : ac.description;
+  const title = applyBoostPoinTemplate(template.title || fallbackTitle, guild);
+  const description = applyBoostPoinTemplate(template.description || fallbackDescription, guild);
   const roleMentions = mentionListFromIds(ac.roleMentionIds, "role");
   const contentParts = [];
+  const templateContent = applyBoostPoinTemplate(template.content || "", guild).trim();
+  if (templateContent) contentParts.push(templateContent);
   if (!isEnd && ac.mentionText) contentParts.push(applyBoostPoinTemplate(ac.mentionText, guild));
   if (!isEnd && roleMentions) contentParts.push(roleMentions);
 
   const embed = new EmbedBuilder()
-    .setColor(hexColor(isEnd ? ac.endColor : ac.color, isEnd ? 0xff5c7a : 0xf5c542))
+    .setColor(hexColor(template.color || (isEnd ? ac.endColor : ac.color), isEnd ? 0xff5c7a : 0x34d399))
     .setTitle(title)
     .setDescription(description)
-    .setFooter({ text: `DESA TULUS • Boost Poin` })
+    .setFooter({ text: makeOTFooter(template.footer || "DESA TULUS • Boost Poin"), iconURL: template.footerIcon || OT_FOOTER_ICON_URL })
     .setTimestamp();
+
+  const authorName = applyBoostPoinTemplate(template.authorName || "DESA TULUS • Boost Poin", guild);
+  if (authorName) embed.setAuthor({ name: authorName, iconURL: dashboardSafeUrl(template.authorIcon) || undefined });
+  if (Array.isArray(template.fields) && template.fields.length) {
+    embed.addFields(template.fields.slice(0, 25).map((field) => ({
+      name: applyBoostPoinTemplate(field.name || "Info", guild).slice(0, 256),
+      value: applyBoostPoinTemplate(field.value || "-", guild).slice(0, 1024),
+      inline: Boolean(field.inline)
+    })));
+  }
+  const image = dashboardSafeUrl(template.image || template.imageUrl || "");
+  const thumbnail = dashboardSafeUrl(template.thumbnail || template.thumbnailUrl || "");
+  if (image) embed.setImage(image);
+  if (thumbnail) embed.setThumbnail(thumbnail);
 
   const payload = { content: contentParts.join("\n") || undefined, embeds: [embed] };
 
@@ -13883,7 +13959,7 @@ function buildBoostPoinPublicPayload(guild, state = "active") {
     if (targetId) {
       payload.components = [new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setLabel(ac.joinButtonLabel || "Join Event")
+          .setLabel(ac.joinButtonLabel || "Buka Channel Event")
           .setStyle(ButtonStyle.Link)
           .setURL(`https://discord.com/channels/${guild.id}/${targetId}`)
       )];
@@ -13914,6 +13990,134 @@ async function sendBoostPoinPublicPost(guild, state = "active") {
   const sent = await safeSend(channel, buildBoostPoinPublicPayload(guild, state));
   if (!sent) return { ok: false, message: "Gagal mengirim pengumuman Boost Poin. Cek permission channel dan DisCloud log SAFE SEND ERROR." };
   return { ok: true, message: state === "end" ? `Pengumuman boost berakhir terkirim ke #${channel.name}.` : `Pengumuman boost aktif terkirim ke #${channel.name}.` };
+}
+
+let boostPoinAutoEndTimer = null;
+let boostPoinAutoEndBusy = false;
+
+function initializeBoostPoinEventState(cfg = getBoostPoinConfig()) {
+  const state = readBoostPoinState();
+  state.events = state.events || {};
+  state.events[cfg.eventId] = state.events[cfg.eventId] || {
+    eventId: cfg.eventId,
+    eventName: cfg.eventName,
+    mode: cfg.eventMode,
+    multiplier: cfg.multiplier,
+    boostPercent: cfg.boostPercent,
+    startedAt: cfg.startedAt || Date.now(),
+    endsAt: cfg.endsAt || 0,
+    status: cfg.eventActive ? "active" : "ended",
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    participants: {}
+  };
+  const ev = state.events[cfg.eventId];
+  ev.eventName = cfg.eventName;
+  ev.mode = cfg.eventMode;
+  ev.multiplier = cfg.multiplier;
+  ev.boostPercent = cfg.boostPercent;
+  ev.startedAt = cfg.startedAt || ev.startedAt || Date.now();
+  ev.endsAt = cfg.endsAt || ev.endsAt || 0;
+  ev.status = cfg.eventActive ? "active" : "ended";
+  ev.updatedAt = Date.now();
+  writeBoostPoinState(state);
+  return ev;
+}
+
+async function startBoostPoinEvent(guild, options = {}) {
+  const cfgFile = readConfigFile();
+  cfgFile.boostPoin = cfgFile.boostPoin || {};
+  const bp = cfgFile.boostPoin;
+  const now = Date.now();
+  const durationMinutes = Math.max(1, Number(bp.durationMinutes || 60));
+  const legacyPercent = Math.max(0, Number(bp.boostPercent ?? 5));
+  const multiplier = Math.max(1, Math.min(100, Number(bp.multiplier ?? (1 + legacyPercent / 100)) || 1));
+  bp.enabled = true;
+  bp.eventActive = true;
+  bp.multiplier = multiplier;
+  bp.boostPercent = Number(((multiplier - 1) * 100).toFixed(4));
+  bp.startedAt = now;
+  bp.endsAt = now + durationMinutes * 60 * 1000;
+  bp.lastStartedAt = now;
+  bp.lastEndedAt = 0;
+  bp.lastEndReason = "";
+  bp.status = "active";
+  bp.eventId = `boost-${now}`;
+  if (options.actorUserId) bp.eventByUserId = parseDiscordId(options.actorUserId);
+  writeConfigFile(cfgFile);
+  initializeBoostPoinEventState(getBoostPoinConfig());
+
+  let postResult = { ok: true, message: "Event aktif tanpa pengumuman." };
+  if (bp.announceOnStart !== false) postResult = await sendBoostPoinPublicPost(guild, "active");
+  appendDashboardActivity("boost", "Boost Poin dimulai", `${getBoostPoinMultiplierText(multiplier)} selama ${durationMinutes} menit.`);
+  return {
+    ok: true,
+    announcementOk: postResult.ok,
+    warning: postResult.ok ? "" : postResult.message,
+    message: postResult.ok ? `Boost Poin ${getBoostPoinMultiplierText(multiplier)} aktif selama ${durationMinutes} menit. ${postResult.message}` : `Boost Poin ${getBoostPoinMultiplierText(multiplier)} tetap aktif, tetapi embed belum terkirim: ${postResult.message}`,
+    config: getBoostPoinConfig()
+  };
+}
+
+async function stopBoostPoinEvent(guild, options = {}) {
+  const cfgBefore = getBoostPoinConfig();
+  const cfgFile = readConfigFile();
+  cfgFile.boostPoin = cfgFile.boostPoin || {};
+  const bp = cfgFile.boostPoin;
+  const wasActive = bp.eventActive === true;
+  const now = Date.now();
+  bp.eventActive = false;
+  bp.status = "ended";
+  bp.lastEndedAt = now;
+  bp.lastEndReason = String(options.reason || "manual");
+  bp.endsAt = Number(bp.endsAt || now);
+  writeConfigFile(cfgFile);
+  initializeBoostPoinEventState({ ...cfgBefore, eventActive: false, endsAt: bp.endsAt });
+
+  let postResult = { ok: true, message: wasActive ? "Event dihentikan tanpa pengumuman." : "Event memang sudah nonaktif." };
+  if (wasActive && options.sendAnnouncement !== false && bp.announceOnEnd !== false) postResult = await sendBoostPoinPublicPost(guild, "end");
+  appendDashboardActivity("boost", "Boost Poin berakhir", options.reason === "automatic" ? "Durasi event habis dan multiplier kembali ke x1." : "Event dihentikan dari dashboard dan multiplier kembali ke x1.");
+  return {
+    ok: true,
+    announcementOk: postResult.ok,
+    warning: postResult.ok ? "" : postResult.message,
+    message: postResult.ok
+      ? `${wasActive ? "Boost Poin dihentikan" : "Boost Poin sudah nonaktif"}. ${postResult.message}`
+      : `Boost Poin sudah dihentikan dan poin kembali x1, tetapi embed akhir belum terkirim: ${postResult.message}`,
+    config: getBoostPoinConfig()
+  };
+}
+
+async function checkBoostPoinAutoEnd() {
+  if (boostPoinAutoEndBusy || !client?.isReady?.()) return;
+  boostPoinAutoEndBusy = true;
+  try {
+    const cfg = getBoostPoinConfig();
+    if (!cfg.enabled || !cfg.eventActive || cfg.autoEndEnabled === false) return;
+    if (!cfg.endsAt) {
+      const cfgFile = readConfigFile();
+      cfgFile.boostPoin = cfgFile.boostPoin || {};
+      cfgFile.boostPoin.startedAt = cfg.startedAt || Date.now();
+      cfgFile.boostPoin.endsAt = Date.now() + cfg.durationMinutes * 60 * 1000;
+      writeConfigFile(cfgFile);
+      return;
+    }
+    if (Date.now() < cfg.endsAt) return;
+    const guild = getDashboardGuild ? getDashboardGuild() : client.guilds.cache.first();
+    await stopBoostPoinEvent(guild, { reason: "automatic", sendAnnouncement: true });
+  } catch (err) {
+    console.log("BOOST POIN AUTO END ERROR:", err?.message || err);
+  } finally {
+    boostPoinAutoEndBusy = false;
+  }
+}
+
+function startBoostPoinAutoEndWatcher() {
+  if (boostPoinAutoEndTimer) return;
+  boostPoinAutoEndTimer = setInterval(checkBoostPoinAutoEnd, 15 * 1000);
+  if (typeof boostPoinAutoEndTimer.unref === "function") boostPoinAutoEndTimer.unref();
+  checkBoostPoinAutoEnd();
+  console.log("⚡ Boost Poin auto-end watcher aktif.");
 }
 
 function buildBonusStatusText(member, userData = {}) {
@@ -14005,7 +14209,7 @@ function buildCekPoinSection(label, emoji, info) {
       `Level: **${info.level}**`,
       `Poin: **${formatNumber(info.points)}**`,
       `Status: **Level maksimal**`,
-      `\`${progressBar(1, 1, 10)}\` **100%**`
+      `${progressBar(1, 1, 10)} **100%**`
     ].join("\n");
   }
 
@@ -14014,7 +14218,7 @@ function buildCekPoinSection(label, emoji, info) {
     `Level: **${info.level}**`,
     `Poin: **${formatNumber(info.points)}**`,
     `Naik Lv.${info.nextLevel}: **${formatNumber(info.need)} poin lagi**`,
-    `\`${info.bar}\` **${info.percent}%**`
+    `${info.bar} **${info.percent}%**`
   ].join("\n");
 }
 
@@ -14078,44 +14282,40 @@ function getLevelBadge(level) {
 function buildLevelUpEmbed(member, userData) {
   const info = getLevelInfo(userData);
   const next = info.next;
-  const badge = getLevelBadge(info.current.level);
   const total = getTotalLevelPoints(userData);
   const chatInfo = getCategoryLevelInfo(userData, "chat");
   const voiceInfo = getCategoryLevelInfo(userData, "voice");
   const e = embedCfg("levelUp");
+  const remaining = next ? Math.max(0, Number((next.total - total).toFixed(1))) : 0;
   const data = {
     user: `${member}`,
     username: member.user.username,
     displayName: member.displayName || member.user.username,
     server: config.serverName || "DESA TULUS",
-    badge,
     rank: info.current.name,
     level: info.current.level,
-    total: formatNumber(total)
+    total: formatNumber(total),
+    chat: formatNumber(chatInfo.points),
+    voice: formatNumber(voiceInfo.points),
+    nextLevel: next?.level || info.current.level,
+    nextRank: next?.name || info.current.name,
+    remainingPoints: formatNumber(remaining)
   };
 
-  const nextText = next
-    ? [
-        `Butuh:`,
-        `- **${formatNumber(Math.max(0, Number((next.total - total).toFixed(1))))} poin total** lagi`,
-        `- Chat: **${formatNumber(chatInfo.points)}** poin`,
-        `- Voice: **${formatNumber(voiceInfo.points)}** poin`
-      ].join("\n")
-    : "Kamu sudah mencapai level tertinggi warga DESA TULUS. Keren banget 🔥";
+  const fieldName = next
+    ? applyTemplate(e.fields?.[0]?.name || "📈 Menuju Level {nextLevel} ({nextRank})", data)
+    : "🏆 Level Maksimal";
+  const fieldValue = next
+    ? applyTemplate(e.fields?.[0]?.value || "Butuh:\n**{remainingPoints} poin total lagi**\nChat: **{chat} poin**\nVoice: **{voice} poin**", data)
+    : "Kamu sudah mencapai level tertinggi warga DESA TULUS.";
 
   const embed = new EmbedBuilder()
     .setColor(hexColor(e.color || "#2ECC71", 0x2ecc71))
-    .setTitle(applyTemplate(e.title || "<a:rocket_animated:1512884173453529288> WARGA NAIK LEVEL!", data))
-    .setDescription(applyTemplate(e.description || "Sekarang menjadi **{rank} (Lvl. {level})** 🔥", data))
-    .addFields(
-      {
-        name: next ? `📈 Menuju Level ${next.level} (${next.name})` : "🏆 Level Maksimal",
-        value: nextText,
-        inline: false
-      }
-    )
+    .setTitle(applyTemplate(e.title || "<a:rocket_animated:1512884173453529288> Warga Naik Level", data))
+    .setDescription(applyTemplate(e.description || "{user} naik menjadi **{rank} — Level {level}**.\n\nTotal poin aktif: **{total} poin**. Tetap rukun dan aktif di desa.", data))
+    .addFields({ name: fieldName, value: fieldValue, inline: false })
     .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 512 }))
-    .setFooter({ text: makeOTFooter(applyTemplate(e.footer || "{server} | Gunakan rwcekpoin untuk melihat level", data)) })
+    .setFooter({ text: makeOTFooter(applyTemplate(e.footer || "DESA TULUS • Level Warga", data)), iconURL: e.footerIcon || OT_FOOTER_ICON_URL })
     .setTimestamp();
 
   return embed;
@@ -14123,7 +14323,6 @@ function buildLevelUpEmbed(member, userData) {
 
 function buildLevelProfileEmbed(member, userData) {
   const info = getLevelInfo(userData);
-  const badge = getLevelBadge(info.current.level);
   const total = getTotalLevelPoints(userData);
   const chatInfo = getCategoryLevelInfo(userData, "chat");
   const voiceInfo = getCategoryLevelInfo(userData, "voice");
@@ -14133,15 +14332,16 @@ function buildLevelProfileEmbed(member, userData) {
     username: member.user.username,
     displayName: member.displayName || member.user.username,
     server: config.serverName || "DESA TULUS",
-    badge,
     rank: info.current.name,
     level: info.current.level,
-    total: formatNumber(total)
+    total: formatNumber(total),
+    chat: formatNumber(chatInfo.points),
+    voice: formatNumber(voiceInfo.points)
   };
 
   const embed = new EmbedBuilder()
     .setColor(hexColor(e.color || "#22D3EE", 0x22d3ee))
-    .setTitle(applyTemplate(e.title || "📊 Level Warga", data))
+    .setTitle(applyTemplate(e.title || "<a:loading:1490575251405406299> Data Keaktifan Warga", data))
     .setDescription([
       `${member}`,
       "",
@@ -14153,7 +14353,7 @@ function buildLevelProfileEmbed(member, userData) {
       `Total Poin: **${formatNumber(total)}**`
     ].join("\n"))
     .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 512 }))
-    .setFooter({ text: makeOTFooter(applyTemplate(e.footer || "{server} | Level Warga", data)) })
+    .setFooter({ text: makeOTFooter(applyTemplate(e.footer || "DESA TULUS • Cek Poin", data)), iconURL: e.footerIcon || OT_FOOTER_ICON_URL })
     .setTimestamp();
 
   return embed;
@@ -14353,7 +14553,7 @@ function getTopActiveArrowEmoji() {
 }
 
 function getTopRankLabel(index) {
-  return ["🥇", "🥈", "🥉"][index] || `**${index + 1}**`;
+  return ["🥇", "🥈", "🥉"][index] || `${index + 1}`;
 }
 
 function formatTopActiveRows(rows, kind = "active") {
@@ -14397,18 +14597,20 @@ function buildTopActiveBoardEmbed(guild, reason = "update") {
   });
 
   const updateText = String(cfg.boardUpdateText || "Update otomatis setiap hari pukul 00.00 WIB").replace(/\*\*/g, "");
-  const footerText = cfg.boardFooterText || boardEmbedCfg.footer || "Gunakan perintah rapihin untuk melihat poin top aktifnya";
+  const footerText = cfg.boardFooterText || boardEmbedCfg.footer || "DESA TULUS • Gunakan perintah rwcekpoin untuk melihat poin warga";
+  const voiceValue = `>>>${formatTopRowsPakRwStyle(voiceRows, "voice")}`.slice(0, 1024);
+  const chatValue = `>>>${formatTopRowsPakRwStyle(chatRows, "chat")}`.slice(0, 1024);
 
   const embed = new EmbedBuilder()
     .setColor(hexColor(boardEmbedCfg.color || config.embeds?.memberOfTheMonth?.color || "#F5C542", 0xf5c542))
-    .setAuthor({ name: cfg.boardAuthor || `${serverName} • Top Aktif Warga` })
+    .setAuthor({ name: cfg.boardAuthor || `${serverName} • Papan peringkat warga aktif` })
     .setTitle(boardTitle)
     .setDescription(updateText)
     .addFields(
-      { name: cfg.topVoiceFieldTitle || "🎙️ Top Voice", value: formatTopRowsPakRwStyle(voiceRows, "voice").slice(0, 1024), inline: false },
-      { name: cfg.topChatFieldTitle || "💬 Top Chat", value: formatTopRowsPakRwStyle(chatRows, "chat").slice(0, 1024), inline: false }
+      { name: cfg.topVoiceFieldTitle || "🎙️ Top Voice Bulanan", value: voiceValue, inline: false },
+      { name: cfg.topChatFieldTitle || "💬 Top Chat Bulanan", value: chatValue, inline: false }
     )
-    .setFooter({ text: makeOTFooter(footerText) })
+    .setFooter({ text: makeOTFooter(footerText), iconURL: boardEmbedCfg.footerIcon || OT_FOOTER_ICON_URL })
     .setTimestamp();
 
   const boardImage = boardEmbedCfg.image || media.topActiveBoardImageUrl || "";
@@ -14440,8 +14642,7 @@ function formatLeaderboardActiveRows(rows = []) {
   return rows.map((u, i) => {
     const rank = getTopRankLabel(i);
     const info = getLevelInfoFromPoints(u.lifetimeTotal || 0);
-    const cycle = Number(u.activeCycleCount || 0) > 0 ? ` • Siklus ${formatNumber(Number(u.activeCycleCount || 0) + 1)}` : "";
-    return `${rank} <@${u.userId}> ${arrow} **${formatNumber(u.lifetimeTotal)} poin**\n🏷️ ${info.current.name} • Lifetime Lv. ${info.current.level}${cycle}`;
+    return `${rank} <@${u.userId}> ${arrow} **${formatNumber(u.lifetimeTotal)} poin**\n🏷️ ${info.current.name} • Lifetime Lv. ${info.current.level}`;
   }).join("\n");
 }
 
@@ -14449,21 +14650,19 @@ function buildLeaderboardActiveEmbed(guild, reason = "update") {
   const cfg = getTopActiveConfig();
   const rows = getLeaderboardActiveRows(guild.id, cfg.leaderboardActiveTopLimit, guild.ownerId);
   const serverName = config.serverName || guild.name || "DESA TULUS";
+  const template = config.embeds?.papanAktif || {};
+  const intro = cfg.leaderboardActiveSubtitle || "Papan ini mencatat total poin warga dari awal bergabung sampai seterusnya. Data ini tidak di-reset meskipun siklus level kembali dari awal setelah 100.000 poin.";
+  const flow = "Alur jelas: poin chat/voice masuk ke siklus level. Saat warga mencapai 100.000 poin, Pak RW memberi role Member Of The Month, lalu poin siklus level kembali dari awal. Poin di Papan Aktif ini tetap lanjut dan tidak di-reset.";
+  const rowsText = `>>>${formatLeaderboardActiveRows(rows)}`;
   const embed = new EmbedBuilder()
-    .setColor(hexColor(config.embeds?.topActiveBoard?.color || "#F5C542", 0xf5c542))
-    .setAuthor({ name: `${serverName} • Leaderboard Aktif` })
-    .setTitle(applyTemplate(cfg.leaderboardActiveTitleTemplate || "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU", { server: serverName }))
-    .setDescription([
-      cfg.leaderboardActiveSubtitle,
-      "",
-      "**Alur jelas:** poin chat/voice masuk ke siklus level. Saat warga mencapai **100.000 poin**, Pak RW memberi role **Member Of The Month**, lalu poin siklus level kembali dari awal. Poin di Papan Aktif ini tetap lanjut dan tidak di-reset.",
-      "",
-      formatLeaderboardActiveRows(rows)
-    ].join("\n"))
-    .setFooter({ text: makeOTFooter(cfg.leaderboardActiveFooter || `${serverName} • Papan Aktif`) })
+    .setColor(hexColor(template.color || config.embeds?.topActiveBoard?.color || "#F5C542", 0xf5c542))
+    .setTitle(applyTemplate(cfg.leaderboardActiveTitleTemplate || template.title || "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU", { server: serverName }))
+    .setDescription([intro, "", flow, "", rowsText].join("\n"))
+    .setFooter({ text: makeOTFooter(cfg.leaderboardActiveFooter || template.footer || `${serverName} • Leaderboard Aktif Warga`), iconURL: template.footerIcon || OT_FOOTER_ICON_URL })
     .setTimestamp();
 
-  if (cfg.leaderboardActiveImageUrl) embed.setImage(cfg.leaderboardActiveImageUrl);
+  const image = cfg.leaderboardActiveImageUrl || template.image || template.imageUrl || "";
+  if (image) embed.setImage(image);
   return embed;
 }
 
@@ -16042,6 +16241,9 @@ function applyTemplate(text = "", data = {}) {
     motmRole: roleTag(config.topActive?.memberOfTheMonthRoleId || config.level100RoleId || "", "@Member Of The Month"),
     donaturRole: roleTag(config.donaturRoleId || "", "@Donatur Desa"),
     juraganRole: roleTag(config.juragan?.roleId || "", "@Juragan Desa"),
+    vipVoiceChannel: channelTag(config.juragan?.vipVoiceChannelId || "", "#voice-vip belum diatur"),
+    juraganChatChannel: channelTag(config.juragan?.chatChannelId || "", "#chat-juragan belum diatur"),
+    juraganBonusPercent: formatNumber(config.juragan?.bonusPercent || config.topActive?.bonusPercent || 15),
     boostChannelId: config.juragan?.boostChannelId || "",
     donaturRoleId: config.donaturRoleId || "",
     juraganRoleId: config.juragan?.roleId || "",
@@ -16659,6 +16861,7 @@ client.once(Events.ClientReady, async () => {
   await seedActiveVoiceRoles();
 
   startTopActiveDailyPoster();
+  startBoostPoinAutoEndWatcher();
 
   if (config.panels?.sendSuggestionPanelOnReady && isFilledId(config.suggestionChannelId)) {
     const channel = client.channels.cache.get(config.suggestionChannelId);
@@ -16760,22 +16963,26 @@ client.on(Events.GuildMemberAdd, async (member) => {
 
 function juraganEmbed(member) {
   const e = embedCfg("juragan");
+  const juraganRole = roleTag(config.juragan?.roleId || "", "@Juragan belum diatur");
+  const vipVoiceChannel = channelTag(config.juragan?.vipVoiceChannelId || "", "#voice-vip belum diatur");
+  const juraganChatChannel = channelTag(config.juragan?.chatChannelId || "", "#chat-juragan belum diatur");
+  const bonusPercent = Number(config.juragan?.bonusPercent || config.topActive?.bonusPercent || 15);
   const data = {
     user: `${member}`,
     username: member.user.username,
     displayName: member.displayName || member.user.username,
-    server: config.serverName
+    server: config.serverName || "DESA TULUS",
+    juraganRole,
+    vipVoiceChannel,
+    juraganChatChannel,
+    bonusPercent: formatNumber(bonusPercent)
   };
 
   const embed = new EmbedBuilder()
-    .setColor(hexColor(e.color, 0xff4fd8))
-    .setAuthor({
-      name: `${config.serverName} • Juragan Baru`,
-      iconURL: member.user.displayAvatarURL({ dynamic: true })
-    })
-    .setTitle(applyTemplate(e.title || "💎 WILUJEUNG SUMPING JURAGAN! 💎", data))
-    .setDescription(applyTemplate(e.description || "Terima kasih sudah mendukung server ini {user}.", data))
-    .setFooter({ text: makeOTFooter(applyTemplate(e.footer || "{server} • Juragan System", data)) })
+    .setColor(hexColor(e.color, 0xd7a84f))
+    .setTitle(applyTemplate(e.title || "<a:Boost:1512485430887714866> SELAMAT DATANG JURAGAN! <a:Boost:1512485430887714866>", data))
+    .setDescription(applyTemplate(e.description || "Terima kasih sudah mendukung server ini {user}.\nSekarang kamu dapat menikmati benefit dari role {juraganRole}.\n\n**Benefit utama:**\n\n• Mendapatkan role {juraganRole}\n• Display role di member list\n• Bonus ekstra poin +{bonusPercent}%\n• Akses ke fitur Soundboard\n• Akses ke voice channel VIP {vipVoiceChannel}\n• Akses text channel khusus donatur {juraganChatChannel}\n\nGunakan benefit dengan sopan dan tetap jaga suasana warga.", data))
+    .setFooter({ text: makeOTFooter(applyTemplate(e.footer || "DESA TULUS • Juragan Desa", data)), iconURL: e.footerIcon || OT_FOOTER_ICON_URL })
     .setTimestamp();
 
   if (!e.thumbnail || e.thumbnail === "avatar") {
@@ -16785,7 +16992,6 @@ function juraganEmbed(member) {
   }
 
   if (e.image) embed.setImage(e.image);
-
   return embed;
 }
 

@@ -25,12 +25,13 @@ const placeholderSample: Record<string, string> = {
   "{nextLevel}": "13",
   "{remainingPoints}": "1.460",
   "{eventName}": "Pekan Guyub Warga",
-  "{multiplier}": "1,5x",
-  "{duration}": "3 hari",
+  "{multiplier}": "x10",
+  "{duration}": "60",
   "{channels}": "#chat-warga, #ruang-mabar",
   "{endsAt}": "19 Juni 2026 23.59 WIB",
   "{by}": "Pak RW",
   "{status}": "Aktif",
+  "{bonusPercent}": "15",
   "{month}": "Juni",
   "{year}": "2026",
   "{date}": "16 Juni 2026",
@@ -53,6 +54,8 @@ const channelTokens: Record<string, string> = {
   "{leaderboardChannel}": "leaderboard-aktif",
   "{mabarChannel}": "cari-mabar",
   "{boostPoinChannel}": "boost-poin",
+  "{vipVoiceChannel}": "voice-vip",
+  "{juraganChatChannel}": "chat-juragan",
   "{welcomeChannel}": "chat-warga"
 };
 
@@ -78,8 +81,24 @@ export function resolvePreviewText(input = "", picker?: PickerData) {
   return output;
 }
 
+function renderInline(text: string) {
+  const pattern = /(<a?:[A-Za-z0-9_]+:\d+>|<@!?\d+>|<@&\d+>|<#\d+>)/g;
+  return text.split(pattern).filter(Boolean).map((part, index) => {
+    const emoji = part.match(/^<(a?):([A-Za-z0-9_]+):(\d+)>$/);
+    if (emoji) {
+      const animated = emoji[1] === "a";
+      return <img key={`${part}-${index}`} className="discord-custom-emoji" src={`https://cdn.discordapp.com/emojis/${emoji[3]}.${animated ? "gif" : "webp"}?size=48&quality=lossless`} alt={`:${emoji[2]}:`} title={`:${emoji[2]}:`} />;
+    }
+    if (/^<@!?\d+>$/.test(part)) return <span key={`${part}-${index}`} className="discord-mention">@Warga</span>;
+    if (/^<@&\d+>$/.test(part)) return <span key={`${part}-${index}`} className="discord-mention">@Role Desa</span>;
+    if (/^<#\d+>$/.test(part)) return <span key={`${part}-${index}`} className="discord-mention">#channel-desa</span>;
+    return <span key={`${part}-${index}`}>{part}</span>;
+  });
+}
+
 function renderLines(text: string) {
-  return text.split("\n").map((line, index) => <span key={index}>{line || "\u00a0"}{index < text.split("\n").length - 1 ? <br /> : null}</span>);
+  const lines = text.split("\n");
+  return lines.map((line, index) => <span key={index}>{line ? renderInline(line) : "\u00a0"}{index < lines.length - 1 ? <br /> : null}</span>);
 }
 
 export function DiscordPreview({ embed, picker }: { embed: EmbedDraft; picker?: PickerData }) {
@@ -93,14 +112,14 @@ export function DiscordPreview({ embed, picker }: { embed: EmbedDraft; picker?: 
           <div className="discord-author-line"><strong>Pak RW</strong><span>APP</span><time>hari ini pukul 17.10</time></div>
           {embed.content ? <div className="discord-content">{renderLines(resolvePreviewText(embed.content, picker))}</div> : null}
           <div className="discord-embed" style={{ borderLeftColor: color }}>
-            {embed.authorName ? <div className="discord-embed-author">{embed.authorIcon ? <img src={embed.authorIcon} alt="" /> : null}<strong>{resolvePreviewText(embed.authorName, picker)}</strong></div> : null}
+            {embed.authorName ? <div className="discord-embed-author">{embed.authorIcon ? <img src={embed.authorIcon} alt="" /> : null}<strong>{renderInline(resolvePreviewText(embed.authorName, picker))}</strong></div> : null}
             {embed.thumbnailUrl ? <img className="discord-thumbnail" src={embed.thumbnailUrl} alt="Thumbnail embed" /> : null}
             <div className="discord-embed-main">
-              {embed.title ? <div className="discord-embed-title">{resolvePreviewText(embed.title, picker)}</div> : null}
+              {embed.title ? <div className="discord-embed-title">{renderInline(resolvePreviewText(embed.title, picker))}</div> : null}
               {embed.description ? <div className="discord-embed-description">{renderLines(resolvePreviewText(embed.description, picker))}</div> : null}
-              {embed.fields?.length ? <div className="discord-fields">{embed.fields.map((field, index) => <div className={field.inline ? "is-inline" : ""} key={index}><strong>{resolvePreviewText(field.name, picker)}</strong><span>{renderLines(resolvePreviewText(field.value, picker))}</span></div>)}</div> : null}
+              {embed.fields?.length ? <div className="discord-fields">{embed.fields.map((field, index) => <div className={field.inline ? "is-inline" : ""} key={index}><strong>{renderInline(resolvePreviewText(field.name, picker))}</strong><span>{renderLines(resolvePreviewText(field.value, picker))}</span></div>)}</div> : null}
               {embed.imageUrl ? <img className="discord-image" src={embed.imageUrl} alt="Gambar embed" /> : null}
-              {(embed.footerText || embed.timestamp) ? <div className="discord-footer">{embed.footerIcon ? <img src={embed.footerIcon} alt="" /> : null}<span>{resolvePreviewText(embed.footerText || "", picker)}{embed.footerText && embed.timestamp ? " · " : ""}{embed.timestamp ? "Hari ini pukul 17.10" : ""}</span></div> : null}
+              {(embed.footerText || embed.timestamp) ? <div className="discord-footer">{embed.footerIcon ? <img src={embed.footerIcon} alt="" /> : null}<span>{renderInline(resolvePreviewText(embed.footerText || "", picker))}{embed.footerText && embed.timestamp ? " · " : ""}{embed.timestamp ? "Hari ini pukul 17.10" : ""}</span></div> : null}
             </div>
           </div>
           {embed.buttons?.length ? <div className="discord-buttons">{embed.buttons.map((button, index) => <button key={index}>{button.label || "Button"}{button.url ? <ExternalLink size={14} /> : null}</button>)}</div> : null}

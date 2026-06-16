@@ -696,3 +696,62 @@ body { font-size: 14px; }
   .device-switcher button { flex: 1; }
   .sticky-save-card { grid-template-columns: 1fr 1fr; }
 }
+
+/* Pak RW v10.10.66 — Boost Poin event control */
+.boost-control-card { overflow: visible; }
+.boost-status-strip { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:20px; }
+.boost-status-strip > div { min-height:92px; display:grid; grid-template-columns:auto 1fr; grid-template-rows:auto auto; align-items:center; column-gap:10px; padding:15px; border:1px solid var(--border-soft); border-radius:15px; background:rgba(239,236,220,.035); }
+.boost-status-strip svg { grid-row:1 / span 2; color:var(--cream); }
+.boost-status-strip span { color:var(--text-muted); font-size:10px; }
+.boost-status-strip strong { color:var(--text-primary); font-size:14px; overflow-wrap:anywhere; }
+.input-prefix { display:grid; grid-template-columns:42px 1fr; align-items:center; border:1px solid var(--border-soft); border-radius:12px; overflow:hidden; background:rgba(12,19,16,.35); }
+.input-prefix > span { display:grid; place-items:center; height:44px; border-right:1px solid var(--border-soft); color:var(--cream); font-weight:800; }
+.input-prefix input { border:0 !important; border-radius:0 !important; background:transparent !important; box-shadow:none !important; }
+.boost-flow-guide { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-top:20px; }
+.boost-flow-guide > div { display:grid; grid-template-columns:32px 1fr; align-items:start; gap:4px 10px; padding:15px; border:1px solid var(--border-soft); border-radius:15px; background:linear-gradient(180deg,rgba(136,160,140,.08),rgba(239,236,220,.025)); }
+.boost-flow-guide > div > span { grid-row:1 / span 2; width:28px; height:28px; display:grid; place-items:center; border-radius:9px; background:rgba(222,212,187,.13); color:var(--cream); font-size:11px; font-weight:800; }
+.boost-flow-guide strong { font-size:11px; }
+.boost-flow-guide small { color:var(--text-muted); font-size:10px; line-height:1.45; }
+.boost-action-row { display:flex; flex-wrap:wrap; gap:10px; margin-top:20px; padding-top:18px; border-top:1px solid var(--border-soft); }
+@media (max-width:1080px){.boost-status-strip,.boost-flow-guide{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media (max-width:620px){.boost-status-strip,.boost-flow-guide{grid-template-columns:1fr}.boost-action-row{display:grid}.boost-action-row .button{width:100%}}
+
+/* Discord custom emoji and mention rendering in the live dashboard preview. */
+.discord-custom-emoji {
+  display: inline-block;
+  width: 1.25em;
+  height: 1.25em;
+  margin: 0 .08em;
+  vertical-align: -.28em;
+  object-fit: contain;
+}
+.discord-mention {
+  display: inline;
+  border-radius: 3px;
+  background: rgba(88, 101, 242, .28);
+  color: #c9cdfb;
+  padding: 0 2px;
+  font-weight: 500;
+}
+
+.boost-option-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.boost-option-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 76px;
+  padding: 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  background: rgba(255,255,255,.025);
+}
+.boost-option-row > div:first-child { display: grid; gap: 4px; min-width: 0; }
+.boost-option-row strong { color: var(--text-primary); font-size: 13px; }
+.boost-option-row small { color: var(--text-muted); font-size: 11px; line-height: 1.45; }
+@media (max-width: 1050px) { .boost-option-grid { grid-template-columns: 1fr; } }
