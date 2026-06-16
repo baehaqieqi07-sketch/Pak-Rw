@@ -111,7 +111,7 @@ function languageRule(text = "") {
     return "Jawab dalam Bahasa Indonesia yang sopan, formal-natural, jelas, rapi, dan jangan dicampur Bahasa Sunda kecuali frasa khas server seperti Wilujeung sumping bila relevan.";
   }
   return isEnglish(text)
-    ? "Reply in natural, clear English unless the user asks for Indonesian or Sundanese."
+    ? "Reply in natural, clear English unless the user asks for Indonesian or Sundanese. For public embed text, default to clear Indonesian unless explicitly asked otherwise."
     : "Jawab dalam Bahasa Indonesia yang sopan, jelas, rapi, natural, dan tidak dicampur Bahasa Sunda kecuali user meminta nuansa Sunda atau konteks welcome DESA TULUS.";
 }
 
@@ -175,29 +175,41 @@ function styleRule(text = "") {
     rules.push("User terdengar kasar atau kesal. Jangan ikut kasar. Tanggapi dengan tenang, tegas, sopan, dan arahkan ke solusi. Pak RW boleh menegur, tetapi tidak menghina.");
   }
 
-  rules.push("Jaga vibes DESA TULUS: perdesaan Sunda, rukun, sauyunan, tata krama, dan rasa balai warga. Tetap utamakan solusi yang jelas dan aman.");
+  rules.push("Jaga vibes DESA TULUS: perdesaan, rukun, tata krama, dan rasa balai warga. Default tetap Bahasa Indonesia yang mudah dipahami; Basa Sunda hanya jika diminta. Tetap utamakan solusi yang jelas dan aman.");
   return rules.join(" ");
 }
 function localPrefix(text = "") {
   if (isSundaneseRequested(text)) return { me: "Pak RW", you: "anjeun", ok: "Mangga", lang: "su" };
   const style = detectConversationStyle(text);
-  if (style.pronoun === "gua_lu") return { me: "Pak RW", you: "warga", ok: "Siap", lang: "id" };
-  if (style.pronoun === "saya_anda") return { me: "Pak RW", you: "Anda", ok: "Baik", lang: "id" };
-  return { me: "Pak RW", you: "kamu", ok: "Siap", lang: "id" };
+  if (style.pronoun === "gua_lu") return { me: "Pak RW", you: "nak", ok: "Siap nak", lang: "id" };
+  if (style.pronoun === "saya_anda") return { me: "Pak RW", you: "nak", ok: "Baik nak", lang: "id" };
+  return { me: "Pak RW", you: "nak", ok: "Siap nak", lang: "id" };
 }
 
 
+function detectPakRwIntent(text = "", mode = "normal") {
+  const msg = cleanText(text).toLowerCase();
+  if (isSundaneseRequested(text)) return "sunda";
+  if (mode === "curhat" || hasAny(msg, ["curhat", "sedih", "capek", "cape", "kecewa", "takut", "kesel", "pusing", "overthinking", "sendiri", "bingung", "nangis", "marah"])) return "curhat";
+  if (hasAny(msg, ["dashboard", "manage", "arcane", "carl", "dyno", "web", "panel", "preview", "ui", "ux", "layout", "mobile", "device"])) return "dashboard";
+  if (hasAny(msg, ["embed", "welcome", "placeholder", "tag user", "tag channel", "tag role", "mention", "thumbnail", "image", "footer", "author"])) return "embed";
+  if (hasAny(msg, ["level", "poin", "leaderboard", "papan aktif", "top aktif", "motm", "member of the month", "rank", "reset poin"])) return "discord";
+  if (hasAny(msg, ["error", "code", "coding", "javascript", "node", "discord.js", "railway", "github", "mongodb", "npm", "syntax", "bug", "fix", "fiks", "crash", "terminal", "deploy", "api", "json", "env", "token"])) return "coding";
+  if (hasAny(msg, ["discord", "server", "role", "channel", "permission", "ticket", "bot", "member", "voice", "boost"])) return "discord";
+  if (hasAny(msg, ["buat kata", "kata kata", "caption", "pengumuman", "announcement", "ucapan", "teks", "template", "deskripsi", "bio"])) return "writing";
+  if (msg.includes("?") || hasAny(msg, ["apa", "kenapa", "gimana", "bagaimana", "tolong", "cara", "bisa", "jelaskan"])) return "question";
+  return "normal";
+}
+
 function pickPakRwOpener(text = "", mode = "normal") {
   const cfg = config.ai?.pakRwOpeners || {};
-  const msg = cleanText(text).toLowerCase();
-  let key = "normal";
-  if (isSundaneseRequested(text)) key = "sunda";
-  else if (mode === "curhat" || hasAny(msg, ["curhat", "sedih", "capek", "cape", "bingung", "kecewa", "takut", "kesel", "pusing", "overthinking"])) key = "curhat";
-  else if (msg.includes("?") || hasAny(msg, ["apa", "kenapa", "gimana", "bagaimana", "tolong", "cara", "bisa", "jelaskan"])) key = "question";
+  const key = detectPakRwIntent(text, mode);
   const arr = Array.isArray(cfg[key]) && cfg[key].length ? cfg[key] : (Array.isArray(cfg.normal) ? cfg.normal : []);
-  if (!arr.length) return mode === "curhat" ? "Iya nak, sini Pak RW dengarkan dulu. Ada apa?" : "Iya nak, ada yang bisa Pak RW bantu?";
-  const seed = (Date.now() + text.length + key.length) % arr.length;
-  return arr[seed];
+  if (!arr.length) return mode === "curhat" ? "Ada apa nak? Pak RW dengarkan dulu." : "Pak RW bantu ya nak, kita ambil intinya dulu.";
+  const normalized = cleanText(text).toLowerCase();
+  let hash = key.length + normalized.length;
+  for (let i = 0; i < normalized.length; i++) hash = (hash * 31 + normalized.charCodeAt(i)) >>> 0;
+  return arr[hash % arr.length];
 }
 
 function isSimpleLocalQuestion(text = "", mode = "normal") {
@@ -228,7 +240,7 @@ function makeDiscordAnswer(userText) {
   const text = cleanText(userText);
   const tone = localPrefix(text);
   return [
-    `${tone.ok}, ${tone.me} bantu rapihin alurnya ya 🤍`,
+    pickPakRwOpener(text, "discord"),
     "",
     `Topik ${tone.you}: **${text || "Discord / server / bot"}**`,
     "",
@@ -249,7 +261,7 @@ function makeCodingAnswer(userText) {
   const text = cleanText(userText);
   const tone = localPrefix(text);
   return [
-    `${tone.ok}, ${tone.me} bantu dari sisi coding ya 🤖`,
+    pickPakRwOpener(text, "coding"),
     "",
     `Yang ${tone.you} bahas: **${text || "code / error"}**`,
     "",
@@ -270,7 +282,7 @@ function makeHomeworkAnswer(userText) {
   const text = cleanText(userText);
   const tone = localPrefix(text);
   return [
-    `${tone.ok}, ${tone.me} bantu tugasnya pelan-pelan ya 📚`,
+    pickPakRwOpener(text, "question"),
     "",
     `Soal/topik ${tone.you}: **${text || "tugas sekolah"}**`,
     "",
@@ -289,7 +301,7 @@ function makeWritingAnswer(userText) {
   const text = cleanText(userText);
   const tone = localPrefix(text);
   return [
-    `${tone.ok}, ${tone.me} bisa bantu bikin kata-kata yang rapi ✍️`,
+    pickPakRwOpener(text, "writing"),
     "",
     `Tema yang ${tone.you} minta: **${text || "teks / pengumuman / caption"}**`,
     "",
@@ -361,12 +373,29 @@ function makeFeatureAnswer(userText) {
       "🧩 Embed Builder: gaya Carl-bot, bisa pilih channel tujuan lalu kirim embed.",
       "🔝 Level & Cek Poin: level-up premium, cek poin 1 channel, Safe Test Mode tidak ubah data.",
       "🏆 Top Aktif/MOTM: Top Voice + Top Chat rapi, auto 00.00 WIB, banner manual.",
-      "☁️ Curhat, 💡 Kotak Saran, 🏡 Wilujeung Sumping, 💎 Juragan Desa, 💸 Donatur Desa: semua bernuansa DESA TULUS.",
+      "☁️ Curhat, 💡 Kotak Saran, 🏡 Welcome Warga Anyar, 💎 Juragan Desa, 💸 Donatur Desa: semua bernuansa DESA TULUS dengan Bahasa Indonesia yang jelas.",
       "🛠️ Tools: status bot, MongoDB, backup, command test, dan dashboard quick action."
     ]),
     "",
     `Kalau ${tone.you} mau ngatur, buka dashboard → pilih modul → preview → test → backup. Pak RW bantu supaya alurnya rapi seperti balai desa yang tertib.`
   ].join("\n");
+}
+
+
+function contextSummaryLine(userText = "", mode = "normal") {
+  const intent = detectPakRwIntent(userText, mode);
+  const map = {
+    curhat: "Pak RW tangkap ini sebagai curhat atau perasaan yang sedang berat.",
+    coding: "Pak RW tangkap ini sebagai masalah teknis/coding yang perlu dibaca dari error dan alurnya.",
+    discord: "Pak RW tangkap ini sebagai pengaturan Discord/server yang perlu dicek dari channel, role, permission, dan bot.",
+    dashboard: "Pak RW tangkap ini sebagai kebutuhan dashboard supaya editnya rapi, jelas, dan sinkron dengan Discord.",
+    embed: "Pak RW tangkap ini sebagai urusan embed/placeholder/mention yang harus sama antara dashboard dan Discord.",
+    writing: "Pak RW tangkap ini sebagai kebutuhan teks yang harus siap pakai dan enak dibaca.",
+    question: "Pak RW tangkap ini sebagai pertanyaan yang butuh jawaban langsung dan runtut.",
+    sunda: "Pak RW tangkap user meminta Basa Sunda formal.",
+    normal: "Pak RW tangkap inti pesannya dan akan jawab langsung ke kebutuhan utamanya."
+  };
+  return map[intent] || map.normal;
 }
 
 function makeHelpfulAnswer(userText, mode = "normal") {
@@ -378,11 +407,11 @@ function makeHelpfulAnswer(userText, mode = "normal") {
     return [
       "💎 **Halo Juragan, Pak RW Premium siap bantu.**",
       "",
-      `${tone.me === "gua" ? "Gua" : tone.me === "saya" ? "Saya" : "Aku"} paham ${tone.you} lagi bahas: **${text || "sesuatu yang ingin ditanyakan"}**`,
+      `Pak RW paham nak, ini sedang membahas: **${text || "sesuatu yang ingin ditanyakan"}**`,
       "",
       "Jawaban Juragan akan dibuat lebih premium: rapi, detail, ada langkah, contoh, alasan, dan tips kalau dibutuhkan.",
       "",
-      `Kirim detailnya, nanti ${tone.me} bantu sampai beres 😎`
+      `Kirim detailnya nak, nanti Pak RW bantu sampai rapi.`
     ].join("\n");
   }
 
@@ -392,11 +421,11 @@ function makeHelpfulAnswer(userText, mode = "normal") {
       "",
       `Halo, ${tone.me} **Pak RW DESA TULUS** 🤍`,
       "",
-      `${tone.me === "gua" ? "Gua" : tone.me === "saya" ? "Saya" : "Aku"} siap bantu warga **${config.serverName || "DESA TULUS"}** dengan jawaban yang jelas, sopan, rapi, dan sesuai bahasa yang diminta ${tone.you}.`,
+      `Pak RW siap bantu warga **${config.serverName || "DESA TULUS"}** dengan jawaban yang jelas, sopan, rapi, dan sesuai bahasa yang diminta.`,
       "",
       "Bisa tanya tugas, coding, Discord, bot error, GitHub, DisCloud, Roblox, Blender, desain, ide konten, translate, curhat, atau pertanyaan umum.",
       "",
-      `Tulis aja pertanyaannya, nanti ${tone.me} jawab sebaik mungkin.`
+      `Tulis saja pertanyaannya nak, nanti Pak RW jawab sebaik mungkin.`
     ].join("\n");
   }
 
@@ -414,7 +443,7 @@ function makeHelpfulAnswer(userText, mode = "normal") {
   return [
     pickPakRwOpener(text, mode),
     "",
-    `${tone.ok}, ${tone.me} paham ${tone.you} nanya tentang: **${text}**`,
+    `${contextSummaryLine(text, mode)}`,
     "",
     "Biar jelas, jawabannya bakal dibuat begini:",
     bullet([
@@ -424,7 +453,7 @@ function makeHelpfulAnswer(userText, mode = "normal") {
       "catatan penting biar nggak salah jalan"
     ]),
     "",
-    `Kirim detail tambahan kalau mau ${tone.me} jawab lebih tepat.`
+    `Kirim detail tambahan kalau mau Pak RW jawab lebih tepat, nak.`
   ].join("\n");
 }
 
@@ -438,7 +467,8 @@ function buildSystemPrompt(userText, mode = "normal") {
     languageRule(userText),
     styleRule(userText),
     "Bahasa harus konsisten: jika user meminta Bahasa Indonesia, jangan campur Basa Sunda; jika user meminta Basa Sunda, gunakan Basa Sunda formal; jika tidak jelas, pakai Bahasa Indonesia sopan dengan nuansa desa seperlunya.",
-    `Awali jawaban dengan sapaan Pak RW yang natural dan bervariasi sesuai konteks. Contoh pembuka yang boleh dipilih/diadaptasi: ${pickPakRwOpener(userText, mode)} Jangan selalu pakai kalimat yang sama.`,
+    "Jangan menjawab asal atau memakai template yang sama. Sebelum menjawab, tentukan konteks user: curhat, pertanyaan, coding, Discord, dashboard, embed, level/top aktif, GitHub/DisCloud, teks, atau umum. Jawaban harus nyambung dengan konteks itu.",
+    `Panggil user dengan “nak” secara natural, tetapi jangan selalu membuka dengan “Iya nak”. Pilih pembuka yang nyambung konteks. Contoh yang boleh diadaptasi: ${pickPakRwOpener(userText, mode)} Setelah itu langsung jawab inti masalah.`,
     "Kamu adalah Pak RW DESA TULUS. Jangan terdengar seperti AI kaku; terdengar seperti RW asli di lembur/perdesaan Sunda: sopan, formal, ngayomi, paham warga, tegas kalau perlu, dan selalu cari solusi.",
     "Saat menjawab warga, pakai gaya Pak RW: tata krama dulu, pahami masalah, jelaskan keputusan/alur, lalu kasih langkah yang gampang diikuti. Vibes harus lembur DESA TULUS: rukun, sauyunan, pos ronda, balai desa, dan warga saling menghargai.",
     "Untuk curhat, peran utama kamu adalah mendengarkan dulu, memvalidasi perasaan, tidak menghakimi, dan membantu warga menata pikiran dengan aman.",
@@ -487,7 +517,7 @@ function buildSystemPrompt(userText, mode = "normal") {
     "Kalau user memberi error coding, jelaskan penyebab, bagian yang harus dicek, dan solusi yang bisa langsung dicoba.",
     "Kalau user bertanya Discord/server, berikan tutorial step-by-step yang praktis dan mudah diikuti.",
     "Kalau user minta dibuatkan teks, berikan hasil yang langsung siap copy, rapi, dan sesuai gaya yang diminta.",
-    "Jawaban default sekitar 5 sampai 12 baris. Boleh lebih panjang kalau user meminta detail atau topiknya memang butuh langkah panjang.",
+    "Jawaban default sekitar 4 sampai 10 baris. Hemat token, tidak bertele-tele, tapi tetap jelas. Boleh lebih panjang kalau user meminta detail atau topiknya memang butuh langkah panjang.",
     serverContext()
   ].join(" ");
 }

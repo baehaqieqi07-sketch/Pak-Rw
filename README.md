@@ -1,17 +1,17 @@
 # Pak RW — DESA TULUS
 
-Pak RW adalah bot utama untuk server **DESA TULUS**. Semua branding diarahkan ke suasana **perdesaan Sunda**: warga, lembur, balai desa, pos ronda, rukun, sauyunan, dan tata krama.
+Pak RW adalah bot utama untuk server **DESA TULUS**. Branding tetap bernuansa perdesaan: warga, balai desa, pos ronda, sawah, rukun, dan tata krama. Mulai v10.10.59, semua embed publik default memakai Bahasa Indonesia yang jelas agar warga tidak bingung.
 
-## Update v10.10.53 — Pak RW Sunda Village Mode
+## Update v10.10.59 — Welcome Mention Sinkron
 
 - Semua teks utama diarahkan ke **Pak RW** dan **DESA TULUS**.
 - Persona AI dibuat seperti **Pak RW asli**: sopan, formal, ngayomi, tegas kalau perlu, tidak kasar, dan solutif.
-- Vibes server dibuat lebih **perdesaan Sunda** tanpa membuat jawaban berantakan.
+- Vibes server tetap perdesaan, tetapi embed publik tidak dibuat full Sunda.
 - Bahasa mengikuti permintaan warga:
   - Jika warga minta Bahasa Indonesia, Pak RW menjawab Bahasa Indonesia.
   - Jika warga minta Basa Sunda, Pak RW menjawab Basa Sunda formal.
   - Tidak mencampur bahasa kecuali warga memang minta gaya campuran.
-- Welcome diganti menjadi gaya **Wilujeung sumping**.
+- Judul welcome tetap **Wilujeung Sumping Warga Anyar**, isi bawahnya memakai Bahasa Indonesia jelas.
 - Curhat diarahkan jadi **Pak RW ngadangu warga**: mendengarkan, tidak menghakimi, dan membantu pelan-pelan.
 - OpenRouter tetap hemat: model ringan, cooldown, max token kecil, dan fallback lokal saat limit/error.
 - Dashboard tetap default mati untuk DisCloud: `DASHBOARD_ENABLED=false`.
@@ -73,7 +73,7 @@ Update ini menaikkan identitas Pak RW menjadi bot besar untuk DESA TULUS. Fokusn
 - Server: DESA TULUS
 - Bot: Pak RW
 - Prefix warga: `rw`
-- Vibes: perdesaan Sunda, sopan, formal, ngayomi, tegas secukupnya
+- Vibes: perdesaan, sopan, formal-natural, mengayomi, tegas secukupnya
 - Dashboard DisCloud tetap default mati: `DASHBOARD_ENABLED=false`
 - RAM DisCloud tetap 100 MB
 
@@ -82,7 +82,7 @@ Pak RW sekarang membawa konsep **Balai Warga Digital**:
 - AI Pak RW untuk tanya jawab warga
 - Curhat Warga dan Curhat Anonim
 - Kotak Saran Warga
-- Wilujeung Sumping untuk warga anyar
+- Welcome Warga Anyar dengan judul Wilujeung Sumping dan isi Bahasa Indonesia
 - Level & Poin Warga
 - Top Aktif dan Member Of The Month
 - Donatur Desa dan Juragan Desa
@@ -106,7 +106,7 @@ Pak RW harus mengikuti bahasa user:
 ### Data aman
 Update ini tidak menyertakan `.env`, `data/`, `logs/`, `backups/`, atau file runtime aktif. Data level, Top Aktif, MOTM, Donatur, Juragan, dan AI memory tetap aman selama MongoDB/ENV lama dipakai.
 
-## v10.10.57 — Papan Aktif Lifetime + Siklus 100.000 Poin
+## v10.10.59 — Papan Aktif Lifetime + Siklus 100.000 Poin
 
 Update ini menambahkan alur level yang lebih besar untuk DESA TULUS:
 
@@ -130,3 +130,27 @@ Data aman:
 - Data lifetime tidak reset.
 - MongoDB tetap dipakai.
 - `.env`, `data`, `logs`, `backups`, dan `node_modules` tidak dimasukkan ke ZIP update.
+
+## v10.10.59 - Bahasa Embed Lebih Jelas
+
+Update ini membuat Pak RW tetap bernuansa DESA TULUS, tetapi semua embed publik default memakai Bahasa Indonesia yang jelas agar warga tidak bingung.
+
+- Judul welcome tetap `Wilujeung Sumping Warga Anyar!` sebagai ciri khas desa.
+- Isi welcome memakai Bahasa Indonesia: `Sambut warga anyar barudak {user}` lalu penjelasan yang mudah dipahami.
+- Curhat, Donatur, Juragan, Cari Mabar, Top Aktif, Papan Aktif, dan dashboard tidak dibuat full Sunda.
+- Basa Sunda formal hanya dipakai ketika user meminta Pak RW menjawab pakai Bahasa Sunda.
+- Mode hemat OpenRouter tetap aktif: sapaan dan pertanyaan sederhana dijawab lokal, AI dipakai hanya saat perlu.
+
+
+## v10.10.60 — Arcane Manage Dashboard + Unified Embed Sync
+
+Update ini merapikan Pak RW supaya terasa seperti bot besar untuk DESA TULUS. Fokusnya:
+
+- AI Pak RW memakai context engine: jawaban harus nyambung dengan curhat, coding, Discord, dashboard, embed, level/top aktif, GitHub/DisCloud, atau teks.
+- Pak RW tetap memanggil warga dengan `nak`, tetapi pembuka tidak selalu `Iya nak`; opener dipilih sesuai konteks.
+- Semua embed publik diarahkan ke tema DESA TULUS yang singkat, jelas, sopan, dan tidak full Basa Sunda.
+- Welcome dibuat simpel dan bisa tag user, role Member Tulus, channel aturan, chat warga, dan ticket.
+- Dashboard diarahkan ke gaya Arcane/Carl/Dyno: card plugin + tombol Manage, embed editor all-in-one, preview sama dengan Discord, placeholder lebih banyak, dan desain desa soft premium.
+- OpenRouter tetap hemat: sapaan dan pertanyaan sederhana dijawab lokal, cooldown/global limit aktif, max token lebih aman, fallback lokal saat limit/credit/rate-limit.
+
+Catatan aman: `.env`, `data`, `logs`, `backups`, dan `node_modules` tidak perlu dipush ke GitHub.

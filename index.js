@@ -4455,7 +4455,7 @@ function dashboardShell(content, title = "Pak RW Dashboard") {
     }
 
 
-    /* ================= PAK RW SOFT CONTROL ROOM v10.10.55 ================= */
+    /* ================= PAK RW SOFT CONTROL ROOM v10.10.60 ================= */
     body.dashboard-clean {
       background:
         radial-gradient(circle at 16% -8%, rgba(76,96,255,.20), transparent 34%),
@@ -4608,7 +4608,7 @@ function dashboardShell(content, title = "Pak RW Dashboard") {
 
 
 
-    /* ================= PAK RW BIG BOT FLOW v10.10.55 ================= */
+    /* ================= PAK RW BIG BOT FLOW v10.10.60 ================= */
     .bbo-flow {
       display: grid;
       grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -4714,7 +4714,7 @@ function dashboardShell(content, title = "Pak RW Dashboard") {
 
 
 
-    /* ================= COMFORT PRO DASHBOARD v10.10.55 ================= */
+    /* ================= COMFORT PRO DASHBOARD v10.10.60 ================= */
     body.dashboard-clean {
       background:
         radial-gradient(circle at 14% -8%, rgba(80, 118, 255, .18), transparent 34%),
@@ -4990,7 +4990,7 @@ function dashboardShell(content, title = "Pak RW Dashboard") {
 
   
 
-    /* ================= FULL FEATURE SUITE v10.10.55 ================= */
+    /* ================= FULL FEATURE SUITE v10.10.60 ================= */
     body.dashboard-clean {
       background:
         radial-gradient(circle at 8% 0%, rgba(124,109,255,.18), transparent 28%),
@@ -5031,7 +5031,7 @@ function dashboardShell(content, title = "Pak RW Dashboard") {
 
   
 
-/* ================= PAK RW PREMIUM DASHBOARD ONLY v10.10.55 ================= */
+/* ================= PAK RW PREMIUM DASHBOARD ONLY v10.10.60 ================= */
 :root{
   --premium-bg:#070a14;
   --premium-bg2:#0b1021;
@@ -5138,7 +5138,7 @@ body.has-unsaved .unsaved-pill{display:block;}
 @media(max-width:860px){.premium-app{grid-template-columns:1fr}.premium-sidebar{position:fixed;left:0;top:0;bottom:0;width:min(86vw,320px);transform:translateX(-105%);transition:.2s ease;height:100vh}.nav-open .premium-sidebar{transform:translateX(0)}.mobile-nav-toggle{display:block}.premium-main{padding:16px 14px 78px}.premium-topbar,.premium-section-head{flex-direction:column}.premium-hero{padding:22px;border-radius:24px}.premium-hero h2{font-size:28px}.premium-grid,.premium-feature-grid,.premium-flow{grid-template-columns:1fr}.premium-pins{grid-template-columns:1fr 1fr}.premium-card,.premium-section{border-radius:22px}.carl-workspace,.carl-shell{grid-template-columns:1fr!important}.carl-preview-panel,.carl-side{position:relative!important;top:auto!important}}
 
 
-/* ================= PAK RW SPACIOUS PREMIUM DASHBOARD ONLY v10.10.55 ================= */
+/* ================= PAK RW SPACIOUS PREMIUM DASHBOARD ONLY v10.10.60 ================= */
 :root{
   --sp-bg:#070912;
   --sp-bg2:#0b1020;
@@ -5281,7 +5281,7 @@ body.ui-density-compact textarea{min-height:120px!important;}
 @media(max-width:860px){.premium-main{padding:18px!important;padding-bottom:100px!important}.premium-topbar{align-items:flex-start!important}.premium-toolbar{justify-content:flex-start!important}.premium-grid,.premium-feature-grid,.premium-flow,.premium-preview-grid{grid-template-columns:1fr!important}.premium-section{padding:20px!important}.premium-sidebar{width:min(88vw,340px)!important}.premium-card,.premium-section{border-radius:24px!important}body.focus-edit .premium-main,body.sidebar-collapsed .premium-main{padding:18px!important;padding-bottom:100px!important}}
 
 
-/* ===== v10.10.55 Control Center Premium Safe Polish ===== */
+/* ===== v10.10.60 Control Center Premium Safe Polish ===== */
 .premium-protect-note{border:1px solid rgba(255,120,215,.18);background:linear-gradient(135deg,rgba(120,168,255,.09),rgba(255,120,215,.07));border-radius:22px;padding:14px 16px;color:rgba(248,251,255,.76);font-weight:850;line-height:1.55;margin:14px 0;}
 .premium-feature.locked,.premium-card.locked{border-color:rgba(247,205,103,.18)!important;background:linear-gradient(180deg,rgba(247,205,103,.065),rgba(255,255,255,.035))!important;}
 .premium-feature.locked:after{content:"Locked Safe";position:absolute;right:14px;top:14px;padding:5px 8px;border-radius:999px;background:rgba(247,205,103,.12);border:1px solid rgba(247,205,103,.22);font-size:10px;font-weight:1000;color:#ffe8a0;}
@@ -5377,7 +5377,7 @@ function dashboardLayout(inner, active = "dashboard") {
         <div class="premium-brand">
           <div class="premium-logo">${dashboardLogoHtml()}</div>
           <div>
-            <h1>${escapeHtml(dash.brandTitle || "Pak RW v10.10.55")}</h1>
+            <h1>${escapeHtml(dash.brandTitle || "Pak RW v10.10.60")}</h1>
             <p>${escapeHtml(dash.brandSubtitle || "Premium Control Center")}</p>
           </div>
         </div>
@@ -5428,7 +5428,7 @@ function dashboardLayout(inner, active = "dashboard") {
             </div>
             <span class="premium-chip ${statusText === "Online" ? "ok" : "warn"}">● ${escapeHtml(statusText)}</span>
             <span class="premium-chip">${escapeHtml(cfg.serverName || "DESA TULUS")}</span>
-            <span class="premium-chip">v10.10.55</span>
+            <span class="premium-chip">v10.10.60</span>
           </div>
         </div>
         ${inner}
@@ -5528,8 +5528,8 @@ function renderDashboard(req) {
 
   return dashboardLayout(`
     <section class="${heroClass}"${heroStyle}>
-      <div class="premium-hero-badge">🌾 DESA TULUS • Balai Desa Digital Premium</div>
-      <h2>${escapeHtml(cfg.embeds?.dashboard?.homeTitle || "Pak RW Premium Control Center v10.10.55")}</h2>
+      <div class="premium-hero-badge">🌾 DESA TULUS • Balai Warga Digital Premium</div>
+      <h2>${escapeHtml(cfg.embeds?.dashboard?.homeTitle || "Pak RW Premium Control Center v10.10.60")}</h2>
       <p>${escapeHtml(cfg.embeds?.dashboard?.homeSubtitle || "Dashboard dibuat lebih rapi, adem, dan modern seperti panel bot Discord besar. Semua fitur lama tetap aman; update ini hanya merapikan web dashboard, navigasi, editor, preview, dan pengalaman edit.")}</p>
       <div class="premium-actions">
         <a class="btn" href="/embeds">🎨 Edit Embed</a>
@@ -5552,13 +5552,13 @@ function renderDashboard(req) {
     <section class="premium-section">
       <div class="premium-section-head">
         <div>
-          <h3>🧭 Control Center Fitur</h3>
-          <div class="premium-muted">Setiap fitur punya card sendiri supaya tidak numpuk. Klik card untuk edit setting yang dibutuhkan.</div>
+          <h3>🧭 Plugin & Manage Center</h3>
+          <div class="premium-muted">Semua fitur Pak RW masuk ke dashboard seperti panel bot besar: pilih plugin, klik Manage, edit setting/embed, preview, lalu simpan.</div>
         </div>
         <a class="btn secondary" href="/feature-flow">Lihat Alur</a>
       </div>
       <div class="premium-feature-grid">
-        ${featureCards.map(([icon, name, href, status, desc]) => { const locked = ["/top-active", "/modules#level"].includes(href); return `<a class="premium-feature ${locked ? "locked" : ""}" href="${href}"><div class="icon">${icon}</div><b>${escapeHtml(name)}</b><span>${escapeHtml(desc)}</span><div class="premium-chip" style="margin-top:12px;width:max-content">${locked ? "Aman terkunci" : escapeHtml(status)}</div></a>`; }).join("")}
+        ${featureCards.map(([icon, name, href, status, desc]) => { const locked = ["/top-active", "/modules#level"].includes(href); return `<a class="premium-feature ${locked ? "locked" : ""}" href="${href}"><div class="icon">${icon}</div><b>${escapeHtml(name)}</b><span>${escapeHtml(desc)}</span><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><div class="premium-chip" style="width:max-content">${escapeHtml(status)}</div><div class="premium-chip" style="width:max-content;background:rgba(215,168,79,.14);border-color:rgba(215,168,79,.28)">Manage</div></div></a>`; }).join("")}
       </div>
     </section>
 
@@ -5635,7 +5635,7 @@ function renderFeatureFlowDashboard(req) {
 
   return dashboardLayout(`
     <section class="suite-hero">
-      <span class="ot-badge">🧭 FULL FEATURE SUITE • v10.10.55</span>
+      <span class="ot-badge">🧭 FULL FEATURE SUITE • v10.10.60</span>
       <h2>Semua Fitur Pak RW, Satu Alur yang Jelas</h2>
       <p>Halaman ini dibuat supaya dashboard terasa seperti bot besar terkenal: fitur tidak numpuk, tiap modul punya tujuan, dan setelah edit kamu tahu harus preview, test, lalu backup.</p>
       <div class="ot-hero-actions">
@@ -5819,7 +5819,7 @@ function renderMaxtonMegaControl(req, saved = false, error = "") {
     <section class="mega-hero">
       <div class="max-eyebrow">MAXTON V3.8 • ALL FORMAT EDITOR • PAK RW</div>
       <h2>Dashboard semua bisa diedit: embed, text, image, channel, role, format, dan alur bot.</h2>
-      <p>${escapeHtml(texts.dashboardHelpText || "Pilih menu, ubah isi yang kamu mau, lalu klik Simpan Semua. Semua pengaturan utama Pak RW dikumpulkan di sini dengan tampilan simple: format embed, format text, image, AI, channel, role, Top Aktif, MOTM, reaction, thread, dan JSON full config.")}</p>
+      <p>${escapeHtml(texts.dashboardHelpText || "Pilih menu, ubah isi yang dibutuhkan, lalu klik Simpan. Semua pengaturan utama Pak RW dibuat satu alur: embed, teks, gambar, AI, channel, role, Top Aktif, Papan Aktif, MOTM, dan JSON full config.")}</p>
       <div class="mega-stat-grid">
         <div class="mega-stat"><b>${maxtonEmbedKeys.length}</b><span>Embed bisa diedit</span></div>
         <div class="mega-stat"><b>${maxtonTextKeys.length}</b><span>Text template aktif</span></div>
@@ -5921,6 +5921,7 @@ function renderMaxtonMegaControl(req, saved = false, error = "") {
           ${maxtonRoleSelect(guild, "donaturRoleId", "Role Donatur", cfg.donaturRoleId)}
           ${maxtonRoleSelect(guild, "level100RoleId", "Role Level 100", cfg.level100RoleId)}
           ${maxtonRoleSelect(guild, "memberOfTheMonthRoleId", "Role Member Of The Month", topCfg.memberOfTheMonthRoleId)}
+          ${maxtonRoleSelect(guild, "welcomeMemberRoleId", "Role Welcome / Member Tulus", cfg.welcome?.memberRoleId || "")}
           ${configInput("level100RoleDurationDays", "Durasi Role Level 100 (hari)", cfg.level100RoleDurationDays ?? 30, "number")}
           ${configInput("levelPointsPerLevel", "Poin per Level", cfg.level?.pointsPerLevel ?? 500, "number")}
           ${configInput("levelMaxLevel", "Level Maksimal", cfg.level?.maxLevel ?? 100, "number")}
@@ -6031,9 +6032,11 @@ function renderMaxtonMegaControl(req, saved = false, error = "") {
 
       <section class="mega-section" id="texts">
         <h3>✍️ Semua Text Center</h3>
-        <p class="section-note">Semua text penting dibuat bisa diedit dari dashboard. Ada field simpel, daftar text otomatis dari config, tambah text baru, dan JSON semua text. Placeholder aman: {user}, {username}, {server}, {role}, {month}, {total}, {chat}, {voice}, {level}, {rank}, {memberCount}, {expiredText}.</p>
+        <p class="section-note">Semua text penting dibuat bisa diedit dari dashboard. Ada field simpel, daftar text otomatis dari config, tambah text baru, dan JSON semua text. Placeholder aman: {user}, {username}, {server}, {memberRole}, {rulesChannel}, {chatWargaChannel}, {ticketChannel}, {role}, {month}, {total}, {chat}, {voice}, {level}, {rank}, {memberCount}, {expiredText}.</p>
         <div class="formgrid">
-          ${configInput("welcomeTitle", "Judul Welcome", cfg.welcome.title || "🏡 Wilujeung Sumping Warga Anyar!")}
+          ${configInput("welcomeTitle", "Judul Welcome", cfg.welcome.title || "🏡 Wilujeung Sumping Warga Anyar! {user}")}
+          ${configInput("welcomeContent", "Teks di Atas Embed Welcome", cfg.welcome.content || "🤍 Sambut warga anyar barudak {user} {memberRole}")}
+          ${configInput("welcomeImageUrl", "Image Welcome URL (opsional)", cfg.welcome.imageUrl || "")}
           ${configInput("suggestionTitle", "Judul Panel Saran", cfg.suggestion.title || "💡 DESA TULUS • Kritik & Saran")}
           ${configInput("dashboardBrandTitle", "Dashboard Brand Title", dash.brandTitle || "Pak RW")}
           ${configInput("dashboardBrandSubtitle", "Dashboard Brand Subtitle", dash.brandSubtitle || "Pak RW Control")}
@@ -6204,7 +6207,7 @@ function applyMaxtonControlPost(body = {}) {
   cfg.ownerName = body.ownerName || cfg.ownerName || "PAK RW";
   cfg.prefix = body.prefix || cfg.prefix || "rw";
   cfg.embedColor = body.embedColor || cfg.embedColor || "#FFFFFF";
-  cfg.activityText = body.activityText || cfg.activityText || "DESA TULUS 🤍";
+  cfg.activityText = body.activityText || cfg.activityText || "DESA TULUS 🌾 • Pak RW Menjaga Warga";
   cfg.ai.openRouterModel = body.openRouterModel || cfg.ai.openRouterModel || "openai/gpt-4o-mini";
   cfg.ai.cooldownMs = num(body.aiCooldownMs, cfg.ai.cooldownMs ?? 4500, 0);
   cfg.ai.maxMessageLength = num(body.aiMaxMessageLength, cfg.ai.maxMessageLength ?? 1900, 300, 4000);
@@ -6239,7 +6242,11 @@ function applyMaxtonControlPost(body = {}) {
 
   cfg.welcome.enabled = bool("welcomeEnabled");
   cfg.welcome.sendToChatWarga = bool("welcomeSendToChatWarga");
-  cfg.welcome.title = body.welcomeTitle || cfg.welcome.title || "🏡 Wilujeung Sumping Warga Anyar!";
+  cfg.welcome.title = body.welcomeTitle || cfg.welcome.title || "🏡 Wilujeung Sumping Warga Anyar! {user}";
+  cfg.welcome.content = body.welcomeContent || cfg.welcome.content || "🤍 Sambut warga anyar barudak {user} {memberRole}";
+  cfg.welcome.imageUrl = body.welcomeImageUrl || cfg.welcome.imageUrl || "";
+  cfg.welcome.memberRoleId = body.welcomeMemberRoleId || cfg.welcome.memberRoleId || "";
+  cfg.welcome.memberRoleName = cfg.welcome.memberRoleName || "Member Tulus";
   cfg.welcome.message = body.welcomeMessage || cfg.welcome.message || "";
   cfg.suggestion.enabled = bool("suggestionEnabled");
   cfg.suggestion.title = body.suggestionTitle || cfg.suggestion.title || "💡 DESA TULUS • Kritik & Saran";
@@ -6398,7 +6405,7 @@ function applyMaxtonControlPost(body = {}) {
   cfg.embeds.dashboard.brandTitle = body.dashboardBrandTitle || cfg.embeds.dashboard.brandTitle || "Pak RW";
   cfg.embeds.dashboard.brandSubtitle = body.dashboardBrandSubtitle || cfg.embeds.dashboard.brandSubtitle || "Pak RW Control";
   cfg.embeds.dashboard.homeTitle = body.dashboardHomeTitle || cfg.embeds.dashboard.homeTitle || "Pak RW Control";
-  cfg.embeds.dashboard.homeSubtitle = body.dashboardHomeSubtitle || cfg.embeds.dashboard.homeSubtitle || "Dashboard besar untuk edit semua fitur Pak RW.";
+  cfg.embeds.dashboard.homeSubtitle = body.dashboardHomeSubtitle || cfg.embeds.dashboard.homeSubtitle || "Dashboard all-in-one dengan alur jelas, modul rapi, preview mudah, dan bahasa embed yang mudah dipahami warga.";
   cfg.embeds.dashboard.accentText = body.dashboardAccentText || cfg.embeds.dashboard.accentText || "DESA TULUS 🤍";
   cfg.embeds.dashboard.media.logoUrl = body.mediaLogoUrl || "";
   cfg.embeds.dashboard.media.bannerUrl = body.mediaBannerUrl || "";
@@ -6416,7 +6423,7 @@ function applyMaxtonControlPost(body = {}) {
   setString("ownerName", (v) => { cfg.ownerName = v || "PAK RW"; });
   setString("prefix", (v) => { cfg.prefix = v || "rw"; });
   setString("embedColor", (v) => { cfg.embedColor = v || "#FFFFFF"; });
-  setString("activityText", (v) => { cfg.activityText = v || "DESA TULUS 🤍"; });
+  setString("activityText", (v) => { cfg.activityText = v || "DESA TULUS 🌾 • Pak RW Menjaga Warga"; });
   ["aiChannelId", "curhatChannelId", "anonymousCurhatChannelId", "suggestionChannelId", "ticketChannelId", "chatWargaChannelId", "levelChannelId", "cekPoinChannelId", "logChannelId", "rulesChannelId", "infoChannelId", "eventChannelId"].forEach((name) => {
     setString(name, (v) => { cfg[name] = v; });
   });
@@ -6749,7 +6756,14 @@ function dashboardAutocompleteData() {
     // Formatting
     { key: "{newline}", label: "{newline}", insert: "{newline}", desc: "Baris baru" },
     { key: "{br}", label: "{br}", insert: "{br}", desc: "Baris baru" },
-    { key: "{separator}", label: "{separator}", insert: "{separator}", desc: "Garis pemisah" }
+    { key: "{separator}", label: "{separator}", insert: "{separator}", desc: "Garis pemisah" },
+    { key: "{memberTulusRole}", label: "{memberTulusRole}", insert: "{memberTulusRole}", desc: "Tag role Member Tulus" },
+    { key: "{rulesChannel}", label: "{rulesChannel}", insert: "{rulesChannel}", desc: "Tag channel aturan desa" },
+    { key: "{chatWargaChannel}", label: "{chatWargaChannel}", insert: "{chatWargaChannel}", desc: "Tag channel chat warga" },
+    { key: "{ticketChannel}", label: "{ticketChannel}", insert: "{ticketChannel}", desc: "Tag channel ticket/bantuan" },
+    { key: "{lifetimeTotal}", label: "{lifetimeTotal}", insert: "{lifetimeTotal}", desc: "Total lifetime Papan Aktif" },
+    { key: "{cyclePoints}", label: "{cyclePoints}", insert: "{cyclePoints}", desc: "Poin siklus menuju MOTM" },
+    { key: "{motmThreshold}", label: "{motmThreshold}", insert: "{motmThreshold}", desc: "Target poin MOTM" }
   ];
 
   return { channels, roles, placeholders };
@@ -6986,9 +7000,10 @@ function safeEmbedKey(key = "") {
     .slice(0, 50);
 }
 
-const PROTECTED_EMBED_KEYS = new Set(["levelUp", "levelProfile", "memberOfTheMonth", "topActiveBoard"]);
+const PROTECTED_EMBED_KEYS = new Set([]);
 
 function isProtectedEmbedKey(key = "") {
+  if (config.embedStudio?.allEmbedsEditable !== false) return false;
   return PROTECTED_EMBED_KEYS.has(String(key || ""));
 }
 
@@ -7228,7 +7243,7 @@ function renderEmbedsPage(req, saved = false, error = "", actionMessage = "") {
     ${saved ? `<div class="alert">✅ Semua embed berhasil disimpan. Config langsung live reload ke bot.</div>` : ""}
     ${actionMessage ? `<div class="alert">${escapeHtml(actionMessage)}</div>` : ""}
     ${error ? `<div class="alert danger">❌ ${escapeHtml(error)}</div>` : ""}
-    <div class="premium-form-note">🔒 Mode aman aktif: embed Level Up, Level Profile/Cek Poin, MOTM, dan Top Aktif dikunci dari editor ini supaya sistem Level, Top Aktif/MOTM, dan Cek Poin tidak berubah.</div>
+    <div class="premium-form-note">🔒 All Embed Sync aktif: Welcome, Juragan, Donatur, Curhat, Saran, Level, Cek Poin, Top Aktif, MOTM, dan Mabar bisa diedit dari dashboard. Preview dashboard dibuat sama dengan Discord.</div>
     <div class="premium-form-note">🎭 Fix role mention: saat edit pakai @role, preview dashboard menampilkan <b>@Nama Role</b>. Config tetap menyimpan ID/mention Discord agar pengiriman embed tetap aman.</div>
 
     <div class="embed-control-strip">
@@ -7511,8 +7526,8 @@ function defaultEmbedTemplateRegistry() {
       lastMessageId: "",
       sourceChannelId: "",
       sourceMessageId: "",
-      content: "",
-      embed: { title: cfg.welcome.title || "🏡 Wilujeung Sumping Warga Anyar!", description: cfg.welcome.message || "", color: hexToIntColor(cfg.embedColor || "#FFFFFF") },
+      content: cfg.welcome.content || "🤍 Sambut warga anyar barudak {user} {memberRole}",
+      embed: { title: cfg.welcome.title || "🏡 Wilujeung Sumping Warga Anyar! {user}", description: cfg.welcome.message || "", color: hexToIntColor(cfg.embedColor || "#FFFFFF"), image: cfg.welcome.imageUrl ? { url: cfg.welcome.imageUrl } : undefined },
       components: [],
       lastEditedAt: "",
       lastSentAt: "",
@@ -9172,10 +9187,10 @@ function renderThemeStudio(req, saved = false, error = "") {
       <div class="formgrid">
         ${configInput("brandTitle", "Brand Title", dash.brandTitle || "Pak RW")}
         ${configInput("brandSubtitle", "Brand Subtitle", dash.brandSubtitle || "Luxe Galaxy")}
-        ${configInput("homeTitle", "Home Title", dash.homeTitle || "Pak RW Luxe Galaxy")}
+        ${configInput("homeTitle", "Home Title", dash.homeTitle || "Pak RW Unified Desa Tulus")}
         ${configInput("accentText", "Accent Text", dash.accentText || "DESA TULUS 🤍")}
       </div>
-      ${textareaInput("homeSubtitle", "Home Subtitle", dash.homeSubtitle || "Dashboard modern, clean, menarik, dan nyaman buat edit semua fitur bot DESA TULUS.", 4)}
+      ${textareaInput("homeSubtitle", "Home Subtitle", dash.homeSubtitle || "Dashboard all-in-one yang rapi, jelas, dan nyaman untuk mengatur semua fitur Pak RW DESA TULUS.", 4)}
 
       <h3 style="margin-top:28px">🎨 Visual Notes</h3>
       <div class="commands">
@@ -10299,7 +10314,7 @@ app.post("/embeds", requireDashboardAuth, (req, res) => {
     }
 
     cfg.embeds.dashboard = cfg.embeds.dashboard || {};
-    cfg.embeds.dashboard.brandTitle = "Pak RW v10.10.55";
+    cfg.embeds.dashboard.brandTitle = "Pak RW v10.10.60";
     cfg.embeds.dashboard.brandSubtitle = "Ultra Premium + Cari Mabar Embed";
     cfg.dashboard = cfg.dashboard || {};
     cfg.dashboard.releaseVersion = "10.10.32";
@@ -10321,7 +10336,7 @@ app.post("/embeds/send/:key", requireDashboardAuth, async (req, res) => {
     cfg.embeds = cfg.embeds || {};
     const originalKey = findEmbedKeyBySafeKey(cfg.embeds, req.params.key);
     if (!originalKey) return res.status(404).send(renderEmbedsPage(req, false, "Embed tidak ditemukan."));
-    if (isProtectedEmbedKey(originalKey)) return res.status(403).send(renderEmbedsPage(req, false, "Embed Level, Top Aktif/MOTM, dan Cek Poin dikunci aman dan tidak bisa diedit/dikirim dari editor ini."));
+    if (isProtectedEmbedKey(originalKey)) return res.status(403).send(renderEmbedsPage(req, false, "Embed ini sedang dikunci oleh config. Aktifkan embedStudio.allEmbedsEditable jika ingin edit dari dashboard."));
 
     const guild = getDashboardGuild ? getDashboardGuild() : client.guilds.cache.first();
     if (!guild) return res.status(400).send(renderEmbedsPage(req, false, "Bot belum membaca server Discord."));
@@ -10333,7 +10348,7 @@ app.post("/embeds/send/:key", requireDashboardAuth, async (req, res) => {
 
     cfg.embeds[originalKey] = updatedEmbed;
     cfg.embeds.dashboard = cfg.embeds.dashboard || {};
-    cfg.embeds.dashboard.brandTitle = "Pak RW v10.10.55";
+    cfg.embeds.dashboard.brandTitle = "Pak RW v10.10.60";
     cfg.embeds.dashboard.brandSubtitle = "Ultra Premium + Cari Mabar Embed";
     cfg.dashboard = cfg.dashboard || {};
     cfg.dashboard.releaseVersion = "10.10.32";
@@ -11293,8 +11308,8 @@ app.post("/theme", requireDashboardAuth, (req, res) => {
 
     cfg.embeds.dashboard.brandTitle = req.body.brandTitle || "Pak RW";
     cfg.embeds.dashboard.brandSubtitle = req.body.brandSubtitle || "Luxe Galaxy";
-    cfg.embeds.dashboard.homeTitle = req.body.homeTitle || "Pak RW Luxe Galaxy";
-    cfg.embeds.dashboard.homeSubtitle = req.body.homeSubtitle || "Dashboard modern, clean, menarik, dan nyaman buat edit semua fitur bot DESA TULUS.";
+    cfg.embeds.dashboard.homeTitle = req.body.homeTitle || "Pak RW Unified Desa Tulus";
+    cfg.embeds.dashboard.homeSubtitle = req.body.homeSubtitle || "Dashboard all-in-one yang rapi, jelas, dan nyaman untuk mengatur semua fitur Pak RW DESA TULUS.";
     cfg.embeds.dashboard.accentText = req.body.accentText || "DESA TULUS 🤍";
 
   writeConfigFile(cfg);
@@ -14686,6 +14701,11 @@ function applyTemplate(text = "", data = {}) {
     chatWargaChannelId: config.chatWargaChannelId || "",
     levelChannelId: config.levelChannelId || "",
     ticketChannelId: config.ticketChannelId || "",
+    rulesChannel: channelTag(config.rulesChannelId, "#aturan-desa"),
+    chatWargaChannel: channelTag(config.chatWargaChannelId, "#chat-warga"),
+    ticketChannel: channelTag(config.ticketChannelId, "#ticket"),
+    memberRole: welcomeMemberRoleTag(),
+    memberTulusRole: welcomeMemberRoleTag(),
     boostChannelId: config.juragan?.boostChannelId || "",
     donaturRoleId: config.donaturRoleId || "",
     juraganRoleId: config.juragan?.roleId || "",
@@ -14723,6 +14743,54 @@ function isFilledId(id) {
   return Boolean(id && !String(id).includes("ISI_") && !String(id).includes("ID_"));
 }
 
+function channelTag(id, fallback = "channel belum diatur") {
+  return isFilledId(id) ? `<#${id}>` : fallback;
+}
+
+function roleTag(id, fallback = "@role belum diatur") {
+  return isFilledId(id) ? `<@&${id}>` : fallback;
+}
+
+function welcomeMemberRoleTag() {
+  const w = config.welcome || {};
+  return roleTag(w.memberRoleId || config.memberTulusRoleId || "", w.memberRoleName ? `@${w.memberRoleName}` : "@Member Tulus");
+}
+
+function mentionIdsFromText(text = "") {
+  const raw = String(text || "");
+  return {
+    users: [...new Set([...raw.matchAll(/<@!?(\d{15,25})>/g)].map((m) => m[1]))],
+    roles: [...new Set([...raw.matchAll(/<@&(\d{15,25})>/g)].map((m) => m[1]))]
+  };
+}
+
+function collectMentionIdsFromPayload(payload) {
+  const users = new Set();
+  const roles = new Set();
+  const add = (text) => {
+    const ids = mentionIdsFromText(text);
+    ids.users.forEach((id) => users.add(id));
+    ids.roles.forEach((id) => roles.add(id));
+  };
+  if (typeof payload === "string") add(payload);
+  if (payload && typeof payload === "object") {
+    add(payload.content);
+    for (const embed of payload.embeds || []) {
+      if (!embed) continue;
+      const data = typeof embed.toJSON === "function" ? embed.toJSON() : embed;
+      add(data.title);
+      add(data.description);
+      add(data.footer?.text);
+      add(data.author?.name);
+      for (const field of data.fields || []) {
+        add(field.name);
+        add(field.value);
+      }
+    }
+  }
+  return { users: [...users], roles: [...roles] };
+}
+
 
 function mentionFeatureConfig() {
   return config.mentions || {};
@@ -14755,6 +14823,7 @@ function smartDiscordMentions(text = "", guild = null) {
     .replace(/@here/gi, "here");
 
   const userIds = new Set(discordMentionUserIds(out));
+  const roleIds = new Set(mentionIdsFromText(out).roles || []);
 
   if (mcfg.realChannelMentions !== false && guild.channels?.cache) {
     const maxChannels = Math.max(1, Number(mcfg.maxChannelMentionsPerReply || 20));
@@ -14785,6 +14854,37 @@ function smartDiscordMentions(text = "", guild = null) {
         const before2 = out;
         out = out.replace(labelRe, `$1: <#${ch.id}>`);
         if (out !== before2) { changedChannels += 1; break; }
+      }
+    }
+  }
+
+  if (mcfg.realRoleMentions !== false && guild.roles?.cache) {
+    const maxRoles = Math.max(1, Number(mcfg.maxRoleMentionsPerReply || 4));
+    let changedRoles = 0;
+    const blocked = new Set(["everyone", "here", ...(mcfg.blockedRoleNames || [])].map((x) => String(x).toLowerCase()));
+    const allowedHints = Array.isArray(mcfg.allowedRoleNameHints) ? mcfg.allowedRoleNameHints.map(normalizeMentionLookup).filter(Boolean) : [];
+    const roles = guild.roles.cache
+      .filter((role) => role?.id && role?.name && role.name !== "@everyone" && !blocked.has(String(role.name).toLowerCase()))
+      .sort((a, b) => String(b.name || "").length - String(a.name || "").length);
+
+    for (const role of roles.values()) {
+      if (changedRoles >= maxRoles) break;
+      if (out.includes(`<@&${role.id}>`)) { roleIds.add(role.id); continue; }
+      const rawName = String(role.name || "").trim();
+      const normalized = normalizeMentionLookup(rawName);
+      if (allowedHints.length && !allowedHints.some((hint) => normalized.includes(hint) || hint.includes(normalized))) continue;
+      const aliases = [...new Set([rawName, normalized].filter((x) => x && x.length >= 2))].sort((a, b) => b.length - a.length);
+      for (const alias of aliases) {
+        if (changedRoles >= maxRoles) break;
+        const escaped = escapeRegExp(alias).replace(/\\s\\\+/g, "\\s+");
+        const re = new RegExp(`(^|[\\s:>\\(\\[])(?:@|＠)\\s*${escaped}(?=$|[\\s.,!?:;\\)\\]])`, "giu");
+        const before = out;
+        out = out.replace(re, `$1<@&${role.id}>`);
+        if (out !== before) {
+          roleIds.add(role.id);
+          changedRoles += 1;
+          break;
+        }
       }
     }
   }
@@ -14820,7 +14920,11 @@ function smartDiscordMentions(text = "", guild = null) {
     }
   }
 
-  return { text: out, userIds: [...userIds].slice(0, Math.max(1, Number(mcfg.maxUserMentionsPerReply || 5))) };
+  return {
+    text: out,
+    userIds: [...userIds].slice(0, Math.max(1, Number(mcfg.maxUserMentionsPerReply || 5))),
+    roleIds: [...roleIds].slice(0, Math.max(1, Number(mcfg.maxRoleMentionsPerReply || 4)))
+  };
 }
 
 function applyMentionPayload(payload, guild = null) {
@@ -14829,7 +14933,7 @@ function applyMentionPayload(payload, guild = null) {
     const rendered = smartDiscordMentions(payload, guild);
     return {
       content: rendered.text,
-      allowedMentions: { users: rendered.userIds, roles: [], repliedUser: false }
+      allowedMentions: { users: rendered.userIds || [], roles: rendered.roleIds || [], repliedUser: false }
     };
   }
   if (!payload || typeof payload !== "object") return payload;
@@ -14837,9 +14941,15 @@ function applyMentionPayload(payload, guild = null) {
   if (typeof next.content === "string") {
     const rendered = smartDiscordMentions(next.content, guild);
     next.content = rendered.text;
-    next.allowedMentions = next.allowedMentions || { users: rendered.userIds, roles: [], repliedUser: false };
+    const collected = collectMentionIdsFromPayload(next);
+    next.allowedMentions = next.allowedMentions || {
+      users: [...new Set([...(rendered.userIds || []), ...(collected.users || [])])],
+      roles: [...new Set([...(rendered.roleIds || []), ...(collected.roles || [])])],
+      repliedUser: false
+    };
   } else if (!next.allowedMentions) {
-    next.allowedMentions = { users: [], roles: [], repliedUser: false };
+    const collected = collectMentionIdsFromPayload(next);
+    next.allowedMentions = { users: collected.users || [], roles: collected.roles || [], repliedUser: false };
   }
   return next;
 }
@@ -14910,7 +15020,7 @@ function anonimPanelRow() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId("curhat_anonim_open")
-      .setLabel("Curhat ka Pak RW")
+      .setLabel("Curhat ke Pak RW")
       .setEmoji("☁️")
       .setStyle(ButtonStyle.Secondary)
   );
@@ -14920,7 +15030,7 @@ function anonimPostRow() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId("curhat_anonim_open")
-      .setLabel("Curhat ka Pak RW")
+      .setLabel("Curhat ke Pak RW")
       .setEmoji("☁️")
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
@@ -15253,25 +15363,43 @@ client.on(Events.GuildMemberAdd, async (member) => {
       return;
     }
 
-    const description = String(config.welcome.message || "Sambut warga anyar barudak {user} di **{server} 🌾**")
-      .replaceAll("{user}", `${member}`)
-      .replaceAll("{server}", config.serverName)
-      .replaceAll("{memberCount}", `${member.guild.memberCount}`);
+    const welcomeData = {
+      user: `${member}`,
+      username: member.user.username,
+      server: config.serverName || member.guild.name,
+      memberCount: `${member.guild.memberCount}`,
+      memberRole: welcomeMemberRoleTag(),
+      memberTulusRole: welcomeMemberRoleTag(),
+      rulesChannel: channelTag(config.rulesChannelId, "#aturan-desa"),
+      chatWargaChannel: channelTag(config.chatWargaChannelId, "#chat-warga"),
+      ticketChannel: channelTag(config.ticketChannelId, "#ticket")
+    };
+
+    const description = applyTemplate(
+      config.welcome.message || "Sambut warga anyar barudak {memberTulusRole}\n\nPak RW menyambut {user} sebagai bagian dari **DESA TULUS**. Semoga betah, rukun, dan saling menghargai.\n\n📌 Baca aturan desa: {rulesChannel}\n💬 Kenalan di chat warga: {chatWargaChannel}\n🎫 Butuh bantuan? Buka ticket: {ticketChannel}\n\nKamu warga ke-**{memberCount}** di desa ini. Wilujeung sumping, semoga betah di lembur urang 🤍",
+      welcomeData
+    );
+    const welcomeTitle = applyTemplate(config.welcome.title || "🏡 Wilujeung Sumping Warga Anyar! {user}", welcomeData);
+    const welcomeContent = applyTemplate(config.welcome.content || "🤍 Sambut warga anyar barudak {user} {memberRole}", welcomeData);
 
     const embed = new EmbedBuilder()
       .setColor(color())
       .setAuthor({
-        name: `${config.serverName} • Warga Baru`,
+        name: `${config.serverName || "DESA TULUS"} • Warga Baru`,
         iconURL: member.user.displayAvatarURL({ dynamic: true })
       })
-      .setTitle(config.welcome.title || "🏡 Wilujeung Sumping Warga Anyar!")
+      .setTitle(welcomeTitle)
       .setDescription(description)
       .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 512 }))
       .setFooter({ text: makeOTFooter("DESA TULUS • Tempat warga baik berkumpul") })
       .setTimestamp();
 
+    if (config.welcome.imageUrl) {
+      embed.setImage(applyTemplate(config.welcome.imageUrl, welcomeData));
+    }
+
     await safeSend(channel, {
-      content: `🤍 Sambut warga anyar barudak ${member}!`,
+      content: welcomeContent,
       embeds: [embed]
     });
 
@@ -15957,7 +16085,7 @@ function buildPakRwBigBotEmbed(message) {
         "• AI Pak RW",
         "• Curhat Warga & Curhat Anonim",
         "• Kotak Saran Warga",
-        "• Wilujeung Sumping",
+        "• Welcome Warga Anyar",
         "• Level & Poin Warga",
         "• Top Aktif & Member Of The Month",
         "• Donatur Desa & Juragan Desa",
@@ -16427,7 +16555,7 @@ client.on(Events.MessageCreate, async (message) => {
 
 
 
-// ================= PAK RW COMMAND CENTER v10.10.55 =================
+// ================= PAK RW COMMAND CENTER v10.10.60 =================
 // Update ini sengaja tidak menyentuh logic Level, Top Aktif/MOTM, dan Cek Poin.
 const COMMAND_THEME_COLOR = 0x7c6dff;
 const COMMAND_SAFE_FEATURES = ["ai", "curhat", "anonim", "saran", "welcome", "juragan", "donatur", "mabar"];
@@ -18108,7 +18236,7 @@ client.on(Events.MessageCreate, async (message) => {
 
       if (cmd === "premium" || cmd === "mahal" || cmd === "suitepremium") {
         return safeReply(message, [
-          "💎 **Pak RW v10.10.55 — Big Bot DESA TULUS**",
+          "💎 **Pak RW v10.10.60 — Big Bot DESA TULUS**",
           "",
           "Pak RW sekarang jadi bot besar DESA TULUS: satu balai warga digital yang rapi untuk AI, curhat, saran, welcome, level, top aktif, voice, donatur, juragan, boost poin, dashboard, dan pengumuman desa.",
           "",
@@ -18132,7 +18260,7 @@ client.on(Events.MessageCreate, async (message) => {
       if (cmd === "fitur" || cmd === "alur" || cmd === "features" || cmd === "suite") {
         const p = config.prefix || "rw";
         return safeReply(message, [
-          "🧭 **Pak RW Big Bot Balai Warga v10.10.55**",
+          "🧭 **Pak RW Big Bot Balai Warga v10.10.60**",
           "",
           "Alurnya sekarang dibuat seperti bot besar balai warga digital:",
           "**warga butuh bantuan → Pak RW baca konteks → pilih fitur → eksekusi/preview → data tetap aman**.",
@@ -18380,7 +18508,7 @@ async function handlePakRwVisibleSlashCommand(interaction) {
   if (cmd === "fitur") {
     await interaction.reply({
       content: [
-        "🧭 **Pak RW Big Bot Balai Warga v10.10.55**",
+        "🧭 **Pak RW Big Bot Balai Warga v10.10.60**",
         "",
         "**Alur bot besar:** pilih fitur → edit setting → preview → test → backup.",
         "",
@@ -18405,7 +18533,7 @@ async function handlePakRwVisibleSlashCommand(interaction) {
   if (cmd === "premium") {
     await interaction.reply({
       content: [
-        "💎 **Pak RW v10.10.55 — Big Bot DESA TULUS**",
+        "💎 **Pak RW v10.10.60 — Big Bot DESA TULUS**",
         "",
         "**Alur utama:** edit → preview → test aman → backup.",
         "",
