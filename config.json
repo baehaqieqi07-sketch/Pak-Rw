@@ -724,8 +724,9 @@
     "placeholderSelectionMode": "channel_role_user_server_bot_live_from_discord",
     "discordPickerMode": "live_api",
     "discordPickerAutoRefresh": true,
-    "uiVersion": "10.10.68",
-    "architecture": "react_vite_static_dashboard_only"
+    "uiVersion": "10.10.70-clean-finishing",
+    "architecture": "react_vite_static_dashboard_only",
+    "backgroundStyle": "2d-village-premium"
   },
   "featureFlow": {
     "step1": "Pilih modul dari Suite Fitur: Tanya Pak RW, Curhat, Saran, Welcome, Juragan, Donatur, Level, Top Aktif, Embed Builder, Banner Manual, atau Discord Manager.",
@@ -1151,7 +1152,7 @@
       "Discord Manager"
     ]
   },
-  "version": "10.10.68",
+  "version": "10.10.70",
   "bigBot": {
     "releaseName": "Pak RW AI Natural + Welcome Mention v10.10.59"
   },

@@ -10133,24 +10133,35 @@ function pakRwRoleSelect(name, label, selected = "", guild, helper = "") {
 
 function pakRwDiscordPickerPayload(guild) {
   const channelTypeLabel = (type) => ({
-    [ChannelType.GuildText]: "Text",
-    [ChannelType.GuildVoice]: "Voice",
+    [ChannelType.GuildText]: "Text Channel",
+    [ChannelType.GuildVoice]: "Voice Channel",
     [ChannelType.GuildCategory]: "Category",
     [ChannelType.GuildAnnouncement]: "Announcement",
     [ChannelType.GuildForum]: "Forum",
-    [ChannelType.GuildStageVoice]: "Stage"
+    [ChannelType.GuildStageVoice]: "Stage Voice",
+    [ChannelType.GuildMedia]: "Media Channel"
   }[type] || "Channel");
 
   const channels = guild
     ? [...guild.channels.cache.values()]
         .filter((ch) => ch && ch.name && !ch.isThread?.())
-        .sort((a, b) => (a.rawPosition || 0) - (b.rawPosition || 0))
+        .sort((a, b) => {
+          const aParent = a.parent?.rawPosition ?? a.rawPosition ?? 0;
+          const bParent = b.parent?.rawPosition ?? b.rawPosition ?? 0;
+          if (aParent !== bParent) return aParent - bParent;
+          return (a.rawPosition || 0) - (b.rawPosition || 0);
+        })
         .map((ch) => ({
           id: ch.id,
-          name: `#${ch.name}`,
+          name: ch.name,
           rawName: ch.name,
           mention: `<#${ch.id}>`,
-          meta: channelTypeLabel(ch.type)
+          type: ch.type,
+          typeLabel: channelTypeLabel(ch.type),
+          meta: channelTypeLabel(ch.type),
+          category: ch.parent?.name || (ch.type === ChannelType.GuildCategory ? "Category" : "Tanpa kategori"),
+          parentId: ch.parentId || "",
+          position: ch.rawPosition || 0
         }))
     : [];
 
@@ -10160,10 +10171,13 @@ function pakRwDiscordPickerPayload(guild) {
         .sort((a, b) => (b.position || 0) - (a.position || 0))
         .map((role) => ({
           id: role.id,
-          name: `@${role.name}`,
+          name: role.name,
           rawName: role.name,
           mention: `<@&${role.id}>`,
-          meta: role.managed ? "Managed role" : "Role"
+          meta: role.managed ? "Managed role" : "Role server",
+          managed: Boolean(role.managed),
+          color: role.hexColor || "",
+          position: role.position || 0
         }))
     : [];
 
@@ -10171,18 +10185,21 @@ function pakRwDiscordPickerPayload(guild) {
     ? [...guild.members.cache.values()]
         .filter((member) => member?.user)
         .sort((a, b) => String(a.displayName || a.user.username).localeCompare(String(b.displayName || b.user.username), "id"))
-        .slice(0, 500)
         .map((member) => ({
           id: member.id,
-          name: `@${member.displayName || member.user.username}`,
+          name: member.displayName || member.user.username,
           rawName: member.displayName || member.user.username,
+          displayName: member.displayName || member.user.username,
+          username: member.user.username,
           mention: `<@${member.id}>`,
-          meta: member.user.bot ? "Bot" : (member.user.tag || "User")
+          avatarUrl: member.displayAvatarURL?.({ size: 64 }) || member.user.displayAvatarURL?.({ size: 64 }) || "",
+          bot: Boolean(member.user.bot),
+          meta: member.user.bot ? "Bot" : (member.user.tag || "Member")
         }))
     : [];
 
   const server = guild ? [{ id: guild.id, name: guild.name, rawName: guild.name, mention: guild.name, meta: "Server Discord" }] : [];
-  const bot = client?.user ? [{ id: client.user.id, name: `@${client.user.username}`, rawName: client.user.username, mention: `<@${client.user.id}>`, meta: client.user.tag || "Pak RW" }] : [];
+  const bot = client?.user ? [{ id: client.user.id, name: client.user.username, rawName: client.user.username, mention: `<@${client.user.id}>`, meta: client.user.tag || "Pak RW" }] : [];
 
   return {
     channel: channels,
@@ -13002,7 +13019,8 @@ app.get("/api/discord-picker-data", requireDashboardAuth, async (req, res) => {
 
     await Promise.allSettled([
       guild.channels.fetch(),
-      guild.roles.fetch()
+      guild.roles.fetch(),
+      guild.members.fetch().catch(() => null)
     ]);
 
     const payload = pakRwDiscordPickerPayload(guild);

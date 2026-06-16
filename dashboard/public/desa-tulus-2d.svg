@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1800 1000" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#8fa89a"/><stop offset="0.48" stop-color="#b8bfa3"/><stop offset="1" stop-color="#d0c097"/></linearGradient>
+    <linearGradient id="hillA" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#5f7e6b"/><stop offset="1" stop-color="#2b4737"/></linearGradient>
+    <linearGradient id="hillB" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#486959"/><stop offset="1" stop-color="#223b2f"/></linearGradient>
+    <linearGradient id="field" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#94a36d"/><stop offset="0.5" stop-color="#6f8d65"/><stop offset="1" stop-color="#4d7358"/></linearGradient>
+    <linearGradient id="rice" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#c0b375"/><stop offset="0.48" stop-color="#7d9966"/><stop offset="1" stop-color="#496d54"/></linearGradient>
+    <filter id="soft"><feGaussianBlur stdDeviation="14"/></filter>
+    <filter id="shadow"><feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#142019" flood-opacity=".24"/></filter>
+    <radialGradient id="sun" cx="0.72" cy="0.2" r="0.42"><stop stop-color="#f1d59a" stop-opacity=".76"/><stop offset=".65" stop-color="#f1d59a" stop-opacity=".12"/><stop offset="1" stop-color="#f1d59a" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="1800" height="1000" fill="url(#sky)"/>
+  <rect width="1800" height="1000" fill="url(#sun)"/>
+  <g opacity=".32" filter="url(#soft)"><ellipse cx="260" cy="210" rx="220" ry="48" fill="#eff0d7"/><ellipse cx="920" cy="150" rx="330" ry="58" fill="#f4ecd1"/><ellipse cx="1450" cy="250" rx="270" ry="54" fill="#f3ead0"/></g>
+  <path d="M0 410 C130 350 255 330 410 384 C535 427 654 326 790 358 C924 391 1050 315 1190 365 C1320 412 1445 315 1590 350 C1690 374 1740 392 1800 372 L1800 620 L0 620 Z" fill="url(#hillA)" opacity=".92"/>
+  <path d="M0 505 C180 430 330 450 530 480 C710 510 805 398 990 436 C1148 468 1238 414 1400 440 C1560 468 1685 470 1800 425 L1800 700 L0 700 Z" fill="url(#hillB)" opacity=".96"/>
+  <path d="M0 590 C255 548 480 570 690 620 C920 675 1180 565 1800 600 L1800 1000 L0 1000 Z" fill="url(#field)"/>
+  <g opacity=".74">
+    <path d="M-80 710 C280 670 560 688 880 760 C1190 832 1490 760 1880 692" fill="none" stroke="#d7c884" stroke-width="42" stroke-linecap="round"/>
+    <path d="M-80 780 C250 735 585 762 870 820 C1175 882 1510 820 1880 748" fill="none" stroke="#5d805c" stroke-width="36" stroke-linecap="round"/>
+    <path d="M-80 850 C305 796 665 840 960 900 C1210 950 1530 890 1880 820" fill="none" stroke="#c5b778" stroke-width="33" stroke-linecap="round"/>
+    <path d="M-80 920 C320 875 710 920 1010 964 C1285 1004 1540 956 1880 900" fill="none" stroke="#4b6e54" stroke-width="34" stroke-linecap="round"/>
+  </g>
+  <g filter="url(#shadow)">
+    <path d="M1110 610 h150 l86 72 h-320 z" fill="#7a5841"/><rect x="1056" y="680" width="250" height="118" rx="8" fill="#cfbd8f"/><rect x="1100" y="715" width="58" height="83" rx="4" fill="#4a3b2f"/><rect x="1190" y="710" width="74" height="46" rx="4" fill="#5c7768"/><path d="M1028 682 h326 l-70 -74 h-178 z" fill="#6f4e3a"/>
+    <rect x="1345" y="628" width="18" height="178" rx="8" fill="#56684d"/><rect x="1378" y="596" width="16" height="198" rx="8" fill="#485f46"/><rect x="1410" y="640" width="14" height="174" rx="7" fill="#5c7350"/>
+    <path d="M1360 630 C1310 572 1325 540 1372 512 C1402 565 1415 594 1360 630 Z" fill="#7b956a"/><path d="M1402 635 C1460 572 1445 535 1394 510 C1370 570 1350 612 1402 635 Z" fill="#648960"/><path d="M1422 698 C1486 654 1485 610 1442 578 C1410 640 1398 668 1422 698 Z" fill="#78945d"/>
+  </g>
+  <path d="M0 668 C250 625 530 650 760 715 C1090 812 1370 740 1800 660" fill="none" stroke="#ece1b9" stroke-opacity=".22" stroke-width="2"/>
+  <path d="M0 760 C300 705 620 735 920 808 C1210 878 1500 800 1800 742" fill="none" stroke="#fff5ce" stroke-opacity=".18" stroke-width="2"/>
+  <rect width="1800" height="1000" fill="#13221b" opacity=".05"/>
+</svg>

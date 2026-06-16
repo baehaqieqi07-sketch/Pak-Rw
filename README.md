@@ -100,3 +100,7 @@ Jangan upload `.env`, `node_modules`, `data`, `logs`, `runtime-logs`, atau `back
 - Level Up memakai `<a:rocket_animated:1512884173453529288>` dan `<a:Chart_Increasing:1516454160684290219>`.
 - Level Up dan Cek Poin tidak lagi memasang thumbnail/image.
 - Preview dashboard menampilkan blockquote dan custom emoji dengan format yang sama seperti Discord.
+
+## Update v10.10.70
+
+Dashboard dirapikan lagi: embed editor sekarang mendukung autocomplete `@` untuk role/member dan `#` untuk channel/category/voice, picker Discord menjadi modal rapi, preview memakai nama asli dari server, dan background diganti menjadi ilustrasi 2D DESA TULUS yang lebih adem.

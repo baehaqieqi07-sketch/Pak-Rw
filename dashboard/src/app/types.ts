@@ -3,7 +3,9 @@ export type DiscordChannel = {
   name: string;
   type?: number | string;
   typeLabel?: string;
+  meta?: string;
   category?: string;
+  rawName?: string;
   mention?: string;
 };
 
@@ -12,14 +14,19 @@ export type DiscordRole = {
   name: string;
   color?: string;
   position?: number;
+  managed?: boolean;
+  rawName?: string;
   mention?: string;
 };
 
 export type DiscordUser = {
   id: string;
   username: string;
+  name?: string;
+  rawName?: string;
   displayName?: string;
   avatarUrl?: string;
+  bot?: boolean;
   mention?: string;
 };
 
