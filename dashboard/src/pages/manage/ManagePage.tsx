@@ -88,7 +88,7 @@ function normalizeEmbed(raw: Record<string, any> = {}): EmbedDraft {
     authorIcon: raw.authorIcon || "",
     title: raw.title || "",
     description: raw.description || "",
-    color: raw.color || "#88a08c",
+    color: raw.color || "#7DBD77",
     thumbnailUrl: raw.thumbnailUrl || (raw.thumbnail && raw.thumbnail !== "avatar" ? raw.thumbnail : ""),
     imageUrl: raw.imageUrl || raw.image || "",
     footerText: raw.footerText || raw.footer || "",

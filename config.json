@@ -2,7 +2,7 @@
   "serverName": "DESA TULUS",
   "ownerName": "Pak RW",
   "prefix": "rw",
-  "embedColor": "#F5E9C8",
+  "embedColor": "#7DBD77",
   "activityText": "DESA TULUS 🌾 • Pak RW Menjaga Warga",
   "aiChannelId": "1506356360298893312",
   "curhatChannelId": "1507363585779695706",
@@ -229,7 +229,8 @@
     "buttonText": "💡 Kirim Saran ke Pak RW",
     "successMessage": "✅ Saran kamu sudah diterima Pak RW. Terima kasih, masukannya akan dibaca dengan baik.",
     "votingMode": "one_user_one_vote",
-    "dashboardHelp": "Saran warga masuk ke Pak RW dengan bahasa sopan dan rapi. Kalau nama dikosongkan, tampil sebagai Anonim."
+    "dashboardHelp": "Saran warga masuk ke Pak RW dengan bahasa sopan dan rapi. Kalau nama dikosongkan, tampil sebagai Anonim.",
+    "color": "#7DBD77"
   },
   "levelChannelId": "1511737744978743367",
   "level100RoleId": "1505183243362767019",
@@ -240,7 +241,7 @@
   "donaturMinimumAmount": 100000,
   "embeds": {
     "juragan": {
-      "color": "#D7A84F",
+      "color": "#7DBD77",
       "title": "<a:Boost:1512485430887714866> SELAMAT DATANG JURAGAN! <a:Boost:1512485430887714866>",
       "description": "Terima kasih sudah mendukung server ini {user}.\nSekarang kamu dapat menikmati benefit dari role {juraganRole}.\n\n**Benefit utama:**\n\n• Mendapatkan role {juraganRole}\n• Display role di member list\n• Bonus ekstra poin +{bonusPercent}%\n• Akses ke fitur Soundboard\n• Akses ke voice channel VIP {vipVoiceChannel}\n• Akses text channel khusus donatur {juraganChatChannel}\n\nGunakan benefit dengan sopan dan tetap jaga suasana warga.",
       "footer": "DESA TULUS • Juragan Desa",
@@ -291,7 +292,7 @@
       "previewMustMatchDiscord": true
     },
     "donatur": {
-      "color": "#55BFA3",
+      "color": "#7DBD77",
       "title": "💎 Donatur Desa Aktif",
       "description": "Halo {user}, akses **Donatur Desa** kamu sedang aktif.\n\nStatus: **Aktif**\n{expiredText}\n\nTerima kasih sudah ikut menjaga **DESA TULUS** tetap hidup, rapi, dan nyaman.",
       "footer": "DESA TULUS • Donatur Desa",
@@ -306,7 +307,7 @@
       "previewMustMatchDiscord": true
     },
     "anonimPanel": {
-      "color": "#8EC5A5",
+      "color": "#7DBD77",
       "title": "☁️ Curhat Anonim ke Pak RW",
       "description": "Punya cerita yang ingin disampaikan tanpa menampilkan identitas?\n\nKlik tombol **Curhat ke Pak RW**. Curhatan akan diterima dengan sopan, aman, dan tidak menghakimi.",
       "footer": "DESA TULUS • Curhat Anonim",
@@ -388,10 +389,11 @@
         "{year}",
         "{date}",
         "{time}"
-      ]
+      ],
+      "color": "#7DBD77"
     },
     "memberOfTheMonth": {
-      "color": "#F1C75B",
+      "color": "#7DBD77",
       "title": "🏆 Member Of The Month",
       "description": "{user} resmi menjadi **Member Of The Month**.\n\nTotal poin bulan ini: **{total}**\nChat: **{chat}** • Voice: **{voice}**\n\nTerima kasih sudah ikut menghidupkan **{server}**.",
       "footer": "DESA TULUS • Member Of The Month",
@@ -406,7 +408,7 @@
       "previewMustMatchDiscord": true
     },
     "suggestionResult": {
-      "color": "#F2C66D",
+      "color": "#7DBD77",
       "title": "💡 Saran Warga",
       "description": "{user} mengirim saran:\n\n{content}",
       "footer": "DESA TULUS • Kotak Saran Pak RW",
@@ -421,7 +423,7 @@
       "previewMustMatchDiscord": true
     },
     "curhatReply": {
-      "color": "#8EC5A5",
+      "color": "#7DBD77",
       "title": "☁️ Pak RW Mendengarkan Warga",
       "description": "{reply}",
       "footer": "DESA TULUS • Curhat Warga",
@@ -436,7 +438,7 @@
       "previewMustMatchDiscord": true
     },
     "topActiveBoard": {
-      "color": "#E2B456",
+      "color": "#7DBD77",
       "title": "🏆 TOP AKTIF WARGA BULAN {month} {server}",
       "description": "Update otomatis setiap hari pukul 00.00 WIB",
       "footer": "DESA TULUS • Gunakan perintah rwcekpoin untuk melihat poin warga",
@@ -451,7 +453,7 @@
       "previewMustMatchDiscord": true
     },
     "cariMabar": {
-      "color": "#6DAF8B",
+      "color": "#7DBD77",
       "content": "🎮 {user} sedang mencari teman mabar di **{server}**.",
       "authorIcon": "",
       "authorName": "DESA TULUS • Cari Mabar Warga",
@@ -498,7 +500,7 @@
       "previewMustMatchDiscord": true
     },
     "papanAktif": {
-      "color": "#D7A84F",
+      "color": "#7DBD77",
       "content": "",
       "authorName": "",
       "title": "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU",
@@ -513,7 +515,7 @@
       "previewMustMatchDiscord": true
     },
     "boostPoinActive": {
-      "color": "#34D399",
+      "color": "#7DBD77",
       "content": "",
       "authorName": "DESA TULUS • Boost Poin",
       "title": "<a:Boost:1512485430887714866> BOOST POIN DIAKTIFKAN",
@@ -528,7 +530,7 @@
       "previewMustMatchDiscord": true
     },
     "boostPoinEnd": {
-      "color": "#FF5C7A",
+      "color": "#7DBD77",
       "content": "",
       "authorName": "DESA TULUS • Boost Poin",
       "title": "<a:Boost:1512485430887714866> BOOST POIN BERAKHIR",
@@ -543,7 +545,7 @@
       "previewMustMatchDiscord": true
     },
     "aiFallback": {
-      "color": "#6D9DF7",
+      "color": "#7DBD77",
       "content": "",
       "authorName": "DESA TULUS • AI Pak RW",
       "title": "🤖 Pak RW sedang hemat limit",
@@ -724,9 +726,11 @@
     "placeholderSelectionMode": "channel_role_user_server_bot_live_from_discord",
     "discordPickerMode": "live_api",
     "discordPickerAutoRefresh": true,
-    "uiVersion": "10.10.72-auto-savebar",
+    "uiVersion": "10.10.73",
     "architecture": "react_vite_static_dashboard_only",
-    "backgroundStyle": "2d-village-premium"
+    "backgroundStyle": "2d-village-premium",
+    "embedColorLocked": "#7DBD77",
+    "embedColorPolicy": "Semua embed Discord Pak RW memakai warna #7DBD77 agar konsisten."
   },
   "featureFlow": {
     "step1": "Pilih modul dari Suite Fitur: Tanya Pak RW, Curhat, Saran, Welcome, Juragan, Donatur, Level, Top Aktif, Embed Builder, Banner Manual, atau Discord Manager.",
@@ -1069,8 +1073,8 @@
     "roleMentionIds": [],
     "endTitle": "<a:Boost:1512485430887714866> BOOST POIN BERAKHIR",
     "endDescription": "Boost poin untuk channel {channels} telah selesai.\n\n🔄 Status: Kembali ke normal (x1)",
-    "announcementColor": "#34D399",
-    "endColor": "#FF5C7A",
+    "announcementColor": "#7DBD77",
+    "endColor": "#7DBD77",
     "showJoinButton": false,
     "joinButtonLabel": "Buka Channel Event",
     "durationMinutes": 60,
@@ -1087,7 +1091,8 @@
     "status": "standby",
     "autoEndEnabled": true,
     "announceOnStart": true,
-    "announceOnEnd": true
+    "announceOnEnd": true,
+    "color": "#7DBD77"
   },
   "botName": "Pak RW",
   "botRole": "Pak RW DESA TULUS",
@@ -1152,7 +1157,7 @@
       "Discord Manager"
     ]
   },
-  "version": "10.10.72",
+  "version": "10.10.73",
   "bigBot": {
     "releaseName": "Pak RW AI Natural + Welcome Mention v10.10.59"
   },

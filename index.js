@@ -33,6 +33,9 @@ const {
 
 const config = require("./config.json");
 
+const DESA_TULUS_EMBED_COLOR_HEX = "#7DBD77";
+const DESA_TULUS_EMBED_COLOR_INT = 0x7DBD77;
+
 let CanvasKit = null;
 try {
   CanvasKit = require("@napi-rs/canvas");
@@ -6487,7 +6490,7 @@ function applyMaxtonControlPost(body = {}) {
   setString("serverName", (v) => { cfg.serverName = v || "DESA TULUS"; });
   setString("ownerName", (v) => { cfg.ownerName = v || "PAK RW"; });
   setString("prefix", (v) => { cfg.prefix = v || "rw"; });
-  setString("embedColor", (v) => { cfg.embedColor = v || "#FFFFFF"; });
+  setString("embedColor", (v) => { cfg.embedColor = DESA_TULUS_EMBED_COLOR_HEX; });
   setString("activityText", (v) => { cfg.activityText = v || "DESA TULUS 🌾 • Pak RW Menjaga Warga"; });
   ["aiChannelId", "curhatChannelId", "anonymousCurhatChannelId", "suggestionChannelId", "ticketChannelId", "chatWargaChannelId", "levelChannelId", "cekPoinChannelId", "logChannelId", "rulesChannelId", "infoChannelId", "eventChannelId"].forEach((name) => {
     setString(name, (v) => { cfg[name] = v; });
@@ -7121,7 +7124,7 @@ function renderCarlbotEmbedEditor(key, embed = {}, channelHtml = "", savedDestin
   const title = embed.title || "";
   const description = embed.description || "";
   const footer = embed.footer || "";
-  const color = embed.color || "#2B2D31";
+  const color = DESA_TULUS_EMBED_COLOR_HEX;
   const fields = Array.isArray(embed.fields) ? embed.fields : [];
   const raw = JSON.stringify({
     content: embed.content || "",
@@ -7279,7 +7282,7 @@ function renderEmbedsPage(req, saved = false, error = "", actionMessage = "") {
       .carl-preview-title.raw { margin-top:14px; }
       .carl-discord-preview { background:#313338; border-radius:16px; padding:14px; border:1px solid rgba(255,255,255,.08); }
       .carl-normal-preview { color:#dbdee1; font-size:13px; margin-bottom:10px; white-space:pre-wrap; }
-      .carl-embed-preview { background:#2b2d31; border-left:4px solid #5865F2; border-radius:6px; padding:12px; color:#dbdee1; max-width:520px; }
+      .carl-embed-preview { background:#2b2d31; border-left:4px solid #7DBD77; border-radius:6px; padding:12px; color:#dbdee1; max-width:520px; }
       .carl-author-preview { font-size:12px; font-weight:800; color:#f2f3f5; margin-bottom:7px; }
       .carl-title-preview { color:#00a8fc; font-weight:1000; margin-bottom:7px; }
       .carl-desc-preview { white-space:pre-wrap; color:#dbdee1; line-height:1.48; font-size:13px; }
@@ -7391,7 +7394,7 @@ function renderEmbedsPage(req, saved = false, error = "", actionMessage = "") {
       }
       function refresh(section) {
         const get = (field) => section.querySelector('[name="embed_' + section.dataset.carlEmbed + '_' + field + '"]')?.value || '';
-        const color = get('color') || '#5865F2';
+        const color = DESA_TULUS_EMBED_COLOR_HEX;
         const preview = section.querySelector('.carl-embed-preview');
         if (preview) preview.style.borderLeftColor = color;
         const normal = section.querySelector('.carl-normal-preview');
@@ -7663,14 +7666,14 @@ function writeEmbedTemplatesFile(data) {
 }
 
 function intToHexColor(color) {
-  if (!color && color !== 0) return "#5865F2";
+  if (!color && color !== 0) return DESA_TULUS_EMBED_COLOR_HEX;
   if (typeof color === "string") return color.startsWith("#") ? color : `#${color}`;
   const hex = Number(color || 0).toString(16).padStart(6, "0").slice(-6);
   return `#${hex}`.toUpperCase();
 }
 
 function hexToIntColor(hex) {
-  const clean = String(hex || "#5865F2").replace("#", "").trim();
+  const clean = String(DESA_TULUS_EMBED_COLOR_HEX).replace("#", "").trim();
   const parsed = parseInt(clean || "5865F2", 16);
   return Number.isFinite(parsed) ? parsed : 0x5865F2;
 }
@@ -7725,7 +7728,7 @@ function formToEmbedTemplate(body = {}) {
   const embed = {
     title: String(body.title || "").slice(0, 256),
     description: String(body.description || "").slice(0, 4096),
-    color: hexToIntColor(body.color || "#5865F2"),
+    color: DESA_TULUS_EMBED_COLOR_INT,
     url: String(body.url || "").trim() || undefined,
     author: String(body.authorName || "").trim() ? {
       name: String(body.authorName || "").slice(0, 256),
@@ -7768,7 +7771,7 @@ function formToEmbedTemplate(body = {}) {
 function templateToEmbedBuilder(template = {}) {
   const embed = template.embed || {};
   const builder = new EmbedBuilder();
-  if (embed.color !== undefined) builder.setColor(Number(embed.color));
+  builder.setColor(DESA_TULUS_EMBED_COLOR_INT);
   if (embed.title) builder.setTitle(String(embed.title).slice(0, 256));
   if (embed.description) builder.setDescription(String(embed.description).slice(0, 4096));
   if (embed.url) builder.setURL(String(embed.url));
@@ -7978,7 +7981,7 @@ function renderEmbedSyncPage(req, opts = {}) {
       function escapeHtmlClient(x){ return String(x||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])); }
       function refresh(){
         if(!form) return;
-        const color = get('color') || '#5865F2';
+        const color = DESA_TULUS_EMBED_COLOR_HEX;
         const set = (sel, val) => { const el = document.querySelector(sel); if(el) el.textContent = val || ''; };
         set('[data-prev="content"]', get('content'));
         set('[data-prev="author"]', get('authorName'));
@@ -8219,7 +8222,7 @@ function renderControlCenter(req, saved = false, error = "", actionMessage = "")
             <textarea name="message" placeholder="Tulis pengumuman / pesan dashboard di sini..."></textarea>
           </div>
           <div class="formgrid" style="margin-top:14px">
-            ${configInput("color", "Warna Embed", "#7C5CFF")}
+            ${configInput("color", "Warna Embed", DESA_TULUS_EMBED_COLOR_HEX)}
             ${configInput("image", "Image/GIF URL (opsional)", "")}
           </div>
           <div class="actions">
@@ -9146,7 +9149,7 @@ function renderCariMabarDashboard(req, saved = false, error = "") {
           <span class="premium-chip">Preview Live</span>
         </div>
         <div class="formgrid">
-          ${configInput("embedColor", "Color HEX", embed.color || "#5865F2")}
+          ${configInput("embedColor", "Color HEX", DESA_TULUS_EMBED_COLOR_HEX)}
           ${configInput("embedTitle", "Title", embed.title || "🎮 CARI MABAR DESA TULUS")}
           ${configInput("embedFooter", "Footer", embed.footer || "DESA TULUS • Cari Mabar")}
           ${configInput("embedImage", "Image URL", embed.image || "")}
@@ -9156,7 +9159,7 @@ function renderCariMabarDashboard(req, saved = false, error = "") {
         ${textareaInput("embedDescription", "Description", embed.description || "Ada yang mau mabar? Isi data mabar dengan jelas biar warga gampang ikut.", 6)}
         <div class="premium-discord-preview" style="margin-top:14px">
           <div class="premium-discord-msg">${escapeHtml(embed.content || "Normal text Cari Mabar")}</div>
-          <div class="premium-embed-demo" style="border-left-color:${escapeHtml(embed.color || "#5865F2")}">
+          <div class="premium-embed-demo" style="border-left-color:${escapeHtml(DESA_TULUS_EMBED_COLOR_HEX)}">
             <div class="title">${escapeHtml(embed.title || "🎮 CARI MABAR DESA TULUS")}</div>
             <p>${escapeHtml(embed.description || "Ada yang mau mabar? Isi data mabar dengan jelas biar warga gampang ikut.")}</p>
             <small>${escapeHtml(embed.footer || "DESA TULUS • Cari Mabar")}</small>
@@ -9380,7 +9383,7 @@ function renderPreviewStudio(req) {
     <section class="panel">
       <h3>🎨 Embed Preview</h3>
       <div class="formgrid">
-        ${cards.map(([name, item]) => `<div class="preview-card" style="border-left:5px solid ${escapeHtml(item?.color || "#7C5CFF")}"><b>${escapeHtml(name)}</b>\n\n${escapeHtml(item?.title || "-")}\n\n${escapeHtml(item?.description || "-")}\n\nFooter: ${escapeHtml(item?.footer || "-")}</div>`).join("")}
+        ${cards.map(([name, item]) => `<div class="preview-card" style="border-left:5px solid ${escapeHtml(DESA_TULUS_EMBED_COLOR_HEX)}"><b>${escapeHtml(name)}</b>\n\n${escapeHtml(item?.title || "-")}\n\n${escapeHtml(item?.description || "-")}\n\nFooter: ${escapeHtml(item?.footer || "-")}</div>`).join("")}
       </div>
       <div class="actions">
         <a class="btn" href="/embeds">Edit Embeds</a>
@@ -10373,7 +10376,7 @@ function pakRwEmbedForFeature(cfg = readConfigFile(), meta = {}) {
       fields: []
     }};
   }
-  return { key: meta.embedKey || meta.slug || "custom", data: { color: cfg.embedColor || "#7DBD77", content: "", authorName: "DESA TULUS • Pak RW", title: meta.name || "Pak RW Embed", description: meta.desc || "Template embed bisa diedit dari dashboard.", footer: "DESA TULUS • Balai Warga Digital", fields: [] } };
+  return { key: meta.embedKey || meta.slug || "custom", data: { color: DESA_TULUS_EMBED_COLOR_HEX, content: "", authorName: "DESA TULUS • Pak RW", title: meta.name || "Pak RW Embed", description: meta.desc || "Template embed bisa diedit dari dashboard.", footer: "DESA TULUS • Balai Warga Digital", fields: [] } };
 }
 
 function pakRwPreviewRichText(text = "", guild = null) {
@@ -10397,7 +10400,7 @@ function pakRwPreviewRichText(text = "", guild = null) {
 function pakRwDiscordPreview(embedCfg = {}, cfg = readConfigFile()) {
   const data = pakRwPreviewData(cfg);
   const guild = typeof getDashboardGuild === "function" ? getDashboardGuild() : client.guilds.cache.first();
-  const color = embedCfg.color || cfg.embedColor || "#7DBD77";
+  const color = embedCfg.color || DESA_TULUS_EMBED_COLOR_HEX;
   const content = pakRwTemplate(embedCfg.content || "", data);
   const author = pakRwTemplate(embedCfg.authorName || "", data);
   const title = pakRwTemplate(embedCfg.title || "", data);
@@ -10773,7 +10776,7 @@ function renderPakRwManagePage(req, slug, opts = {}) {
       ${meta.channelKey ? pakRwChannelSelect("channelId", "Channel Utama", channelVal, guild, `Sekarang: ${pakRwReadableChannel(guild, channelVal)}`) : ""}
       ${meta.roleKey ? pakRwRoleSelect("roleId", "Role Utama", roleVal, guild, `Sekarang: ${pakRwReadableRole(guild, roleVal)}`) : ""}
       ${featureSpecific}
-      ${pakRwTextField("embedColor", "Embed Color", embed.color || cfg.embedColor || "#7DBD77", "Contoh: #7DBD77", "text")}
+      ${pakRwTextField("embedColor", "Embed Color", embed.color || DESA_TULUS_EMBED_COLOR_HEX, "Contoh: #7DBD77", "text")}
       ${pakRwTextField("content", "Content / teks atas embed", embed.content || "", "Bisa pakai placeholder dan mention aman.")}
       ${pakRwTextField("authorName", "Author Name", embed.authorName || "", "Contoh: DESA TULUS • Warga Baru")}
       ${pakRwTextField("authorIcon", "Author Icon URL", embed.authorIcon || embed.footerIcon || "", "Opsional URL icon")}
@@ -10921,7 +10924,7 @@ function savePakRwManagePage(req, slug) {
   cfg.embeds = cfg.embeds || {};
   cfg.embeds[pack.key] = {
     ...(cfg.embeds[pack.key] || pack.data || {}),
-    color: String(req.body.embedColor || pack.data?.color || cfg.embedColor || "#7DBD77"),
+    color: String(req.body.embedColor || pack.data?.color || DESA_TULUS_EMBED_COLOR_HEX),
     content: String(req.body.content ?? pack.data?.content ?? ""),
     authorName: String(req.body.authorName ?? pack.data?.authorName ?? ""),
     authorIcon: String(req.body.authorIcon ?? pack.data?.authorIcon ?? ""),
@@ -10954,7 +10957,7 @@ function renderPakRwGlobalEmbedManager(req, opts = {}) {
     ${opts.saved ? `<div class="alert">✅ Template embed berhasil disimpan.</div>` : ""}
     ${opts.error ? `<div class="alert danger">❌ ${escapeHtml(opts.error)}</div>` : ""}
     <section class="hero" style="min-height:220px"><div class="hero-content"><div class="badge-row"><span class="badge ok">Global Embed Manager</span><span class="badge">${keys.length} template</span><span class="badge">Preview sama seperti Discord</span></div><h2>🎨 Embed Manager Global</h2><p>Edit semua embed yang tampil di Discord: Welcome, Curhat, Saran, Level Up, Cek Poin, Top Aktif, Papan Aktif, MOTM, Donatur, Juragan, Mabar, Boost Poin, command help, error permission, dan logs.</p></div></section>
-    <div class="embed-list"><aside class="template-list">${list || `<div class="muted">Belum ada template.</div>`}</aside><div class="workspace" style="grid-template-columns:minmax(0,1.05fr) minmax(360px,.95fr)"><form class="form-card" method="post" action="/dashboard/manage/embed"><input type="hidden" name="templateKey" value="${escapeHtml(selectedKey)}"><h3>Template: ${escapeHtml(selectedKey)}</h3><div class="form-grid">${pakRwTextField("content", "Content", selected.content || "", "Teks di atas embed.")}${pakRwTextField("color", "Color", selected.color || cfg.embedColor || "#7DBD77", "Hex color")}${pakRwTextField("authorName", "Author Name", selected.authorName || "", "Nama author")}${pakRwTextField("authorIcon", "Author Icon", selected.authorIcon || selected.footerIcon || "", "URL icon")}${pakRwTextField("title", "Title", selected.title || "", "Judul embed")}${pakRwTextField("titleUrl", "Title URL", selected.titleUrl || "", "Opsional")}${pakRwTextarea("description", "Description", selected.description || "", "Isi embed", 10)}${pakRwTextField("thumbnail", "Thumbnail URL", selected.thumbnail || "", "Opsional")}${pakRwTextField("image", "Image URL", selected.image || "", "Opsional")}${pakRwTextField("footer", "Footer Text", selected.footer || "", "Footer")}${pakRwTextField("footerIcon", "Footer Icon", selected.footerIcon || "", "URL icon footer")}${pakRwTextField("buttonLabel", "Button Label", selected.buttonLabel || "", "Opsional")}${pakRwTextField("buttonUrl", "Button URL / Channel", selected.buttonUrl || "", "Opsional")}${pakRwTextarea("fieldsJson", "Fields JSON", JSON.stringify(selected.fields || [], null, 2), "Array field embed. Contoh: [{\"name\":\"Info\",\"value\":\"Isi\",\"inline\":false}]", 7)}</div><div class="action-bar"><button class="btn" type="submit">💾 Save Template</button><button class="btn secondary" type="submit" name="duplicate" value="1">Duplicate</button><button class="btn secondary" type="button" data-copy='${escapeHtml(JSON.stringify(selected, null, 2))}'>Copy JSON</button><a class="btn ghost" href="/embed-sync?template=${encodeURIComponent(selectedKey)}">Advanced Sync</a></div></form><aside class="preview-card">${pakRwDiscordPreview(selected, cfg)}${pakRwPlaceholderPanel(guild)}</aside></div></div>
+    <div class="embed-list"><aside class="template-list">${list || `<div class="muted">Belum ada template.</div>`}</aside><div class="workspace" style="grid-template-columns:minmax(0,1.05fr) minmax(360px,.95fr)"><form class="form-card" method="post" action="/dashboard/manage/embed"><input type="hidden" name="templateKey" value="${escapeHtml(selectedKey)}"><h3>Template: ${escapeHtml(selectedKey)}</h3><div class="form-grid">${pakRwTextField("content", "Content", selected.content || "", "Teks di atas embed.")}${pakRwTextField("color", "Color", selected.color || DESA_TULUS_EMBED_COLOR_HEX, "Hex color")}${pakRwTextField("authorName", "Author Name", selected.authorName || "", "Nama author")}${pakRwTextField("authorIcon", "Author Icon", selected.authorIcon || selected.footerIcon || "", "URL icon")}${pakRwTextField("title", "Title", selected.title || "", "Judul embed")}${pakRwTextField("titleUrl", "Title URL", selected.titleUrl || "", "Opsional")}${pakRwTextarea("description", "Description", selected.description || "", "Isi embed", 10)}${pakRwTextField("thumbnail", "Thumbnail URL", selected.thumbnail || "", "Opsional")}${pakRwTextField("image", "Image URL", selected.image || "", "Opsional")}${pakRwTextField("footer", "Footer Text", selected.footer || "", "Footer")}${pakRwTextField("footerIcon", "Footer Icon", selected.footerIcon || "", "URL icon footer")}${pakRwTextField("buttonLabel", "Button Label", selected.buttonLabel || "", "Opsional")}${pakRwTextField("buttonUrl", "Button URL / Channel", selected.buttonUrl || "", "Opsional")}${pakRwTextarea("fieldsJson", "Fields JSON", JSON.stringify(selected.fields || [], null, 2), "Array field embed. Contoh: [{\"name\":\"Info\",\"value\":\"Isi\",\"inline\":false}]", 7)}</div><div class="action-bar"><button class="btn" type="submit">💾 Save Template</button><button class="btn secondary" type="submit" name="duplicate" value="1">Duplicate</button><button class="btn secondary" type="button" data-copy='${escapeHtml(JSON.stringify(selected, null, 2))}'>Copy JSON</button><a class="btn ghost" href="/embed-sync?template=${encodeURIComponent(selectedKey)}">Advanced Sync</a></div></form><aside class="preview-card">${pakRwDiscordPreview(selected, cfg)}${pakRwPlaceholderPanel(guild)}</aside></div></div>
   `, "embed", "Embed Manager Global");
 }
 
@@ -10967,7 +10970,7 @@ function savePakRwGlobalEmbedManager(req) {
   const base = cfg.embeds[key] || {};
   cfg.embeds[key] = {
     ...base,
-    color: String(req.body.color || base.color || cfg.embedColor || "#7DBD77"),
+    color: String(req.body.color || base.color || DESA_TULUS_EMBED_COLOR_HEX),
     content: String(req.body.content || ""),
     authorName: String(req.body.authorName || ""),
     authorIcon: String(req.body.authorIcon || ""),
@@ -11065,7 +11068,7 @@ function normalizeDashboardEmbed(raw = {}) {
     authorIcon: String(raw.authorIcon || "").slice(0, 500),
     title: String(raw.title || "").slice(0, 256),
     description: String(raw.description || "").slice(0, 4096),
-    color: String(raw.color || "#88a08c").slice(0, 20),
+    color: DESA_TULUS_EMBED_COLOR_HEX,
     thumbnailUrl: String(raw.thumbnailUrl || "").slice(0, 500),
     imageUrl: String(raw.imageUrl || "").slice(0, 500),
     footerText: String(raw.footerText || "").slice(0, 2048),
@@ -11093,8 +11096,8 @@ function mergeDashboardEmbed(previous = {}, draft = {}) {
   };
 }
 
-function parseDashboardColor(input = "#88a08c") {
-  const value = String(input || "#88a08c").replace("#", "");
+function parseDashboardColor(input = DESA_TULUS_EMBED_COLOR_HEX) {
+  const value = String(DESA_TULUS_EMBED_COLOR_HEX).replace("#", "");
   return /^[0-9a-fA-F]{6}$/.test(value) ? parseInt(value, 16) : 0x88a08c;
 }
 
@@ -11190,7 +11193,7 @@ app.post("/api/dashboard/test-embed", requireDashboardAuth, async (req, res) => 
     if (!channel || !channel.isTextBased?.()) return res.status(400).json({ ok: false, error: "Channel tujuan tidak valid atau bukan text channel." });
     const draft = normalizeDashboardEmbed(req.body?.embed || {});
     const builder = new EmbedBuilder()
-      .setColor(parseDashboardColor(draft.color))
+      .setColor(DESA_TULUS_EMBED_COLOR_INT)
       .setDescription(draft.description || "Pratinjau tes dari Pak RW Control Center.");
     if (draft.title) builder.setTitle(draft.title);
     if (draft.authorName) builder.setAuthor({ name: draft.authorName, iconURL: dashboardSafeUrl(draft.authorIcon) || undefined });
@@ -11371,7 +11374,7 @@ app.post("/config", requireDashboardAuth, (req, res) => {
     cfg.serverName = req.body.serverName || cfg.serverName;
     cfg.ownerName = req.body.ownerName || cfg.ownerName;
     cfg.prefix = req.body.prefix || cfg.prefix;
-    cfg.embedColor = req.body.embedColor || cfg.embedColor;
+    cfg.embedColor = DESA_TULUS_EMBED_COLOR_HEX;
     cfg.activityText = req.body.activityText || cfg.activityText;
 
     cfg.ai = cfg.ai || {};
@@ -11421,7 +11424,7 @@ function normalizeEmbedFormFromRequest(req, originalKey, current = {}) {
 
   return {
     ...current,
-    color: clean(get("color")) || current.color || config.embedColor || "#2B2D31",
+    color: clean(get("color")) || current.color || DESA_TULUS_EMBED_COLOR_HEX,
     content: String(get("content") ?? ""),
     authorIcon: clean(get("authorIcon")),
     authorName: clean(get("authorName")),
@@ -11450,7 +11453,7 @@ function isHttpUrl(value = "") {
 function buildDashboardEmbedPayload(embedCfg = {}, data = {}) {
   const content = smartDiscordMentions(applyTemplate(embedCfg.content || "", data), client?.guilds?.cache?.first?.() || null).text.slice(0, 2000);
   const embed = new EmbedBuilder()
-    .setColor(hexColor(embedCfg.color || config.embedColor || "#2B2D31", 0x2b2d31));
+    .setColor(hexColor(embedCfg.color || DESA_TULUS_EMBED_COLOR_HEX, 0x2b2d31));
 
   const authorName = applyTemplate(embedCfg.authorName || "", data).slice(0, 256);
   const authorIcon = applyTemplate(embedCfg.authorIcon || "", data);
@@ -11675,7 +11678,7 @@ app.post("/embeds", requireDashboardAuth, (req, res) => {
 
       cfg.embeds[originalKey] = {
         ...current,
-        color: clean(get("color")) || current.color || cfg.embedColor || "#2B2D31",
+        color: clean(get("color")) || current.color || DESA_TULUS_EMBED_COLOR_HEX,
         content: String(get("content") ?? ""),
         authorIcon: clean(get("authorIcon")),
         authorName: clean(get("authorName")),
@@ -11697,7 +11700,7 @@ app.post("/embeds", requireDashboardAuth, (req, res) => {
       const key = safeEmbedKey(req.body.newEmbedKey);
       if (key) {
         cfg.embeds[key] = cfg.embeds[key] || {};
-        cfg.embeds[key].color = cfg.embeds[key].color || cfg.embedColor || "#2B2D31";
+        cfg.embeds[key].color = cfg.embeds[key].color || DESA_TULUS_EMBED_COLOR_HEX;
         cfg.embeds[key].title = clean(req.body.newEmbedTitle) || cfg.embeds[key].title || key;
         cfg.embeds[key].authorName = clean(req.body.newEmbedAuthorName) || cfg.embeds[key].authorName || "";
         cfg.embeds[key].description = cfg.embeds[key].description || "";
@@ -12055,7 +12058,7 @@ app.post("/quick-edit", requireDashboardAuth, (req, res) => {
 
     cfg.prefix = req.body.prefix || "rw";
     cfg.activityText = req.body.activityText || cfg.activityText || "DESA TULUS 🤍";
-    cfg.embedColor = req.body.embedColor || cfg.embedColor || "#FFFFFF";
+    cfg.embedColor = DESA_TULUS_EMBED_COLOR_HEX;
 
     cfg.ai = cfg.ai || {};
     cfg.ai.openRouterModel = req.body.openRouterModel || cfg.ai.openRouterModel || "openai/gpt-4o-mini";
@@ -12351,7 +12354,7 @@ function renderBoostPoinDashboard(req, saved = false, error = "", notice = "") {
           <p class="easy-panel-desc">Ini contoh yang akan dikirim ke channel Boost Poin. Kalau mau post ke Discord, klik tombol <b>Simpan + Kirim Panel</b>.</p>
           <div class="premium-discord-preview">
             <div class="premium-muted">Content: ${escapeHtml((boost.mentionText || "") || "Kosong / tidak ada mention")}</div>
-            <div class="discord-embed" style="border-left-color:${escapeHtml(boost.announcementColor || "#F5C542")}">
+            <div class="discord-embed" style="border-left-color:${escapeHtml(DESA_TULUS_EMBED_COLOR_HEX)}">
               <div class="discord-title">${escapeHtml(titlePreview)}</div>
               <div class="discord-description">${escapeHtml(descPreview)}</div>
               <div class="discord-field"><b>🎯 Mode Event</b><br>${escapeHtml(getBoostPoinModeText(boost.eventMode || "chat_voice"))}</div>
@@ -12414,8 +12417,8 @@ function saveBoostPoinDashboardConfigFromBody(body = {}) {
   cfg.boostPoin.endDescription = String(body.endDescription || cfg.boostPoin.endDescription || "Boost poin telah selesai.\n\n🔄 Status: Kembali ke normal (x1)").trim();
   cfg.boostPoin.showJoinButton = body.showJoinButton !== "off";
   cfg.boostPoin.joinButtonLabel = String(body.joinButtonLabel || cfg.boostPoin.joinButtonLabel || "Join Event").trim();
-  cfg.boostPoin.announcementColor = cfg.boostPoin.announcementColor || "#F5C542";
-  cfg.boostPoin.endColor = cfg.boostPoin.endColor || "#FF5C7A";
+  cfg.boostPoin.announcementColor = DESA_TULUS_EMBED_COLOR_HEX;
+  cfg.boostPoin.endColor = DESA_TULUS_EMBED_COLOR_HEX;
   writeConfigFile(cfg);
   return cfg.boostPoin;
 }
@@ -12482,8 +12485,8 @@ app.post("/boost-poin", requireDashboardAuth, async (req, res) => {
     cfg.boostPoin.endDescription = String(req.body.endDescription || cfg.boostPoin.endDescription || "Boost poin telah selesai.\n\n🔄 Status: Kembali ke normal (x1)").trim();
     cfg.boostPoin.showJoinButton = req.body.showJoinButton !== "off";
     cfg.boostPoin.joinButtonLabel = String(req.body.joinButtonLabel || cfg.boostPoin.joinButtonLabel || "Join Event").trim();
-    cfg.boostPoin.announcementColor = cfg.boostPoin.announcementColor || "#F5C542";
-    cfg.boostPoin.endColor = cfg.boostPoin.endColor || "#FF5C7A";
+    cfg.boostPoin.announcementColor = DESA_TULUS_EMBED_COLOR_HEX;
+    cfg.boostPoin.endColor = DESA_TULUS_EMBED_COLOR_HEX;
     writeConfigFile(cfg);
 
     const action = String(req.body.boostAction || "save");
@@ -12638,7 +12641,7 @@ app.post("/cari-mabar", requireDashboardAuth, (req, res) => {
     cfg.mabar.defaultNote = req.body.defaultNote || "Ayo mabar bareng warga DESA TULUS 🤍";
     cfg.mabar.buttonText = req.body.buttonText || "🎮 Cari Mabar";
 
-    cfg.embeds.cariMabar.color = req.body.embedColor || cfg.embeds.cariMabar.color || "#5865F2";
+    cfg.embeds.cariMabar.color = DESA_TULUS_EMBED_COLOR_HEX;
     cfg.embeds.cariMabar.title = req.body.embedTitle || cfg.embeds.cariMabar.title || "🎮 CARI MABAR DESA TULUS";
     cfg.embeds.cariMabar.description = req.body.embedDescription || cfg.embeds.cariMabar.description || "Ada yang mau mabar? Isi data mabar dengan jelas biar warga gampang ikut.";
     cfg.embeds.cariMabar.footer = req.body.embedFooter || cfg.embeds.cariMabar.footer || "DESA TULUS • Cari Mabar";
@@ -12770,7 +12773,7 @@ app.post("/modules", requireDashboardAuth, (req, res) => {
     cfg.serverName = req.body.serverName || cfg.serverName || "";
     cfg.ownerName = req.body.ownerName || cfg.ownerName || "";
     cfg.prefix = req.body.prefix || cfg.prefix || "!";
-    cfg.embedColor = req.body.embedColor || cfg.embedColor || "#FFFFFF";
+    cfg.embedColor = DESA_TULUS_EMBED_COLOR_HEX;
     cfg.activityText = req.body.activityText || cfg.activityText || "";
     cfg.ticketChannelId = req.body.ticketChannelId || cfg.ticketChannelId || "";
 
@@ -12858,7 +12861,7 @@ app.post("/control/send-message", requireDashboardAuth, async (req, res) => {
     const title = String(req.body.title || "").trim();
     const message = String(req.body.message || "").trim();
     const image = String(req.body.image || "").trim();
-    const colorRaw = String(req.body.color || "#7C5CFF").trim();
+    const colorRaw = DESA_TULUS_EMBED_COLOR_HEX;
 
     if (!message && !title) {
       return res.status(400).send(renderControlCenter(req, false, "Isi pesan atau judul embed dulu."));
@@ -12866,7 +12869,7 @@ app.post("/control/send-message", requireDashboardAuth, async (req, res) => {
 
     if (title) {
       const embed = new EmbedBuilder()
-        .setColor(typeof hexColor === "function" ? hexColor(colorRaw, 0x7c5cff) : 0x7c5cff)
+        .setColor(DESA_TULUS_EMBED_COLOR_INT)
         .setTitle(title)
         .setDescription(message || " ")
         .setFooter({ text: makeOTFooter(`${config.serverName} • Dashboard Message`) })
@@ -13330,7 +13333,7 @@ function buildDonaturOnlyEmbed(member) {
   };
 
   return new EmbedBuilder()
-    .setColor(hexColor(e.color, 0x2f6bff))
+    .setColor(DESA_TULUS_EMBED_COLOR_INT)
     .setTitle(applyTemplate(e.title || "💎 Donatur Desa Access", data))
     .setDescription(applyTemplate(e.description || "Halo {user}, ini adalah menu khusus untuk role **Donatur DESA TULUS** 🤍\n\nStatus role kamu: **Aktif**\n{expiredText}", data))
     .addFields(
@@ -13960,7 +13963,7 @@ function getBoostPoinAnnouncementConfig() {
     mentionText: String(raw.mentionText || "").trim(),
     roleMentionIds: Array.isArray(raw.roleMentionIds) ? raw.roleMentionIds.map(parseDiscordId).filter(Boolean) : [],
     color: String(raw.announcementColor || "#34D399").trim(),
-    endColor: String(raw.endColor || "#FF5C7A").trim(),
+    endColor: DESA_TULUS_EMBED_COLOR_HEX,
     showJoinButton: raw.showJoinButton === true,
     joinButtonLabel: String(raw.joinButtonLabel || "Buka Channel Event").trim(),
     multiplier: cfg.multiplier
@@ -14013,7 +14016,7 @@ function buildBoostPoinPublicPayload(guild, state = "active") {
   if (!isEnd && roleMentions) contentParts.push(roleMentions);
 
   const embed = new EmbedBuilder()
-    .setColor(hexColor(template.color || (isEnd ? ac.endColor : ac.color), isEnd ? 0xff5c7a : 0x34d399))
+    .setColor(DESA_TULUS_EMBED_COLOR_INT)
     .setTitle(title)
     .setDescription(description)
     .setFooter({ text: makeOTFooter(template.footer || "DESA TULUS • Boost Poin"), iconURL: template.footerIcon || OT_FOOTER_ICON_URL })
@@ -14393,7 +14396,7 @@ function buildLevelUpEmbed(member, userData) {
     : "Kamu sudah mencapai level tertinggi warga DESA TULUS.";
 
   const embed = new EmbedBuilder()
-    .setColor(hexColor(e.color || "#2ECC71", 0x2ecc71))
+    .setColor(DESA_TULUS_EMBED_COLOR_INT)
     .setTitle(normalizePakRwEmojiCodes(applyTemplate(e.title || "<a:rocket_animated:1512884173453529288> Warga Naik Level", data)))
     .setDescription(applyTemplate(e.description || "{user} naik menjadi **{rank} — Level {level}**.\n\nTotal poin aktif: **{total} poin**. Tetap rukun dan aktif di desa.", data))
     .addFields({ name: normalizePakRwEmojiCodes(fieldName), value: normalizePakRwEmojiCodes(fieldValue), inline: false })
@@ -14422,7 +14425,7 @@ function buildLevelProfileEmbed(member, userData) {
   };
 
   const embed = new EmbedBuilder()
-    .setColor(hexColor(e.color || "#22D3EE", 0x22d3ee))
+    .setColor(DESA_TULUS_EMBED_COLOR_INT)
     .setTitle(normalizePakRwEmojiCodes(applyTemplate(e.title || "<a:bar_chart:1516453838117277829> Data Keaktifan Warga", data)))
     .setDescription([
       `${member}`,
@@ -14685,7 +14688,7 @@ function buildTopActiveBoardEmbed(guild, reason = "update") {
   const chatValue = `>>> ${formatTopRowsPakRwStyle(chatRows, "chat")}`.slice(0, 1024);
 
   const embed = new EmbedBuilder()
-    .setColor(hexColor(boardEmbedCfg.color || config.embeds?.memberOfTheMonth?.color || "#F5C542", 0xf5c542))
+    .setColor(DESA_TULUS_EMBED_COLOR_INT)
     .setAuthor({ name: cfg.boardAuthor || `${serverName} • Papan peringkat warga aktif` })
     .setTitle(boardTitle)
     .setDescription(updateText)
@@ -14738,7 +14741,7 @@ function buildLeaderboardActiveEmbed(guild, reason = "update") {
   const flow = "Alur jelas: poin chat/voice masuk ke siklus level. Saat warga mencapai 100.000 poin, Pak RW memberi role Member Of The Month, lalu poin siklus level kembali dari awal. Poin di Papan Aktif ini tetap lanjut dan tidak di-reset.";
   const rowsText = `>>> ${formatLeaderboardActiveRows(rows)}`;
   const embed = new EmbedBuilder()
-    .setColor(hexColor(template.color || config.embeds?.topActiveBoard?.color || "#F5C542", 0xf5c542))
+    .setColor(DESA_TULUS_EMBED_COLOR_INT)
     .setTitle(applyTemplate(cfg.leaderboardActiveTitleTemplate || template.title || "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU", { server: serverName }))
     .setDescription([intro, "", flow, "", rowsText].join("\n"))
     .setFooter({ text: makeOTFooter(cfg.leaderboardActiveFooter || template.footer || `${serverName} • Leaderboard Aktif Warga`), iconURL: template.footerIcon || OT_FOOTER_ICON_URL })
@@ -15693,7 +15696,7 @@ async function sendMotmAnnouncementSeparate(channel, member, userData, { isTest 
       if (manualUrl) {
         // Gambar manual dikirim TANPA caption/teks. Embed hanya dipakai sebagai wadah image URL.
         const imageEmbed = new EmbedBuilder()
-          .setColor(hexColor(cfg.bannerGold || "#F6C75A", 0xf6c75a))
+          .setColor(DESA_TULUS_EMBED_COLOR_INT)
           .setImage(manualUrl);
         imageMessage = await safeSend(channel, { embeds: [imageEmbed] });
       } else {
@@ -15801,7 +15804,7 @@ function buildMemberOfTheMonthEmbed(member, userData, imageUrl = "") {
   }
 
   const embed = new EmbedBuilder()
-    .setColor(hexColor(e.color, 0xf5c542))
+    .setColor(DESA_TULUS_EMBED_COLOR_INT)
     .setAuthor({ name: `${config.serverName || "DESA TULUS"} • Member Of The Month`, iconURL: member.user.displayAvatarURL({ dynamic: true }) })
     .setTitle(applyTemplate(e.title || "🏆 MEMBER OF THE MONTH DESA TULUS", data))
     .setDescription(applyTemplate(e.description || "{user} berhasil mencapai **{total} poin aktif** bulan ini dan mendapatkan role **Member Of The Month**.", data))
@@ -15893,7 +15896,7 @@ async function checkCycleMemberOfTheMonthReward(member, userData, type = "chat")
   const channel = await getTopActiveChannel(member.guild);
   if (channel && cfg.announceMemberOfTheMonth === true) {
     const embed = new EmbedBuilder()
-      .setColor(0xf5c542)
+      .setColor(DESA_TULUS_EMBED_COLOR_INT)
       .setTitle("🏆 MEMBER OF THE MONTH OTOMATIS")
       .setDescription([
         `${member} berhasil mencapai **${formatNumber(threshold)} poin aktif**.`,
@@ -15974,7 +15977,7 @@ async function sendTopActiveLevelNotice(member, userData) {
   const info = getLevelInfo(userData);
   const monthly = getMonthlyStats(userData);
   const embed = new EmbedBuilder()
-    .setColor(hexColor(config.embeds?.levelUp?.color || "#7C5CFF", 0x7c5cff))
+    .setColor(DESA_TULUS_EMBED_COLOR_INT)
     .setTitle(config.texts?.levelUpTopActiveTitle || "🆙 Warga Naik Level + Masuk Top Aktif")
     .setDescription([
       `${member} baru saja naik ke **Level ${info.current.level} — ${info.current.name}**.`,
@@ -16268,10 +16271,8 @@ const client = new Client({
 });
 
 
-function hexColor(value, fallback = 0xffffff) {
-  const raw = String(value || "").replace("#", "");
-  const parsed = Number.parseInt(raw, 16);
-  return Number.isNaN(parsed) ? fallback : parsed;
+function hexColor(value, fallback = DESA_TULUS_EMBED_COLOR_INT) {
+  return DESA_TULUS_EMBED_COLOR_INT;
 }
 
 function applyTemplate(text = "", data = {}) {
@@ -16359,9 +16360,7 @@ function embedCfg(name) {
 
 
 function color() {
-  const raw = String(config.embedColor || "#FFFFFF").replace("#", "");
-  const parsed = Number.parseInt(raw, 16);
-  return Number.isNaN(parsed) ? 0xffffff : parsed;
+  return DESA_TULUS_EMBED_COLOR_INT;
 }
 
 function isFilledId(id) {
@@ -16680,7 +16679,7 @@ async function sendAnonimPanel(channel) {
 
     const panelEmbedCfg = embedCfg("anonimPanel");
     const embed = new EmbedBuilder()
-      .setColor(hexColor(panelEmbedCfg.color, color()))
+      .setColor(DESA_TULUS_EMBED_COLOR_INT)
       .setTitle(panelEmbedCfg.title || "☁️ Curhat Anonim DESA TULUS")
       .setDescription(panelEmbedCfg.description || "Punya sesuatu yang ingin kamu ceritakan tanpa menampilkan identitas?\n\nKlik tombol **☁️ Curhat ke Pak RW** di bawah ini. Curhatan kamu akan dikirim sebagai **Anonymous** dan warga bisa membalas lewat thread diskusi 🤍")
       .setFooter({ text: makeOTFooter(panelEmbedCfg.footer || "Pak RW • PANEL_CURHAT_ANONIM") })
@@ -16950,7 +16949,7 @@ client.once(Events.ClientReady, async () => {
     const channel = client.channels.cache.get(config.suggestionChannelId);
     if (channel) {
       const embed = new EmbedBuilder()
-        .setColor(color())
+        .setColor(DESA_TULUS_EMBED_COLOR_INT)
         .setTitle(config.suggestion?.title || "💡 DESA TULUS • Kritik & Saran")
         .setDescription(config.suggestion?.description || "Klik tombol di bawah untuk mengirim saran.")
         .setFooter({ text: makeOTFooter("Pak RW • Sistem Saran") })
@@ -17018,7 +17017,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
     const welcomeContent = applyTemplate(config.welcome.content || "🤍 Sambut warga anyar barudak {user} {memberRole}", welcomeData);
 
     const embed = new EmbedBuilder()
-      .setColor(color())
+      .setColor(DESA_TULUS_EMBED_COLOR_INT)
       .setAuthor({
         name: `${config.serverName || "DESA TULUS"} • Warga Baru`,
         iconURL: member.user.displayAvatarURL({ dynamic: true })
@@ -17062,7 +17061,7 @@ function juraganEmbed(member) {
   };
 
   const embed = new EmbedBuilder()
-    .setColor(hexColor(e.color, 0xd7a84f))
+    .setColor(DESA_TULUS_EMBED_COLOR_INT)
     .setTitle(applyTemplate(e.title || "<a:Boost:1512485430887714866> SELAMAT DATANG JURAGAN! <a:Boost:1512485430887714866>", data))
     .setDescription(applyTemplate(e.description || "Terima kasih sudah mendukung server ini {user}.\nSekarang kamu dapat menikmati benefit dari role {juraganRole}.\n\n**Benefit utama:**\n\n• Mendapatkan role {juraganRole}\n• Display role di member list\n• Bonus ekstra poin +{bonusPercent}%\n• Akses ke fitur Soundboard\n• Akses ke voice channel VIP {vipVoiceChannel}\n• Akses text channel khusus donatur {juraganChatChannel}\n\nGunakan benefit dengan sopan dan tetap jaga suasana warga.", data))
     .setFooter({ text: makeOTFooter(applyTemplate(e.footer || "DESA TULUS • Juragan Desa", data)), iconURL: e.footerIcon || OT_FOOTER_ICON_URL })
@@ -17694,7 +17693,7 @@ async function handleRwTanyaCommand(message) {
   const answer = await askAI(personalizedQuestion, "juragan");
 
   const embed = new EmbedBuilder()
-    .setColor(0x2f6bff)
+    .setColor(DESA_TULUS_EMBED_COLOR_INT)
     .setTitle(`💎 Jawaban Pak RW untuk ${displayName}`)
     .setDescription(trimReply(answer))
     .setFooter({ text: makeOTFooter(`${config.serverName} • RWTANYA Donatur`) })
@@ -17731,7 +17730,7 @@ function buildPakRwBigBotEmbed(message) {
       ].join("\n");
 
   return new EmbedBuilder()
-    .setColor(color())
+    .setColor(DESA_TULUS_EMBED_COLOR_INT)
     .setTitle("🌾 Pak RW Big Bot Premium DESA TULUS")
     .setDescription([
       "Pak RW ayeuna janten **bot besar balai warga digital** pikeun DESA TULUS.",
@@ -17786,7 +17785,7 @@ async function handleRwLevelCommand(message) {
       : "Belum ada data level warga.";
 
     const embed = new EmbedBuilder()
-      .setColor(0x7c5cff)
+      .setColor(DESA_TULUS_EMBED_COLOR_INT)
       .setTitle("🏆 Top Level Warga DESA TULUS")
       .setDescription(desc)
       .setFooter({ text: makeOTFooter(`${config.serverName} • Level Leaderboard`) })
@@ -17829,7 +17828,7 @@ function buildServerInfoEmbed(guild) {
   const created = Math.floor(guild.createdTimestamp / 1000);
 
   return new EmbedBuilder()
-    .setColor(color())
+    .setColor(DESA_TULUS_EMBED_COLOR_INT)
     .setTitle(`🏠 Info Server ${guild.name}`)
     .setThumbnail(guild.iconURL({ size: 256 }) || null)
     .setDescription([
@@ -17860,7 +17859,7 @@ function buildUserInfoEmbed(member) {
     .join(" ") || "Tidak ada role khusus.";
 
   return new EmbedBuilder()
-    .setColor(color())
+    .setColor(DESA_TULUS_EMBED_COLOR_INT)
     .setTitle(`👤 Info User ${member.displayName}`)
     .setThumbnail(user.displayAvatarURL({ size: 256 }))
     .setDescription([
@@ -17881,7 +17880,7 @@ function buildChannelInfoEmbed(channel) {
   const created = channel.createdTimestamp ? Math.floor(channel.createdTimestamp / 1000) : null;
 
   return new EmbedBuilder()
-    .setColor(color())
+    .setColor(DESA_TULUS_EMBED_COLOR_INT)
     .setTitle(`📌 Info Channel #${channel.name}`)
     .setDescription([
       `**Channel:** <#${channel.id}>`,
@@ -17906,7 +17905,7 @@ function buildRoleListEmbed(guild) {
     : "Belum ada role yang terbaca.";
 
   return new EmbedBuilder()
-    .setColor(color())
+    .setColor(DESA_TULUS_EMBED_COLOR_INT)
     .setTitle("🎭 Daftar Role Server")
     .setDescription(desc)
     .setFooter({ text: makeOTFooter(`${config.serverName} • Menampilkan maksimal 25 role`) })
@@ -17919,7 +17918,7 @@ function buildIdHelperEmbed(message) {
   const targetRole = message.mentions.roles.first();
 
   return new EmbedBuilder()
-    .setColor(color())
+    .setColor(DESA_TULUS_EMBED_COLOR_INT)
     .setTitle("🆔 ID Helper Pak RW")
     .setDescription([
       `**User ID:** \`${targetUser.id}\``,
@@ -17947,7 +17946,7 @@ async function handleUtilityCommand(message, cmd, args) {
   if (cmd === "avatar" || cmd === "pp") {
     const target = message.mentions.users.first() || message.author;
     const embed = new EmbedBuilder()
-      .setColor(color())
+      .setColor(DESA_TULUS_EMBED_COLOR_INT)
       .setTitle(`🖼️ Avatar ${target.username}`)
       .setImage(target.displayAvatarURL({ size: 1024 }))
       .setFooter({ text: makeOTFooter(`${config.serverName} • Avatar`) })
@@ -17971,7 +17970,7 @@ async function handleUtilityCommand(message, cmd, args) {
 
   if (cmd === "configcek" || cmd === "cekconfig") {
     const embed = new EmbedBuilder()
-      .setColor(color())
+      .setColor(DESA_TULUS_EMBED_COLOR_INT)
       .setTitle("⚙️ Cek Config Pak RW")
       .setDescription([
         `**Prefix:** \`${config.prefix || "rw"}\``,
@@ -18267,7 +18266,7 @@ function isProtectedCommandFeature(feature = "") {
 
 function commandEmbed(title, description, options = {}) {
   return new EmbedBuilder()
-    .setColor(options.color ?? COMMAND_THEME_COLOR)
+    .setColor(DESA_TULUS_EMBED_COLOR_INT)
     .setTitle(title)
     .setDescription(Array.isArray(description) ? description.join("\n") : String(description || ""))
     .setFooter({ text: makeOTFooter(options.footer || `${config.serverName || "DESA TULUS"} • Pak RW Command Center`) })
@@ -18410,7 +18409,7 @@ function featureChannelKey(feature) {
 
 async function sendSuggestionPanelCommand(channel) {
   const embed = new EmbedBuilder()
-    .setColor(hexColor(config.suggestion?.color || config.embedColor || "#FFFFFF", color()))
+    .setColor(DESA_TULUS_EMBED_COLOR_INT)
     .setTitle(config.suggestion?.title || "💡 DESA TULUS • Kritik & Saran")
     .setDescription(config.suggestion?.description || "Punya ide, kritik, saran, atau masukan buat server? Klik tombol di bawah dan tulis dengan jelas ya 🤍")
     .setFooter({ text: makeOTFooter(`${config.serverName || "DESA TULUS"} • Kritik & Saran`) })
@@ -18427,7 +18426,7 @@ async function sendMabarPanelCommand(channel, author) {
   const cfg = config.mabar || {};
   const e = config.embeds?.cariMabar || {};
   const embed = new EmbedBuilder()
-    .setColor(hexColor(e.color || "#5865F2", 0x5865f2))
+    .setColor(DESA_TULUS_EMBED_COLOR_INT)
     .setTitle(e.title || "🎮 CARI MABAR DESA TULUS")
     .setDescription(e.description || "Ada yang mau mabar? Tulis game, mode, slot, dan jam main biar warga gampang ikut.")
     .setFooter({ text: makeOTFooter(e.footer || `${config.serverName || "DESA TULUS"} • Cari Mabar`) })
@@ -18696,7 +18695,7 @@ async function handlePakRwCommandCenterPrefix(message, cmd, args = []) {
       const reply = await askAI(text, "curhat", message.author.username);
       const embedCfg = config.embeds?.curhatReply || {};
       const embed = new EmbedBuilder()
-        .setColor(hexColor(embedCfg.color || "#FFFFFF", color()))
+        .setColor(DESA_TULUS_EMBED_COLOR_INT)
         .setTitle(embedCfg.title || "🤍 Balasan Pak RW")
         .setDescription(compactReply(reply || "Aku baca ceritamu. Pelan-pelan ya, kamu tidak harus menyelesaikan semuanya sendirian." ).slice(0, 1900))
         .setFooter({ text: makeOTFooter(embedCfg.footer || `${config.serverName || "DESA TULUS"} • Curhat System`) })
@@ -18713,7 +18712,7 @@ async function handlePakRwCommandCenterPrefix(message, cmd, args = []) {
     const note = args.join(" ").trim();
     const e = config.embeds?.cariMabar || {};
     const embed = new EmbedBuilder()
-      .setColor(hexColor(e.color || "#5865F2", 0x5865f2))
+      .setColor(DESA_TULUS_EMBED_COLOR_INT)
       .setTitle(e.title || "🎮 CARI MABAR DESA TULUS")
       .setDescription([
         note || e.description || "Ada yang mau mabar? Tulis game, mode, slot, dan jam main biar warga gampang ikut.",
@@ -18934,7 +18933,7 @@ function buildOwnerPointEditEmbed(member, action, amount, type, result) {
   const actionText = action === "set" ? "diset menjadi" : "dikurangi";
 
   return new EmbedBuilder()
-    .setColor(action === "set" ? 0x70a7ff : 0xffb84d)
+    .setColor(DESA_TULUS_EMBED_COLOR_INT)
     .setTitle(`👑 ${actionTitle} Owner`)
     .setDescription([
       `Member: ${member}`,
@@ -18954,7 +18953,7 @@ function buildOwnerPointEditEmbed(member, action, amount, type, result) {
 function ownerHelpEmbed(message) {
   const p = ownerCommandConfig().prefix;
   return new EmbedBuilder()
-    .setColor(0xf5c542)
+    .setColor(DESA_TULUS_EMBED_COLOR_INT)
     .setTitle("👑 Owner Control Pak RW")
     .setDescription([
       `Prefix owner khusus: **\`${p}\`**`,
@@ -18988,7 +18987,7 @@ function ownerHelpEmbed(message) {
       "",
       "**💬 Kirim Pesan & Embed**",
       `\`${p}say #channel pesan\` • kirim pesan lewat bot`,
-      `\`${p}embed #channel | Judul | Deskripsi | #F5C542\` • kirim embed cepat`,
+      `\`${p}embed #channel | Judul | Deskripsi | #7DBD77\` • kirim embed cepat`,
       `\`${p}dm @user pesan\` • kirim DM lewat bot`,
       "",
       "**🛡️ Moderasi & Server**",
@@ -19047,7 +19046,7 @@ async function handleOwnerPrefixCommand(message) {
     const dbStatus = await getMongoStatus(message.guild.id).catch(() => null);
     const cfg = getTopActiveConfig();
     const embed = new EmbedBuilder()
-      .setColor(0xf5c542)
+      .setColor(DESA_TULUS_EMBED_COLOR_INT)
       .setTitle("👑 Status Owner Pak RW")
       .setDescription([
         `**Bot:** ${client.user?.tag || "belum ready"}`,
@@ -19404,10 +19403,10 @@ async function handleOwnerPrefixCommand(message) {
     const channel = resolveTextChannelArg(message, args[0]);
     const content = rest.slice((args[0] || "").length).trim();
     const [titleRaw, descRaw, colorRaw] = content.split("|").map((x) => x?.trim());
-    if (!channel || !titleRaw || !descRaw) return safeReply(message, `❌ Contoh: \`${p}embed #channel | Judul | Deskripsi | #F5C542\``), true;
-    const embedColor = Number.parseInt(String(colorRaw || "#F5C542").replace("#", ""), 16);
+    if (!channel || !titleRaw || !descRaw) return safeReply(message, `❌ Contoh: \`${p}embed #channel | Judul | Deskripsi | #7DBD77\``), true;
+    const embedColor = DESA_TULUS_EMBED_COLOR_INT;
     const embed = new EmbedBuilder()
-      .setColor(Number.isNaN(embedColor) ? 0xf5c542 : embedColor)
+      .setColor(DESA_TULUS_EMBED_COLOR_INT)
       .setTitle(titleRaw)
       .setDescription(descRaw.replaceAll("\\n", "\n"))
       .setFooter({ text: makeOTFooter(`${config.serverName || "DESA TULUS"} • Owner Embed`) })
@@ -19583,7 +19582,7 @@ client.on(Events.MessageCreate, async (message) => {
 
       if (cmd === "status") {
         const embed = new EmbedBuilder()
-          .setColor(color())
+          .setColor(DESA_TULUS_EMBED_COLOR_INT)
           .setTitle("🤖 Pak RW Status")
           .setDescription(
             `✅ Bot online dan stabil\n` +
@@ -19609,7 +19608,7 @@ client.on(Events.MessageCreate, async (message) => {
       if (cmd === "mongodb" || cmd === "mongo" || cmd === "db") {
         const dbStatus = await getMongoStatus(message.guild.id);
         const embed = new EmbedBuilder()
-          .setColor(dbStatus.active ? 0x48e6a6 : 0xffd166)
+          .setColor(DESA_TULUS_EMBED_COLOR_INT)
           .setTitle("🗄️ Status Database Pak RW")
           .setDescription([
             `**Mode:** ${dbStatus.active ? "MongoDB aktif ✅" : "Local JSON fallback ⚠️"}`,
@@ -19642,7 +19641,7 @@ client.on(Events.MessageCreate, async (message) => {
         const userData = getLevelUser(data, message.guild.id, target.id);
         const info = getLevelBonusInfo(target);
         const embed = new EmbedBuilder()
-          .setColor(info.active ? 0xf5c542 : color())
+          .setColor(DESA_TULUS_EMBED_COLOR_INT)
           .setTitle("🎁 Cek Bonus Ekstra Poin")
           .setDescription([
             `${target}, ini status bonus level kamu.`,
@@ -19673,7 +19672,7 @@ client.on(Events.MessageCreate, async (message) => {
           : "Belum ada data level warga.";
 
         const embed = new EmbedBuilder()
-          .setColor(color())
+          .setColor(DESA_TULUS_EMBED_COLOR_INT)
           .setTitle("🏆 Top Level Warga DESA TULUS")
           .setDescription(desc)
           .setFooter({ text: makeOTFooter(`${config.serverName} • Level Leaderboard`) })
@@ -19686,7 +19685,7 @@ client.on(Events.MessageCreate, async (message) => {
         if (cmd === "topchat") {
           const rows = getTopActiveRows(message.guild.id, "chat", getTopActiveConfig().topLimit, message.guild.ownerId);
           const embed = new EmbedBuilder()
-            .setColor(0xf5c542)
+            .setColor(DESA_TULUS_EMBED_COLOR_INT)
             .setTitle("💬 Top Chat Warga Bulan Ini")
             .setDescription("Poin, level, dan rank di bawah dihitung dari **poin chat bulan ini**.\n\n" + formatTopActiveRows(rows, "chat"))
             .setFooter({ text: makeOTFooter(`${config.serverName} • ${getMonthLabel()}`) })
@@ -19697,7 +19696,7 @@ client.on(Events.MessageCreate, async (message) => {
         if (cmd === "topvoice") {
           const rows = getTopActiveRows(message.guild.id, "voice", getTopActiveConfig().topLimit, message.guild.ownerId);
           const embed = new EmbedBuilder()
-            .setColor(0xf5c542)
+            .setColor(DESA_TULUS_EMBED_COLOR_INT)
             .setTitle("🎙️ Top Voice Warga Bulan Ini")
             .setDescription("Poin, level, dan rank di bawah dihitung dari **poin voice bulan ini**.\n\n" + formatTopActiveRows(rows, "voice"))
             .setFooter({ text: makeOTFooter(`${config.serverName} • ${getMonthLabel()}`) })
@@ -19974,7 +19973,7 @@ client.on(Events.MessageCreate, async (message) => {
         }
 
         const embed = new EmbedBuilder()
-          .setColor(color())
+          .setColor(DESA_TULUS_EMBED_COLOR_INT)
           .setTitle(config.suggestion?.title || "💡 DESA TULUS • Kritik & Saran")
           .setDescription(config.suggestion?.description || "Klik tombol di bawah untuk mengirim saran.")
           .setFooter({ text: makeOTFooter("Pak RW • Sistem Saran") })
@@ -19996,7 +19995,7 @@ client.on(Events.MessageCreate, async (message) => {
 
       if (cmd === "anonim" || cmd === "curhatanonim") {
         const embed = new EmbedBuilder()
-          .setColor(color())
+          .setColor(DESA_TULUS_EMBED_COLOR_INT)
           .setTitle("☁️ Curhat Anonim DESA TULUS")
           .setDescription(
             "Klik tombol **☁️ Curhat ke Pak RW** di bawah ini untuk mengirim curhatan anonim.\n\n" +
@@ -20059,7 +20058,7 @@ function isOwnerCommandInteractionUser(interaction) {
 function buildOwnerStatusEmbedForGuild(guild) {
   const cfg = getTopActiveConfig();
   return new EmbedBuilder()
-    .setColor(0xf5c542)
+    .setColor(DESA_TULUS_EMBED_COLOR_INT)
     .setTitle("👑 Status Owner Pak RW")
     .setDescription([
       `**Bot:** ${client.user?.tag || "belum ready"}`,
@@ -20082,7 +20081,7 @@ function buildOwnerStatusEmbedForGuild(guild) {
 
 function slashOwnerHelpEmbed(guild) {
   return new EmbedBuilder()
-    .setColor(0xf5c542)
+    .setColor(DESA_TULUS_EMBED_COLOR_INT)
     .setTitle("👑 Slash Command Pak RW")
     .setDescription([
       "Command ini sekarang muncul langsung di menu Discord saat ketik `/`.",
@@ -20225,7 +20224,7 @@ async function handlePakRwVisibleSlashCommand(interaction) {
     const userData = getLevelUser(data, interaction.guild.id, target.id);
     const info = getLevelBonusInfo(target);
     const embed = new EmbedBuilder()
-      .setColor(info.active ? 0xf5c542 : color())
+      .setColor(DESA_TULUS_EMBED_COLOR_INT)
       .setTitle("🎁 Cek Bonus Ekstra Poin")
       .setDescription([
         `${target}, ini status bonus level kamu.`,
@@ -20254,7 +20253,7 @@ async function handlePakRwVisibleSlashCommand(interaction) {
     const type = cmd === "topchat" ? "chat" : "voice";
     const rows = getTopActiveRows(interaction.guild.id, type, getTopActiveConfig().topLimit, interaction.guild.ownerId);
     const embed = new EmbedBuilder()
-      .setColor(0xf5c542)
+      .setColor(DESA_TULUS_EMBED_COLOR_INT)
       .setTitle(cmd === "topchat" ? "💬 Top Chat Warga Bulan Ini" : "🎙️ Top Voice Warga Bulan Ini")
       .setDescription((type === "chat" ? "Poin, level, dan rank di bawah dihitung dari **poin chat bulan ini**." : "Poin, level, dan rank di bawah dihitung dari **poin voice bulan ini**.") + "\n\n" + formatTopActiveRows(rows, type))
       .setFooter({ text: makeOTFooter(`${config.serverName} • ${getMonthLabel()}`) })
@@ -20582,7 +20581,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const targetChannel = getTextChannel(interaction.guild, config.anonymousCurhatChannelId) || interaction.channel;
 
       const embed = new EmbedBuilder()
-        .setColor(color())
+        .setColor(DESA_TULUS_EMBED_COLOR_INT)
         .setTitle("☁️ Pesan Curhat")
         .setDescription(content.slice(0, 1200))
         .setFooter({ text: makeOTFooter("☁️ Anonymous") })
@@ -20638,7 +20637,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       const replyEmbed = new EmbedBuilder()
-        .setColor(color())
+        .setColor(DESA_TULUS_EMBED_COLOR_INT)
         .setTitle("💬 Balasan Anonim")
         .setDescription(content.slice(0, 1000))
         .setFooter({ text: makeOTFooter("☁️ Anonymous Reply") })
@@ -20673,7 +20672,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         : "Pengirim mengosongkan nama, jadi otomatis tampil sebagai Anonim.";
 
       const embed = new EmbedBuilder()
-        .setColor(color())
+        .setColor(DESA_TULUS_EMBED_COLOR_INT)
         .setTitle("💡 Saran Baru DESA TULUS")
         .setDescription("Ada saran baru dari warga. Silakan vote dan diskusikan dengan baik 🤍")
         .addFields(

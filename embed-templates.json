@@ -13,7 +13,7 @@
       "embed": {
         "title": "<a:Boost:1512485430887714866> SELAMAT DATANG JURAGAN! <a:Boost:1512485430887714866>",
         "description": "Terima kasih sudah mendukung server ini {user}.\nSekarang kamu dapat menikmati benefit dari role {juraganRole}.\n\nBenefit role, bonus poin, Soundboard, voice VIP, dan chat Juragan ditampilkan sebagai mention Discord asli.",
-        "color": 14133327,
+        "color": 8240503,
         "footer": {
           "text": "DESA TULUS • Juragan Desa",
           "icon_url": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
@@ -103,7 +103,7 @@
       "embed": {
         "title": "💎 Donatur Desa Access",
         "description": "Halo {user}, ini adalah menu khusus untuk role **Donatur DESA TULUS** 🤍\n\nStatus role kamu: **Aktif**\n{expiredText}",
-        "color": 3107839,
+        "color": 8240503,
         "footer": {
           "text": "DESA TULUS • Donatur System",
           "icon_url": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
@@ -133,7 +133,7 @@
       "embed": {
         "title": "☁️ Curhat Anonim DESA TULUS",
         "description": "Punya sesuatu yang ingin kamu ceritakan tanpa menampilkan identitas?\n\nKlik tombol **☁️ Curhat ke Pak RW** di bawah ini. Curhatan kamu akan dikirim sebagai **Anonim** dan warga bisa membalas lewat thread diskusi 🤍",
-        "color": 16777215,
+        "color": 8240503,
         "footer": {
           "text": "DESA TULUS • Curhat Anonim Aman",
           "icon_url": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
@@ -163,7 +163,7 @@
       "embed": {
         "title": "🏆 MEMBER OF THE MONTH DESA TULUS",
         "description": "{user} resmi menjadi **Member Of The Month** bulan ini.\n\n⭐ Total Poin Bulan Ini: **{total}** poin\n💬 Top Chat: **{chat}** poin\n🎙️ Top Voice: **{voice}** poin\n\nTerima kasih sudah aktif dan ikut menghidupkan server **{server}** 🤍",
-        "color": 16106818,
+        "color": 8240503,
         "footer": {
           "text": "DESA TULUS • Member Of The Month",
           "icon_url": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
@@ -193,7 +193,7 @@
       "embed": {
         "title": "💡 Saran Baru DESA TULUS",
         "description": "{user} mengirim saran:\n\n{content}",
-        "color": 16777215,
+        "color": 8240503,
         "footer": {
           "text": "DESA TULUS • Saran & Voting",
           "icon_url": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
@@ -223,7 +223,7 @@
       "embed": {
         "title": "🤍 Balasan Pak RW",
         "description": "{reply}",
-        "color": 16777215,
+        "color": 8240503,
         "footer": {
           "text": "DESA TULUS • Curhat System",
           "icon_url": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
@@ -253,7 +253,7 @@
       "embed": {
         "title": "🏆 TOP AKTIF WARGA BULAN {month} {server}",
         "description": "Update otomatis setiap hari pukul 00.00 WIB",
-        "color": 14857302,
+        "color": 8240503,
         "footer": {
           "text": "DESA TULUS • Gunakan perintah rwcekpoin untuk melihat poin warga",
           "icon_url": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
@@ -283,7 +283,7 @@
       "embed": {
         "title": "🎮 CARI MABAR DESA TULUS",
         "description": "Lagi nyari teman main? Isi info mabar dengan jelas biar warga lain gampang ikut.\n\n<a:Animated_Arrow_Bluelite:1512751559140839576> **Game:** {game}\n<a:Animated_Arrow_Bluelite:1512751559140839576> **Mode:** {mode}\n<a:Animated_Arrow_Bluelite:1512751559140839576> **Jumlah Slot:** {slot}\n<a:Animated_Arrow_Bluelite:1512751559140839576> **Jam Main:** {time}\n<a:Animated_Arrow_Bluelite:1512751559140839576> **Catatan:** {note}",
-        "color": 5793266,
+        "color": 8240503,
         "footer": {
           "text": "DESA TULUS • Cari Mabar System",
           "icon_url": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
@@ -313,7 +313,7 @@
       "embed": {
         "title": "👋 Warga Baru Datang!",
         "description": "Sambut warga anyar barudak {user} di **{server} 🌾**\n\nPak RW menyambut kamu sebagai bagian dari DESA TULUS. Semoga betah, rukun, dan ikut menjaga suasana desa digital ini tetap hangat.\n\n📌 Baca aturan desa dulu supaya paham tata tertib server.\n💬 Kalau sudah siap, silakan kenalan di chat warga.\n🎫 Kalau butuh bantuan, panggil staff atau hubungi Pak RW.\n\nKamu adalah warga ke-**{memberCount}** di desa ini. Selamat bergabung, semoga betah ya 🤍",
-        "color": 16777215,
+        "color": 8240503,
         "author": {
           "name": "DESA TULUS • Pak RW"
         },
@@ -343,7 +343,7 @@
       "embed": {
         "title": "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU",
         "description": "Lifetime point tidak di-reset walaupun siklus level kembali dari awal setelah 100.000 poin.",
-        "color": 14133327,
+        "color": 8240503,
         "footer": {
           "text": "DESA TULUS • Leaderboard Aktif Warga",
           "icon_url": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
@@ -366,7 +366,7 @@
       "embed": {
         "title": "<a:Boost:1512485430887714866> BOOST POIN DIAKTIFKAN",
         "description": "Boost poin dimulai:\n\n👤 Oleh: {by}\n💥 Multiplier: {multiplier}\n⏱️ Durasi: {duration} menit\n📍 Channel: {channels}\n🕒 Berakhir: {endsAt}",
-        "color": 3462041,
+        "color": 8240503,
         "footer": {
           "text": "DESA TULUS • Boost Poin",
           "icon_url": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
@@ -389,7 +389,7 @@
       "embed": {
         "title": "<a:Boost:1512485430887714866> BOOST POIN BERAKHIR",
         "description": "Boost poin untuk channel {channels} telah selesai.\n\n🔄 Status: Kembali ke normal (x1)",
-        "color": 16735354,
+        "color": 8240503,
         "footer": {
           "text": "DESA TULUS • Boost Poin",
           "icon_url": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"

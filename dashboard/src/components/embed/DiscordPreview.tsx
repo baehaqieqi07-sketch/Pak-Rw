@@ -145,7 +145,7 @@ function renderLines(text: string, picker?: PickerData) {
 }
 
 export function DiscordPreview({ embed, picker }: { embed: EmbedDraft; picker?: PickerData }) {
-  const color = embed.color || "#88a08c";
+  const color = embed.color || "#7DBD77";
   return (
     <div className="discord-preview-shell">
       <div className="discord-preview-toolbar"><span>Discord preview</span><small>Renderer dashboard</small></div>

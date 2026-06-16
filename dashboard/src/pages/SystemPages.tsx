@@ -76,7 +76,7 @@ export function BackupPage() {
 
 export function SettingsPage() {
   const { data, refresh, notify } = useDashboard();
-  const initial = useMemo(() => ({ serverName: data.config.serverName || "DESA TULUS", ownerName: data.config.ownerName || "Pak RW", embedColor: data.config.embedColor || "#88a08c" }), [data]);
+  const initial = useMemo(() => ({ serverName: data.config.serverName || "DESA TULUS", ownerName: data.config.ownerName || "Pak RW", embedColor: data.config.embedColor || "#7DBD77" }), [data]);
   const [values, setValues] = useState(initial);
   const [saving, setSaving] = useState(false);
   useEffect(() => setValues(initial), [initial]);

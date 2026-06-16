@@ -303,7 +303,7 @@ kbd { font-family: inherit; font-size: 10px; color: var(--text-muted); backgroun
 .discord-author-line > span { border-radius: 3px; background: #5865f2; color: #fff; padding: 1px 4px; font-size: 7px; font-weight: 800; }
 .discord-author-line time { color: #949ba4; font-size: 8px; }
 .discord-content { margin-top: 4px; color: #dbdee1; font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
-.discord-embed { position: relative; margin-top: 7px; max-width: 530px; min-height: 80px; overflow: hidden; border-left: 4px solid #88a08c; border-radius: 4px; background: #2b2d31; padding: 10px 12px; box-shadow: 0 0 0 1px rgba(0,0,0,.10); }
+.discord-embed { position: relative; margin-top: 7px; max-width: 530px; min-height: 80px; overflow: hidden; border-left: 4px solid #7DBD77; border-radius: 4px; background: #2b2d31; padding: 10px 12px; box-shadow: 0 0 0 1px rgba(0,0,0,.10); }
 .discord-embed-main { min-width: 0; }
 .discord-embed-author { display: flex; align-items: center; gap: 6px; margin-bottom: 7px; color: #f2f3f5; font-size: 9px; }
 .discord-embed-author img { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; }

@@ -227,7 +227,7 @@ export function EmbedBuilder({
   const resetEmbed = () => {
     if (!window.confirm("Reset seluruh isi embed ke template kosong DESA TULUS?")) return;
     onChange({
-      color: "#88a08c",
+      color: "#7DBD77",
       authorName: "DESA TULUS • Pak RW",
       footerText: "DESA TULUS • Pak RW",
       footerIcon: "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless",
@@ -264,7 +264,7 @@ export function EmbedBuilder({
         <details className="builder-disclosure" open>
           <summary><span><Image size={18} /><strong>Warna, gambar, dan footer</strong></span><small>Media visual dan identitas embed</small></summary>
           <div className="builder-disclosure-body form-grid two-columns">
-            <div className="form-field"><label>Warna</label><div className="color-field"><input type="color" value={value.color || "#88a08c"} onChange={(event) => update("color", event.target.value)} /><input value={value.color || "#88a08c"} onChange={(event) => update("color", event.target.value)} /></div></div>
+            <div className="form-field"><label>Warna</label><div className="color-field"><input type="color" value={value.color || "#7DBD77"} onChange={(event) => update("color", event.target.value)} /><input value={value.color || "#7DBD77"} onChange={(event) => update("color", event.target.value)} /></div></div>
             <div className="form-field"><label>URL thumbnail</label><div className="input-with-icon"><Image size={16} /><input value={value.thumbnailUrl || ""} onChange={(event) => update("thumbnailUrl", event.target.value)} placeholder="https://..." /></div></div>
             <div className="form-field full-span"><label>URL gambar</label><div className="input-with-icon"><Image size={16} /><input value={value.imageUrl || ""} onChange={(event) => update("imageUrl", event.target.value)} placeholder="https://..." /></div></div>
             <div className="form-field"><div className="field-label-row"><label>Teks footer</label><span>{String(value.footerText || "").length}/2048</span></div><SmartTextInput maxLength={2048} value={value.footerText || ""} onChange={(next) => update("footerText", next)} picker={picker} mentionSafe={false} /></div>
