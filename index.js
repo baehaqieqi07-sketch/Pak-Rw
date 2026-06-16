@@ -130,10 +130,53 @@ function readConfigFile() {
   }
 }
 
+function applySafeEmbedDisplayMigrations(data = {}) {
+  const next = data && typeof data === "object" ? data : {};
+  next.embeds = next.embeds && typeof next.embeds === "object" ? next.embeds : {};
+
+  const profile = next.embeds.levelProfile = next.embeds.levelProfile && typeof next.embeds.levelProfile === "object"
+    ? next.embeds.levelProfile
+    : {};
+  const oldProfileTitle = String(profile.title || "").trim();
+  if (!oldProfileTitle || oldProfileTitle === "<a:loading:1490575251405406299> Data Keaktifan Warga" || oldProfileTitle === ":loading: Data Keaktifan Warga") {
+    profile.title = "<a:bar_chart:1516453838117277829> Data Keaktifan Warga";
+  }
+  // Embed protected ini sengaja tanpa media agar tidak muncul label Image/thumbnail.
+  profile.thumbnail = "";
+  profile.image = "";
+
+  const levelUp = next.embeds.levelUp = next.embeds.levelUp && typeof next.embeds.levelUp === "object"
+    ? next.embeds.levelUp
+    : {};
+  levelUp.title = levelUp.title || "<a:rocket_animated:1512884173453529288> Warga Naik Level";
+  levelUp.thumbnail = "";
+  levelUp.image = "";
+  levelUp.fields = Array.isArray(levelUp.fields) ? levelUp.fields : [];
+  if (!levelUp.fields[0]) {
+    levelUp.fields[0] = {
+      name: "<a:Chart_Increasing:1516454160684290219> Menuju Level {nextLevel} ({nextRank})",
+      value: "Butuh:\n**{remainingPoints} poin total lagi**\nChat: **{chat} poin**\nVoice: **{voice} poin**",
+      inline: false
+    };
+  } else {
+    const oldFieldName = String(levelUp.fields[0].name || "").trim();
+    if (!oldFieldName || oldFieldName.startsWith("📈 Menuju Level")) {
+      levelUp.fields[0].name = "<a:Chart_Increasing:1516454160684290219> Menuju Level {nextLevel} ({nextRank})";
+    }
+  }
+
+  next.topActive = next.topActive && typeof next.topActive === "object" ? next.topActive : {};
+  next.topActive.rowArrowEmoji = normalizePakRwEmojiCodes(
+    next.topActive.rowArrowEmoji || "<a:Animated_Arrow_Bluelite:1512751559140839576>"
+  );
+  return next;
+}
+
 function syncLiveConfig(data = {}) {
   try {
+    const migrated = applySafeEmbedDisplayMigrations(data);
     for (const key of Object.keys(config)) delete config[key];
-    Object.assign(config, data);
+    Object.assign(config, migrated);
   } catch (err) {
     console.log("SYNC CONFIG ERROR:", err.message);
   }
@@ -141,8 +184,9 @@ function syncLiveConfig(data = {}) {
 
 function writeConfigFile(data) {
   const configPath = getDashboardConfigPath();
-  fs.writeFileSync(configPath, JSON.stringify(data, null, 2), "utf8");
-  syncLiveConfig(data);
+  const migrated = applySafeEmbedDisplayMigrations(data);
+  fs.writeFileSync(configPath, JSON.stringify(migrated, null, 2), "utf8");
+  syncLiveConfig(migrated);
   console.log(`✅ Dashboard config saved + live reloaded: ${configPath}`);
 }
 
@@ -164,6 +208,27 @@ const OT_FOOTER_EMOJI = "<a:Desa_Tulus:1516424353934348299>";
 const OT_FOOTER_EMOJI_ID = "1516424353934348299";
 const OT_FOOTER_ICON_URL = `https://cdn.discordapp.com/emojis/${OT_FOOTER_EMOJI_ID}.gif?size=44&quality=lossless`;
 const OT_FOOTER_PREFIX = "DESA TULUS";
+
+// Normalisasi shortcode emoji lama agar selalu menjadi custom emoji Discord asli.
+// Bentuk :nama: tidak akan tampil sebagai GIF tanpa ID emoji, jadi Pak RW mengubah
+// shortcode yang dikenal sebelum dikirim ke Discord dan sebelum ditampilkan di preview.
+const PAK_RW_KNOWN_EMOJI_CODES = Object.freeze({
+  rocket_animated: "<a:rocket_animated:1512884173453529288>",
+  bar_chart: "<a:bar_chart:1516453838117277829>",
+  Chart_Increasing: "<a:Chart_Increasing:1516454160684290219>",
+  Animated_Arrow_Bluelite: "<a:Animated_Arrow_Bluelite:1512751559140839576>",
+  Desa_Tulus: "<a:Desa_Tulus:1516424353934348299>"
+});
+
+function normalizePakRwEmojiCodes(text = "") {
+  let output = String(text || "");
+  for (const [name, markup] of Object.entries(PAK_RW_KNOWN_EMOJI_CODES)) {
+    // Jangan mengubah markup yang sudah lengkap, karena pada markup lengkap
+    // setelah :nama: langsung ada angka ID emoji.
+    output = output.replace(new RegExp(`:${name}:(?!\\d)`, "g"), markup);
+  }
+  return output;
+}
 
 function makeOTFooter(text = "") {
   const raw = String(text || "").trim();
@@ -10912,7 +10977,7 @@ function savePakRwGlobalEmbedManager(req) {
 /* =================== END PAK RW FULL PREMIUM DASHBOARD REBUILD v10.10.63 =================== */
 
 
-/* =================== PAK RW DASHBOARD-ONLY REBUILD v10.10.66 =================== */
+/* =================== PAK RW DASHBOARD-ONLY REBUILD v10.10.67 =================== */
 const pakRwDashboardDist = path.join(__dirname, "dashboard", "dist");
 const pakRwDashboardIndex = path.join(pakRwDashboardDist, "index.html");
 
@@ -11051,7 +11116,7 @@ app.get("/api/dashboard/bootstrap", requireDashboardAuth, (req, res) => {
       dashboardEnabled: isDashboardEnabled,
       activeFeatureCount: featureCount.active,
       totalFeatureCount: featureCount.total,
-      version: String(cfg.version || "10.10.66"),
+      version: String(cfg.version || "10.10.67"),
       prefix: String(cfg.prefix || "rw"),
       environment: String(process.env.NODE_ENV || "development")
     },
@@ -11073,7 +11138,7 @@ app.put("/api/dashboard/settings", requireDashboardAuth, (req, res) => {
       if (!isSafeDashboardPath(pathText)) return res.status(400).json({ ok: false, error: `Path config tidak diizinkan: ${pathText}` });
       setDashboardPath(cfg, pathText, patch.value);
     }
-    cfg.version = "10.10.66";
+    cfg.version = "10.10.67";
     writeConfigFile(cfg);
     appendDashboardActivity("settings", "Setting dashboard disimpan", `${patches.length} field diperbarui melalui adapter aman.`);
     return res.json({ ok: true, config: cfg });
@@ -11089,7 +11154,7 @@ app.put("/api/dashboard/embed/:key", requireDashboardAuth, (req, res) => {
     const cfg = readConfigFile();
     cfg.embeds = cfg.embeds || {};
     cfg.embeds[key] = mergeDashboardEmbed(cfg.embeds[key] || {}, req.body?.embed || {});
-    cfg.version = "10.10.66";
+    cfg.version = "10.10.67";
     writeConfigFile(cfg);
     appendDashboardActivity("embed", "Template embed disimpan", `Template ${key} diperbarui dari Embed Builder.`);
     return res.json({ ok: true, embed: cfg.embeds[key] });
@@ -11175,7 +11240,7 @@ app.post("/api/dashboard/boost-poin/stop", requireDashboardAuth, async (req, res
   }
 });
 
-/* ================= END PAK RW DASHBOARD-ONLY REBUILD v10.10.66 ================= */
+/* ================= END PAK RW DASHBOARD-ONLY REBUILD v10.10.67 ================= */
 
 
 app.get("/motm-banner.svg", (req, res) => {
@@ -14303,7 +14368,7 @@ function buildLevelUpEmbed(member, userData) {
   };
 
   const fieldName = next
-    ? applyTemplate(e.fields?.[0]?.name || "📈 Menuju Level {nextLevel} ({nextRank})", data)
+    ? applyTemplate(e.fields?.[0]?.name || "<a:Chart_Increasing:1516454160684290219> Menuju Level {nextLevel} ({nextRank})", data)
     : "🏆 Level Maksimal";
   const fieldValue = next
     ? applyTemplate(e.fields?.[0]?.value || "Butuh:\n**{remainingPoints} poin total lagi**\nChat: **{chat} poin**\nVoice: **{voice} poin**", data)
@@ -14311,10 +14376,9 @@ function buildLevelUpEmbed(member, userData) {
 
   const embed = new EmbedBuilder()
     .setColor(hexColor(e.color || "#2ECC71", 0x2ecc71))
-    .setTitle(applyTemplate(e.title || "<a:rocket_animated:1512884173453529288> Warga Naik Level", data))
+    .setTitle(normalizePakRwEmojiCodes(applyTemplate(e.title || "<a:rocket_animated:1512884173453529288> Warga Naik Level", data)))
     .setDescription(applyTemplate(e.description || "{user} naik menjadi **{rank} — Level {level}**.\n\nTotal poin aktif: **{total} poin**. Tetap rukun dan aktif di desa.", data))
-    .addFields({ name: fieldName, value: fieldValue, inline: false })
-    .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 512 }))
+    .addFields({ name: normalizePakRwEmojiCodes(fieldName), value: normalizePakRwEmojiCodes(fieldValue), inline: false })
     .setFooter({ text: makeOTFooter(applyTemplate(e.footer || "DESA TULUS • Level Warga", data)), iconURL: e.footerIcon || OT_FOOTER_ICON_URL })
     .setTimestamp();
 
@@ -14341,7 +14405,7 @@ function buildLevelProfileEmbed(member, userData) {
 
   const embed = new EmbedBuilder()
     .setColor(hexColor(e.color || "#22D3EE", 0x22d3ee))
-    .setTitle(applyTemplate(e.title || "<a:loading:1490575251405406299> Data Keaktifan Warga", data))
+    .setTitle(normalizePakRwEmojiCodes(applyTemplate(e.title || "<a:bar_chart:1516453838117277829> Data Keaktifan Warga", data)))
     .setDescription([
       `${member}`,
       "",
@@ -14352,7 +14416,6 @@ function buildLevelProfileEmbed(member, userData) {
       `⭐ **Total Level:** ${info.current.name} (Lvl. ${info.current.level})`,
       `Total Poin: **${formatNumber(total)}**`
     ].join("\n"))
-    .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 512 }))
     .setFooter({ text: makeOTFooter(applyTemplate(e.footer || "DESA TULUS • Cek Poin", data)), iconURL: e.footerIcon || OT_FOOTER_ICON_URL })
     .setTimestamp();
 
@@ -14549,7 +14612,9 @@ function topMedal(index) {
 }
 
 function getTopActiveArrowEmoji() {
-  return String(getTopActiveConfig().rowArrowEmoji || "<a:Animated_Arrow_Bluelite:1512751559140839576>").trim();
+  return normalizePakRwEmojiCodes(
+    String(getTopActiveConfig().rowArrowEmoji || "<a:Animated_Arrow_Bluelite:1512751559140839576>").trim()
+  );
 }
 
 function getTopRankLabel(index) {
@@ -14598,8 +14663,8 @@ function buildTopActiveBoardEmbed(guild, reason = "update") {
 
   const updateText = String(cfg.boardUpdateText || "Update otomatis setiap hari pukul 00.00 WIB").replace(/\*\*/g, "");
   const footerText = cfg.boardFooterText || boardEmbedCfg.footer || "DESA TULUS • Gunakan perintah rwcekpoin untuk melihat poin warga";
-  const voiceValue = `>>>${formatTopRowsPakRwStyle(voiceRows, "voice")}`.slice(0, 1024);
-  const chatValue = `>>>${formatTopRowsPakRwStyle(chatRows, "chat")}`.slice(0, 1024);
+  const voiceValue = `>>> ${formatTopRowsPakRwStyle(voiceRows, "voice")}`.slice(0, 1024);
+  const chatValue = `>>> ${formatTopRowsPakRwStyle(chatRows, "chat")}`.slice(0, 1024);
 
   const embed = new EmbedBuilder()
     .setColor(hexColor(boardEmbedCfg.color || config.embeds?.memberOfTheMonth?.color || "#F5C542", 0xf5c542))
@@ -14653,7 +14718,7 @@ function buildLeaderboardActiveEmbed(guild, reason = "update") {
   const template = config.embeds?.papanAktif || {};
   const intro = cfg.leaderboardActiveSubtitle || "Papan ini mencatat total poin warga dari awal bergabung sampai seterusnya. Data ini tidak di-reset meskipun siklus level kembali dari awal setelah 100.000 poin.";
   const flow = "Alur jelas: poin chat/voice masuk ke siklus level. Saat warga mencapai 100.000 poin, Pak RW memberi role Member Of The Month, lalu poin siklus level kembali dari awal. Poin di Papan Aktif ini tetap lanjut dan tidak di-reset.";
-  const rowsText = `>>>${formatLeaderboardActiveRows(rows)}`;
+  const rowsText = `>>> ${formatLeaderboardActiveRows(rows)}`;
   const embed = new EmbedBuilder()
     .setColor(hexColor(template.color || config.embeds?.topActiveBoard?.color || "#F5C542", 0xf5c542))
     .setTitle(applyTemplate(cfg.leaderboardActiveTitleTemplate || template.title || "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU", { server: serverName }))
@@ -16265,7 +16330,7 @@ function applyTemplate(text = "", data = {}) {
     return data[key] ?? defaults[key] ?? `{${key}}`;
   });
 
-  return rendered
+  return normalizePakRwEmojiCodes(rendered)
     .replace(/@everyone/gi, "everyone")
     .replace(/@here/gi, "here");
 }

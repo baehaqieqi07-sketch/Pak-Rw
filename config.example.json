@@ -232,12 +232,12 @@
       "authorName": "",
       "fields": [
         {
-          "name": "📈 Menuju Level {nextLevel} ({nextRank})",
+          "name": "<a:Chart_Increasing:1516454160684290219> Menuju Level {nextLevel} ({nextRank})",
           "value": "Butuh:\n**{remainingPoints} poin total lagi**\nChat: **{chat} poin**\nVoice: **{voice} poin**",
           "inline": false
         }
       ],
-      "thumbnail": "avatar",
+      "thumbnail": "",
       "image": "",
       "dashboardGroup": "Level & Poin",
       "dashboardEditable": true,
@@ -245,14 +245,14 @@
     },
     "levelProfile": {
       "color": "#7DBD77",
-      "title": "<a:loading:1490575251405406299> Data Keaktifan Warga",
+      "title": "<a:bar_chart:1516453838117277829> Data Keaktifan Warga",
       "description": "{user}\n\n💬 **Chat**\nLevel: **{chatLevel}**\nPoin: **{chat}**\nNaik Lv.{nextChatLevel}: **{chatRemaining} poin lagi**\n{chatProgress} **{chatPercent}%**\n\n🎙️ **Voice**\nLevel: **{voiceLevel}**\nPoin: **{voice}**\nNaik Lv.{nextVoiceLevel}: **{voiceRemaining} poin lagi**\n{voiceProgress} **{voicePercent}%**\n\n⭐ **Total Level:** {rank} (Lvl. {level})\nTotal Poin: **{total}**",
       "footer": "DESA TULUS • Cek Poin",
       "footerIcon": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless",
       "content": "{user}",
       "authorName": "",
       "fields": [],
-      "thumbnail": "avatar",
+      "thumbnail": "",
       "image": "",
       "dashboardGroup": "Level & Poin",
       "dashboardEditable": true,
@@ -652,7 +652,7 @@
     "placeholderSelectionMode": "channel_role_user_server_bot_live_from_discord",
     "discordPickerMode": "live_api",
     "discordPickerAutoRefresh": true,
-    "uiVersion": "10.10.66",
+    "uiVersion": "10.10.68",
     "architecture": "react_vite_static_dashboard_only"
   },
   "featureFlow": {
@@ -1079,7 +1079,7 @@
       "Discord Manager"
     ]
   },
-  "version": "10.10.66",
+  "version": "10.10.68",
   "bigBot": {
     "releaseName": "Pak RW AI Natural + Welcome Mention v10.10.59"
   },

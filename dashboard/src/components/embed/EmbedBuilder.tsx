@@ -71,6 +71,18 @@ export function EmbedBuilder({
     update(insertTarget, `${current}${separator}${text}`);
   };
 
+  const resetEmbed = () => {
+    if (!window.confirm("Reset seluruh isi embed ke template kosong DESA TULUS?")) return;
+    onChange({
+      color: "#88a08c",
+      authorName: "DESA TULUS • Pak RW",
+      footerText: "DESA TULUS • Pak RW",
+      footerIcon: "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless",
+      fields: [],
+      buttons: []
+    });
+  };
+
   return (
     <div className="embed-builder-grid">
       <div className="embed-editor-stack">
@@ -87,22 +99,22 @@ export function EmbedBuilder({
         <Card className="embed-editor-panel">
           <CardHeader title="Pesan dan isi embed" description="Perubahan langsung terlihat pada pratinjau Discord di sebelah kanan." />
           <div className="form-grid two-columns">
-            <div className="form-field full-span"><label>Content</label><textarea value={value.content || ""} onChange={(event) => update("content", event.target.value)} rows={3} placeholder="Teks di atas embed" /><small className="field-helper">Content mendukung mention user, role, dan channel.</small></div>
-            <div className="form-field"><label>Author name</label><input value={value.authorName || ""} onChange={(event) => update("authorName", event.target.value)} placeholder="DESA TULUS • Warga Baru" /></div>
-            <div className="form-field"><label>Author icon URL</label><input value={value.authorIcon || ""} onChange={(event) => update("authorIcon", event.target.value)} placeholder="https://..." /></div>
-            <div className="form-field full-span"><label>Title</label><input value={value.title || ""} onChange={(event) => update("title", event.target.value)} placeholder="Judul embed" /><small className="field-helper">Gunakan {"{displayName}"} pada title. Discord tidak merender mention pada judul.</small></div>
-            <div className="form-field full-span"><label>Description</label><textarea value={value.description || ""} onChange={(event) => update("description", event.target.value)} rows={10} placeholder="Isi embed" /></div>
+            <div className="form-field full-span"><div className="field-label-row"><label>Content</label><span>{String(value.content || "").length}/2000</span></div><textarea maxLength={2000} value={value.content || ""} onChange={(event) => update("content", event.target.value)} rows={3} placeholder="Teks di atas embed" /><small className="field-helper">Content mendukung mention user, role, dan channel.</small></div>
+            <div className="form-field"><label>Nama author</label><input value={value.authorName || ""} onChange={(event) => update("authorName", event.target.value)} placeholder="DESA TULUS • Warga Baru" /></div>
+            <div className="form-field"><label>Icon author URL</label><input value={value.authorIcon || ""} onChange={(event) => update("authorIcon", event.target.value)} placeholder="https://..." /></div>
+            <div className="form-field full-span"><div className="field-label-row"><label>Title</label><span>{String(value.title || "").length}/256</span></div><input maxLength={256} value={value.title || ""} onChange={(event) => update("title", event.target.value)} placeholder="Judul embed" /><small className="field-helper">Gunakan {"{displayName}"} pada title. Discord tidak merender mention pada judul.</small></div>
+            <div className="form-field full-span"><div className="field-label-row"><label>Description</label><span>{String(value.description || "").length}/4096</span></div><textarea maxLength={4096} value={value.description || ""} onChange={(event) => update("description", event.target.value)} rows={10} placeholder="Isi embed" /></div>
           </div>
         </Card>
 
         <details className="builder-disclosure" open>
           <summary><span><Image size={18} /><strong>Warna, gambar, dan footer</strong></span><small>Media visual dan identitas embed</small></summary>
           <div className="builder-disclosure-body form-grid two-columns">
-            <div className="form-field"><label>Color</label><div className="color-field"><input type="color" value={value.color || "#88a08c"} onChange={(event) => update("color", event.target.value)} /><input value={value.color || "#88a08c"} onChange={(event) => update("color", event.target.value)} /></div></div>
-            <div className="form-field"><label>Thumbnail URL</label><div className="input-with-icon"><Image size={16} /><input value={value.thumbnailUrl || ""} onChange={(event) => update("thumbnailUrl", event.target.value)} placeholder="https://..." /></div></div>
-            <div className="form-field full-span"><label>Image URL</label><div className="input-with-icon"><Image size={16} /><input value={value.imageUrl || ""} onChange={(event) => update("imageUrl", event.target.value)} placeholder="https://..." /></div></div>
-            <div className="form-field"><label>Footer text</label><input value={value.footerText || ""} onChange={(event) => update("footerText", event.target.value)} /></div>
-            <div className="form-field"><label>Footer icon URL</label><input value={value.footerIcon || ""} onChange={(event) => update("footerIcon", event.target.value)} placeholder="https://..." /></div>
+            <div className="form-field"><label>Warna</label><div className="color-field"><input type="color" value={value.color || "#88a08c"} onChange={(event) => update("color", event.target.value)} /><input value={value.color || "#88a08c"} onChange={(event) => update("color", event.target.value)} /></div></div>
+            <div className="form-field"><label>URL thumbnail</label><div className="input-with-icon"><Image size={16} /><input value={value.thumbnailUrl || ""} onChange={(event) => update("thumbnailUrl", event.target.value)} placeholder="https://..." /></div></div>
+            <div className="form-field full-span"><label>URL gambar</label><div className="input-with-icon"><Image size={16} /><input value={value.imageUrl || ""} onChange={(event) => update("imageUrl", event.target.value)} placeholder="https://..." /></div></div>
+            <div className="form-field"><div className="field-label-row"><label>Teks footer</label><span>{String(value.footerText || "").length}/2048</span></div><input maxLength={2048} value={value.footerText || ""} onChange={(event) => update("footerText", event.target.value)} /></div>
+            <div className="form-field"><label>Icon footer URL</label><input value={value.footerIcon || ""} onChange={(event) => update("footerIcon", event.target.value)} placeholder="https://..." /></div>
             <label className="checkbox-row full-span"><input type="checkbox" checked={Boolean(value.timestamp)} onChange={(event) => update("timestamp", event.target.checked)} /><span><strong>Tampilkan timestamp</strong><small>Discord menampilkan waktu saat pesan dikirim.</small></span></label>
           </div>
         </details>
@@ -110,7 +122,7 @@ export function EmbedBuilder({
         <details className="builder-disclosure">
           <summary><span><Type size={18} /><strong>Fields</strong></span><small>{fields.length} dari 25 field</small></summary>
           <div className="builder-disclosure-body">
-            <div className="builder-section-head"><p>Tambahkan informasi terstruktur di dalam embed.</p><Button variant="secondary" icon={<Plus size={16} />} onClick={() => update("fields", [...fields, { name: "Field baru", value: "Isi field", inline: false }])}>Tambah field</Button></div>
+            <div className="builder-section-head"><p>Tambahkan informasi terstruktur di dalam embed.</p><Button variant="secondary" icon={<Plus size={16} />} disabled={fields.length >= 25} onClick={() => update("fields", [...fields, { name: "Field baru", value: "Isi field", inline: false }])}>Tambah field</Button></div>
             <div className="repeat-list">
               {fields.map((field, index) => <div className="repeat-card" key={index}>
                 <div className="repeat-card-grid"><input value={field.name} onChange={(event) => update("fields", fields.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} placeholder="Nama field" /><textarea value={field.value} onChange={(event) => update("fields", fields.map((item, itemIndex) => itemIndex === index ? { ...item, value: event.target.value } : item))} rows={2} placeholder="Isi field" /></div>
@@ -122,15 +134,15 @@ export function EmbedBuilder({
         </details>
 
         <details className="builder-disclosure">
-          <summary><span><Link2 size={18} /><strong>Buttons</strong></span><small>{buttons.length} button</small></summary>
+          <summary><span><Link2 size={18} /><strong>Tombol</strong></span><small>{buttons.length} tombol</small></summary>
           <div className="builder-disclosure-body">
-            <div className="builder-section-head"><p>Tombol link untuk panel atau informasi eksternal.</p><Button variant="secondary" icon={<Plus size={16} />} onClick={() => update("buttons", [...buttons, { label: "Buka informasi", url: "" }])}>Tambah button</Button></div>
+            <div className="builder-section-head"><p>Tombol link untuk panel atau informasi eksternal.</p><Button variant="secondary" icon={<Plus size={16} />} disabled={buttons.length >= 5} onClick={() => update("buttons", [...buttons, { label: "Buka informasi", url: "" }])}>Tambah tombol</Button></div>
             <div className="repeat-list">
               {buttons.map((button, index) => <div className="repeat-card" key={index}>
                 <div className="repeat-card-grid two"><input value={button.label} onChange={(event) => update("buttons", buttons.map((item, itemIndex) => itemIndex === index ? { ...item, label: event.target.value } : item))} placeholder="Label button" /><input value={button.url || ""} onChange={(event) => update("buttons", buttons.map((item, itemIndex) => itemIndex === index ? { ...item, url: event.target.value } : item))} placeholder="https://... atau channel ID" /></div>
                 <div className="repeat-card-actions"><button type="button" aria-label="Hapus button" onClick={() => update("buttons", buttons.filter((_, itemIndex) => itemIndex !== index))}><Trash2 size={16} /></button></div>
               </div>)}
-              {!buttons.length ? <div className="empty-inline">Belum ada button.</div> : null}
+              {!buttons.length ? <div className="empty-inline">Belum ada tombol.</div> : null}
             </div>
           </div>
         </details>
@@ -143,7 +155,7 @@ export function EmbedBuilder({
         <div className={`preview-device preview-${device}`}><DiscordPreview embed={value} picker={picker} /></div>
         {channelMissing ? <div className="inline-warning">Pilih channel tujuan pada tab Channel & Role sebelum menggunakan Kirim Tes.</div> : null}
         <div className="sticky-save-card">
-          <Button variant="secondary" icon={<RotateCcw size={16} />} onClick={() => onChange({ color: "#88a08c", fields: [], buttons: [] })}>Reset</Button>
+          <Button variant="secondary" icon={<RotateCcw size={16} />} onClick={resetEmbed}>Reset</Button>
           <Button variant="secondary" icon={<Copy size={16} />} onClick={() => navigator.clipboard.writeText(json)}>Salin JSON</Button>
           <Button variant="secondary" icon={<Send size={16} />} onClick={onTest} disabled={channelMissing || saving}>Kirim tes</Button>
           <Button icon={<Save size={16} />} onClick={onSave} disabled={saving}>{saving ? "Menyimpan" : "Simpan"}</Button>

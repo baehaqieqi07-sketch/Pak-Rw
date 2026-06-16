@@ -134,6 +134,20 @@ export function ManagePage() {
   const configComplete = requiredBindings.length === completedRequired;
 
   useEffect(() => {
+    setTab(slug === "embed" ? "embed" : "general");
+  }, [slug]);
+
+  useEffect(() => {
+    const warnBeforeLeave = (event: BeforeUnloadEvent) => {
+      if (!dirty) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeLeave);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeave);
+  }, [dirty]);
+
+  useEffect(() => {
     const cfg = data.config || {};
     const nextEmbedKey = slug === "embed" ? (embedKey && data.embeds[embedKey] ? embedKey : availableEmbedKeys[0] || "welcome") : feature.embedKey || "welcome";
     const nextTargets: Record<string, string> = {};
@@ -223,6 +237,15 @@ export function ManagePage() {
   };
 
   const runBoostAction = async (action: "start" | "stop") => {
+    if (action === "stop" && !window.confirm("Hentikan event Boost Poin sekarang? Multiplier akan kembali ke x1.")) return;
+    if (action === "start" && Number(boostMultiplier) <= 1) {
+      notify("Multiplier event harus lebih besar dari x1.", "error");
+      return;
+    }
+    if (action === "start" && Number(boostDuration) < 1) {
+      notify("Durasi event minimal 1 menit.", "error");
+      return;
+    }
     if (action === "start" && !targets.boostChannel) {
       notify("Pilih Channel Pengumuman Boost terlebih dahulu.", "error");
       setTab("targets");
@@ -270,6 +293,11 @@ export function ManagePage() {
     }
   };
 
+  const cancelChanges = async () => {
+    await refresh();
+    notify("Perubahan yang belum disimpan dibatalkan.", "info");
+  };
+
   const testEmbed = async () => {
     if (!primaryChannelId) {
       notify("Pilih channel Kirim Tes terlebih dahulu.", "error");
@@ -301,13 +329,15 @@ export function ManagePage() {
         <div className="feature-header-status">
           <StatusBadge label={enabled ? "Aktif" : "Nonaktif"} tone={enabled ? "success" : "warning"} />
           <StatusBadge label={configComplete ? "Siap digunakan" : `${completedRequired}/${requiredBindings.length} target siap`} tone={configComplete ? "success" : "warning"} />
+          {dirty ? <StatusBadge label="Belum disimpan" tone="warning" /> : null}
         </div>
       </section>
 
-      <section className="setup-steps" aria-label="Alur pengaturan">
-        <button className={tab === "targets" ? "is-active" : configComplete ? "is-complete" : ""} onClick={() => setTab("targets")}><span>1</span><div><strong>Pilih channel & role</strong><small>Ambil langsung dari Discord</small></div>{configComplete ? <CheckCircle2 size={18} /> : null}</button>
-        <button className={tab === "content" || tab === "embed" ? "is-active" : ""} onClick={() => setTab("embed")}><span>2</span><div><strong>Edit embed</strong><small>Konten dan preview langsung</small></div></button>
-        <button className={tab === "activity" ? "is-active" : ""} onClick={() => setTab("activity")}><span>3</span><div><strong>Simpan & tes</strong><small>Kirim uji ke channel pilihan</small></div></button>
+      <section className="manage-workflow" aria-label="Alur pengaturan">
+        <div><span>1</span><strong>Atur fitur</strong><small>Status dan pengaturan utama</small></div>
+        <div><span>2</span><strong>Pilih Discord</strong><small>Channel, role, dan user asli</small></div>
+        <div><span>3</span><strong>Edit & preview</strong><small>Pastikan hasil sama dengan Discord</small></div>
+        <div><span>4</span><strong>Simpan & tes</strong><small>Kirim uji sebelum dipakai warga</small></div>
       </section>
 
       <div className="manage-tabs" role="tablist">
@@ -335,39 +365,60 @@ export function ManagePage() {
           {slug === "top-aktif" || slug === "papan-aktif" ? <Card><CardHeader title="Jadwal leaderboard" description="Scheduler core bot tidak diubah; dashboard hanya menyimpan setting yang didukung." /><div className="form-grid two-columns"><div className="form-field"><label>Jumlah peringkat</label><input type="number" min={3} max={25} value={topLimit} onChange={(event) => { setTopLimit(Number(event.target.value)); setDirty(true); }} /></div><div className="form-field"><label>Jam post WIB</label><input type="number" min={0} max={23} value={postHour} onChange={(event) => { setPostHour(Number(event.target.value)); setDirty(true); }} /><small className="field-helper">Gunakan 0 untuk pukul 00.00 WIB.</small></div></div></Card> : null}
           {slug === "motm" ? <Card><CardHeader title="Threshold MOTM" description="Lifetime point tetap lanjut dan tidak ikut reset." /><div className="form-field"><label>Target poin siklus</label><input type="number" min={1000} value={motmThreshold} onChange={(event) => { setMotmThreshold(Number(event.target.value)); setDirty(true); }} /><small className="field-helper">Default DESA TULUS: 100.000 poin.</small></div></Card> : null}
           {slug === "boost-poin" ? <>
-            <Card className="full-span-card boost-control-card">
-              <CardHeader title="Kontrol Event Boost Poin" description="Atur pengali poin, durasi, channel target, lalu mulai atau hentikan event dari satu tempat." action={<StatusBadge label={boostEventActive ? "Event berjalan" : "Standby"} tone={boostEventActive ? "success" : "warning"} />} />
+            <Card className="full-span-card boost-overview-card">
+              <CardHeader title="Status Event Boost Poin" description="Lihat kondisi event sebelum mengubah multiplier atau menjalankan event baru." action={<StatusBadge label={boostEventActive ? "Sedang berjalan" : "Tidak aktif"} tone={boostEventActive ? "success" : "neutral"} />} />
               <div className="boost-status-strip">
-                <div><Gauge size={20} /><span>Multiplier</span><strong>x{boostMultiplier.toLocaleString("id-ID")}</strong></div>
+                <div><Gauge size={20} /><span>Multiplier</span><strong>{boostEventActive ? `x${boostMultiplier.toLocaleString("id-ID")}` : "x1 normal"}</strong></div>
                 <div><Clock3 size={20} /><span>Durasi</span><strong>{boostDuration} menit</strong></div>
-                <div><Activity size={20} /><span>Status</span><strong>{boostEventActive ? "Aktif" : "Normal x1"}</strong></div>
+                <div><Activity size={20} /><span>Mode</span><strong>{boostMode === "chat" ? "Chat" : boostMode === "voice" ? "Voice" : "Chat + Voice"}</strong></div>
                 <div><Clock3 size={20} /><span>Berakhir</span><strong>{boostEventActive && boostEndsAt ? new Date(boostEndsAt).toLocaleString("id-ID") : "Belum dimulai"}</strong></div>
               </div>
+              {boostEventActive ? <div className="inline-warning boost-live-warning">Event sedang berjalan. Hentikan event terlebih dahulu untuk mengubah multiplier, durasi, atau mode.</div> : null}
+            </Card>
+
+            <Card className="boost-settings-card">
+              <CardHeader title="Pengaturan event" description="Tentukan nama, pengali, durasi, dan jenis aktivitas yang mendapat boost." />
               <div className="form-grid two-columns">
-                <div className="form-field"><label>Nama event</label><input value={boostEventName} onChange={(event) => { setBoostEventName(event.target.value); setDirty(true); }} /><small className="field-helper">Tampil pada placeholder {`{eventName}`}.</small></div>
-                <div className="form-field"><label>Multiplier poin</label><div className="input-prefix"><span>x</span><input type="number" min={1} max={100} step={0.1} value={boostMultiplier} onChange={(event) => { setBoostMultiplier(Number(event.target.value)); setDirty(true); }} /></div><small className="field-helper">Contoh x10: poin dasar 5 menjadi total 50 poin.</small></div>
-                <div className="form-field"><label>Durasi event</label><input type="number" min={1} max={10080} value={boostDuration} onChange={(event) => { setBoostDuration(Number(event.target.value)); setDirty(true); }} /><small className="field-helper">Dalam menit. Setelah waktunya habis, event berhenti dan embed selesai dikirim otomatis.</small></div>
-                <div className="form-field"><label>Aktivitas yang diboost</label><select value={boostMode} onChange={(event) => { setBoostMode(event.target.value); setDirty(true); }}><option value="chat_voice">Chat dan Voice</option><option value="chat">Chat saja</option><option value="voice">Voice saja</option></select><small className="field-helper">Channel target dipilih pada tab Channel & Role.</small></div>
-              </div>
-              <div className="boost-option-grid">
-                <div className="boost-option-row"><div><strong>Selesai otomatis</strong><small>Event berhenti saat durasi habis dan poin kembali x1.</small></div><Toggle checked={boostAutoEnd} onChange={(value) => { setBoostAutoEnd(value); setDirty(true); }} label="Selesai otomatis" /></div>
-                <div className="boost-option-row"><div><strong>Kirim embed saat mulai</strong><small>Pengumuman aktif dikirim ke Channel Pengumuman Boost.</small></div><Toggle checked={boostAnnounceStart} onChange={(value) => { setBoostAnnounceStart(value); setDirty(true); }} label="Pengumuman mulai" /></div>
-                <div className="boost-option-row"><div><strong>Kirim embed saat selesai</strong><small>Dikirim saat event berakhir otomatis maupun dihentikan owner.</small></div><Toggle checked={boostAnnounceEnd} onChange={(value) => { setBoostAnnounceEnd(value); setDirty(true); }} label="Pengumuman selesai" /></div>
-              </div>
-              <div className="boost-flow-guide">
-                <div><span>1</span><strong>Isi multiplier dan durasi</strong><small>Owner menentukan x poin event.</small></div>
-                <div><span>2</span><strong>Pilih channel Discord</strong><small>Pengumuman, chat, dan voice dipilih berdasarkan nama.</small></div>
-                <div><span>3</span><strong>Mulai event</strong><small>Embed aktif dikirim dan pengali langsung berjalan.</small></div>
-                <div><span>4</span><strong>Selesai otomatis/manual</strong><small>Poin kembali x1 dan embed berakhir dikirim.</small></div>
-              </div>
-              <div className="boost-action-row">
-                <Button icon={<Play size={17} />} disabled={boostActionLoading !== "" || boostEventActive} onClick={() => runBoostAction("start")}>{boostActionLoading === "start" ? "Memulai event" : "Mulai event dan kirim embed"}</Button>
-                <Button variant="danger" icon={<Square size={17} />} disabled={boostActionLoading !== "" || !boostEventActive} onClick={() => runBoostAction("stop")}>{boostActionLoading === "stop" ? "Menghentikan event" : "Hentikan sekarang"}</Button>
-                <Button variant="secondary" icon={<Save size={17} />} disabled={saving || !dirty} onClick={saveSettings}>Simpan tanpa memulai</Button>
+                <div className="form-field"><label>Nama event</label><input disabled={boostEventActive} value={boostEventName} onChange={(event) => { setBoostEventName(event.target.value); setDirty(true); }} /><small className="field-helper">Dipakai oleh placeholder {`{eventName}`}.</small></div>
+                <div className="form-field"><label>Multiplier poin</label><div className="input-prefix"><span>x</span><input disabled={boostEventActive} type="number" min={1.1} max={100} step={0.1} value={boostMultiplier} onChange={(event) => { setBoostMultiplier(Number(event.target.value)); setDirty(true); }} /></div><small className="field-helper">Contoh x10: poin dasar 5 menjadi total 50 poin.</small></div>
+                <div className="form-field"><label>Durasi event</label><input disabled={boostEventActive} type="number" min={1} max={10080} value={boostDuration} onChange={(event) => { setBoostDuration(Number(event.target.value)); setDirty(true); }} /><small className="field-helper">Dalam menit. Durasi maksimal 7 hari.</small></div>
+                <div className="form-field"><label>Aktivitas yang diboost</label><select disabled={boostEventActive} value={boostMode} onChange={(event) => { setBoostMode(event.target.value); setDirty(true); }}><option value="chat_voice">Chat dan Voice</option><option value="chat">Chat saja</option><option value="voice">Voice saja</option></select><small className="field-helper">Channel target dipilih pada tab Channel & Role.</small></div>
               </div>
             </Card>
-            <Card><CardHeader title="Embed saat dimulai" description="Template boostPoinActive dapat diedit pada tab Embed & Preview." /><div className="template-summary"><span>Template aktif</span><strong>boostPoinActive</strong><small>Berisi Oleh, Multiplier, Durasi, Channel, dan waktu berakhir.</small></div></Card>
-            <Card><CardHeader title="Embed saat selesai" description="Template boostPoinEnd tersedia di Embed Manager global." /><div className="template-summary"><span>Template akhir</span><strong>boostPoinEnd</strong><small>Dikirim otomatis saat durasi habis atau saat owner menekan Hentikan sekarang.</small></div></Card>
+
+            <Card className="boost-options-card">
+              <CardHeader title="Otomatisasi pengumuman" description="Atur apa yang dilakukan Pak RW saat event mulai dan selesai." />
+              <div className="boost-option-list">
+                <div className="boost-option-row"><div><strong>Selesai otomatis</strong><small>Event berhenti saat durasi habis dan multiplier kembali ke x1.</small></div><Toggle checked={boostAutoEnd} onChange={(value) => { setBoostAutoEnd(value); setDirty(true); }} label="Selesai otomatis" /></div>
+                <div className="boost-option-row"><div><strong>Kirim embed saat mulai</strong><small>Pengumuman aktif dikirim ke Channel Pengumuman Boost.</small></div><Toggle checked={boostAnnounceStart} onChange={(value) => { setBoostAnnounceStart(value); setDirty(true); }} label="Pengumuman mulai" /></div>
+                <div className="boost-option-row"><div><strong>Kirim embed saat selesai</strong><small>Dikirim saat event berakhir otomatis atau dihentikan owner.</small></div><Toggle checked={boostAnnounceEnd} onChange={(value) => { setBoostAnnounceEnd(value); setDirty(true); }} label="Pengumuman selesai" /></div>
+              </div>
+            </Card>
+
+            <Card className="full-span-card boost-run-card">
+              <CardHeader title="Jalankan event" description="Ikuti alur ini supaya boost tidak salah channel atau salah multiplier." />
+              <div className="boost-flow-guide">
+                <div><span>1</span><strong>Isi pengaturan</strong><small>Tentukan multiplier, durasi, dan mode.</small></div>
+                <div><span>2</span><strong>Pilih target Discord</strong><small>Pilih channel pengumuman, chat, voice, dan pengaktif.</small></div>
+                <div><span>3</span><strong>Periksa embed</strong><small>Buka tab Embed & Preview, lalu kirim tes.</small></div>
+                <div><span>4</span><strong>Mulai atau hentikan</strong><small>Pak RW mengatur multiplier dan mengirim pengumuman.</small></div>
+              </div>
+              <div className="boost-readiness">
+                <div className={targets.boostChannel ? "is-ready" : "is-missing"}><span />Channel pengumuman {targets.boostChannel ? "siap" : "belum dipilih"}</div>
+                <div className={(boostMode === "voice" || targets.boostChatChannel) ? "is-ready" : "is-missing"}><span />Target chat {(boostMode === "voice" || targets.boostChatChannel) ? "siap" : "belum dipilih"}</div>
+                <div className={(boostMode === "chat" || targets.boostVoiceChannel) ? "is-ready" : "is-missing"}><span />Target voice {(boostMode === "chat" || targets.boostVoiceChannel) ? "siap" : "belum dipilih"}</div>
+                <div className={boostMultiplier > 1 && boostDuration > 0 ? "is-ready" : "is-missing"}><span />Multiplier dan durasi {boostMultiplier > 1 && boostDuration > 0 ? "valid" : "belum valid"}</div>
+              </div>
+              <div className="boost-action-row">
+                <Button icon={<Play size={17} />} disabled={boostActionLoading !== "" || boostEventActive || boostMultiplier <= 1} onClick={() => runBoostAction("start")}>{boostActionLoading === "start" ? "Memulai event" : "Mulai event"}</Button>
+                <Button variant="danger" icon={<Square size={17} />} disabled={boostActionLoading !== "" || !boostEventActive} onClick={() => runBoostAction("stop")}>{boostActionLoading === "stop" ? "Menghentikan event" : "Hentikan event"}</Button>
+                <Button variant="secondary" icon={<Save size={17} />} disabled={saving || !dirty || boostEventActive} onClick={saveSettings}>Simpan sebagai pengaturan berikutnya</Button>
+                <Button variant="secondary" icon={<Layers3 size={17} />} onClick={() => setTab("targets")}>Pilih channel target</Button>
+              </div>
+            </Card>
+
+            <Card><CardHeader title="Embed saat dimulai" description="Gunakan tab Embed & Preview untuk mengedit template boostPoinActive." /><div className="template-summary"><span>Template</span><strong>boostPoinActive</strong><small>Menampilkan pengaktif, multiplier, durasi, target, dan waktu selesai.</small></div></Card>
+            <Card><CardHeader title="Embed saat selesai" description="Edit template boostPoinEnd melalui Embed Builder global." /><div className="template-summary"><span>Template</span><strong>boostPoinEnd</strong><small>Dikirim saat durasi habis atau owner menghentikan event.</small></div></Card>
           </> : null}
         </div>
       ) : null}
@@ -421,7 +472,7 @@ export function ManagePage() {
 
       {tab === "activity" ? <Card><CardHeader title="Aktivitas terbaru" description={`Perubahan yang berkaitan dengan ${feature.name}.`} /><div className="activity-list">{data.activity?.length ? data.activity.slice(0, 12).map((item, index) => <div className="activity-item" key={`${item.at}-${index}`}><span className="activity-marker" /><div><strong>{item.title}</strong><small>{item.detail || "Perubahan dashboard"}</small></div><time>{new Date(item.at).toLocaleString("id-ID")}</time></div>) : <div className="empty-inline">Belum ada aktivitas.</div>}</div></Card> : null}
 
-      {tab !== "embed" ? <div className="page-save-bar"><div><strong>{dirty ? "Ada perubahan belum disimpan" : "Semua perubahan tersimpan"}</strong><span>Hanya field yang dipilih yang diperbarui. Data warga tidak disentuh.</span></div><div><Button variant="secondary" icon={<RefreshCcw size={16} />} onClick={() => refresh()}>Batalkan</Button><Button icon={<Save size={16} />} disabled={!dirty || saving} onClick={saveSettings}>{saving ? "Menyimpan" : "Simpan perubahan"}</Button></div></div> : null}
+      {tab !== "embed" ? <div className="page-save-bar"><div><strong>{dirty ? "Ada perubahan belum disimpan" : "Semua perubahan tersimpan"}</strong><span>Hanya field yang dipilih yang diperbarui. Data warga tidak disentuh.</span></div><div><Button variant="secondary" icon={<RefreshCcw size={16} />} onClick={cancelChanges}>Batalkan</Button><Button icon={<Save size={16} />} disabled={!dirty || saving} onClick={saveSettings}>{saving ? "Menyimpan" : "Simpan perubahan"}</Button></div></div> : null}
     </div>
   );
 }

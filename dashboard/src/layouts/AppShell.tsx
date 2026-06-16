@@ -49,11 +49,11 @@ export function AppShell({ data }: { data: BootstrapData }) {
           <button className="icon-button mobile-close" aria-label="Tutup menu" onClick={closeMobile}><X size={20} /></button>
         </div>
 
-        <button className="server-card" type="button">
+        <div className="server-card" aria-label="Server aktif">
           <span className="server-mark"><Server size={18} /></span>
           <span className="server-card-copy"><strong>{data.guild?.name || "DESA TULUS"}</strong><small>{data.guild ? `${data.guild.memberCount.toLocaleString("id-ID")} warga` : "Menunggu koneksi server"}</small></span>
-          <ChevronDown size={16} />
-        </button>
+          <StatusBadge label={data.status.botOnline ? "Terhubung" : "Offline"} tone={data.status.botOnline ? "success" : "danger"} />
+        </div>
 
         <button className="sidebar-search" onClick={() => setSearchOpen(true)}>
           <Search size={17} /><span>Cari menu</span><kbd>Ctrl K</kbd>
@@ -98,8 +98,8 @@ export function AppShell({ data }: { data: BootstrapData }) {
             <button className="topbar-search-button" onClick={() => setSearchOpen(true)}><Search size={17} /><span>Cari fitur atau setting</span><kbd>Ctrl K</kbd></button>
             <StatusBadge label={data.status.environment} tone="neutral" />
             <StatusBadge label={data.status.botOnline ? "Bot online" : "Bot offline"} tone={data.status.botOnline ? "success" : "danger"} />
-            <button className="icon-button" aria-label="Notifikasi"><Bell size={19} /></button>
-            <button className="quick-create" onClick={() => navigate("/manage/embed")}><Plus size={17} /><span>Quick create</span></button>
+            <button className="icon-button" aria-label="Buka aktivitas terbaru" title="Aktivitas terbaru" onClick={() => navigate("/activity")}><Bell size={19} /></button>
+            <button className="quick-create" onClick={() => navigate("/manage/embed")}><Plus size={17} /><span>Buat Embed</span></button>
           </div>
         </header>
 
@@ -109,7 +109,7 @@ export function AppShell({ data }: { data: BootstrapData }) {
       {searchOpen ? (
         <div className="command-overlay" onMouseDown={() => setSearchOpen(false)}>
           <div className="command-dialog" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="command-input"><Search size={19} /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cari halaman dashboard" /><button aria-label="Tutup" onClick={() => setSearchOpen(false)}><X size={18} /></button></div>
+            <div className="command-input"><Search size={19} /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cari fitur, channel, role, atau pengaturan" /><button aria-label="Tutup" onClick={() => setSearchOpen(false)}><X size={18} /></button></div>
             <div className="command-results">
               {searchResults.map((item) => {
                 const Icon = item.icon;

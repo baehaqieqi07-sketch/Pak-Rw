@@ -70,8 +70,24 @@ const roleTokens: Record<string, string> = {
   "{juraganRole}": "@Juragan Desa"
 };
 
-export function resolvePreviewText(input = "", picker?: PickerData) {
+const knownEmojiShortcodes: Record<string, string> = {
+  rocket_animated: "<a:rocket_animated:1512884173453529288>",
+  bar_chart: "<a:bar_chart:1516453838117277829>",
+  Chart_Increasing: "<a:Chart_Increasing:1516454160684290219>",
+  Animated_Arrow_Bluelite: "<a:Animated_Arrow_Bluelite:1512751559140839576>",
+  Desa_Tulus: "<a:Desa_Tulus:1516424353934348299>"
+};
+
+function normalizeKnownEmojiShortcodes(input = "") {
   let output = input;
+  Object.entries(knownEmojiShortcodes).forEach(([name, markup]) => {
+    output = output.replace(new RegExp(`:${name}:(?!\\d)`, "g"), markup);
+  });
+  return output;
+}
+
+export function resolvePreviewText(input = "", picker?: PickerData) {
+  let output = normalizeKnownEmojiShortcodes(input);
   const replacements = { ...placeholderSample, ...roleTokens };
   Object.entries(replacements).forEach(([token, value]) => { output = output.split(token).join(value); });
   Object.entries(channelTokens).forEach(([token, fallback]) => {
@@ -96,9 +112,17 @@ function renderInline(text: string) {
   });
 }
 
+function renderPlainLines(lines: string[]) {
+  return lines.map((line, index) => <span key={index}>{line ? renderInline(line) : "\u00a0"}{index < lines.length - 1 ? <br /> : null}</span>);
+}
+
 function renderLines(text: string) {
   const lines = text.split("\n");
-  return lines.map((line, index) => <span key={index}>{line ? renderInline(line) : "\u00a0"}{index < lines.length - 1 ? <br /> : null}</span>);
+  if (lines[0]?.startsWith(">>> ")) {
+    const quoted = [lines[0].slice(4), ...lines.slice(1)];
+    return <span className="discord-blockquote-multiline">{renderPlainLines(quoted)}</span>;
+  }
+  return renderPlainLines(lines);
 }
 
 export function DiscordPreview({ embed, picker }: { embed: EmbedDraft; picker?: PickerData }) {

@@ -67,6 +67,7 @@ export function DiscordPicker({
   const rootRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const selected = items.find((item) => item.id === value);
+  const hasStoredValue = Boolean(value && !selected);
 
   const grouped = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -80,7 +81,9 @@ export function DiscordPicker({
       existing.push(item);
       output.set(group, existing);
     });
-    return Array.from(output.entries());
+    return Array.from(output.entries())
+      .sort(([left], [right]) => left.localeCompare(right, "id"))
+      .map(([group, groupItems]) => [group, groupItems.sort((left, right) => labelOf(kind, left).localeCompare(labelOf(kind, right), "id"))] as [string, Item[]]);
   }, [items, kind, query]);
 
   useEffect(() => {
@@ -121,10 +124,10 @@ export function DiscordPicker({
           {loading ? <LoaderCircle className="spin" size={18} /> : <PickerIcon kind={kind} item={selected} />}
         </span>
         <span className="picker-value">
-          <strong>{selected ? labelOf(kind, selected) : loading ? "Membaca data Discord" : placeholder}</strong>
-          <small>{selected ? metaOf(kind, selected) : items.length ? `${items.length} pilihan siap dipilih` : "Belum ada data dari Discord"}</small>
+          <strong>{selected ? labelOf(kind, selected) : hasStoredValue ? "Pilihan tersimpan belum ditemukan" : loading ? "Membaca data Discord" : placeholder}</strong>
+          <small>{selected ? metaOf(kind, selected) : hasStoredValue ? `ID ${value} masih tersimpan. Muat ulang Discord untuk mencocokkan nama.` : items.length ? `${items.length} pilihan siap dipilih` : "Belum ada data dari Discord"}</small>
         </span>
-        {selected ? (
+        {value ? (
           <span
             className="picker-clear"
             role="button"
@@ -168,7 +171,7 @@ export function DiscordPicker({
               </section>
             )) : <div className="picker-empty"><Search size={22} /><strong>Tidak ada hasil</strong><span>Coba nama lain atau tekan Muat ulang Discord.</span></div>}
           </div>
-          <div className="picker-popover-foot"><span>{selected ? `Terpilih: ${labelOf(kind, selected)}` : "Belum ada pilihan"}</span><button type="button" onClick={() => { onChange(""); setOpen(false); setQuery(""); }}>Kosongkan</button></div>
+          <div className="picker-popover-foot"><span>{selected ? `Terpilih: ${labelOf(kind, selected)}` : hasStoredValue ? `ID tersimpan: ${value}` : `${items.length} pilihan tersedia`}</span><button type="button" onClick={() => { onChange(""); setOpen(false); setQuery(""); }}>Kosongkan</button></div>
         </div>
       ) : null}
       {helper ? <small className="field-helper">{helper}</small> : null}

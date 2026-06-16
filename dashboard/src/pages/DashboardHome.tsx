@@ -25,7 +25,7 @@ const quickActions = [
   { to: "/channel-manager", label: "Sinkronkan Discord", helper: "Pilih channel berdasarkan nama", icon: Server }
 ];
 
-const GROUPS = ["Semua", "Community", "Engagement", "Level & Activity", "Membership", "Content", "Administration", "System"];
+const GROUPS = ["Semua", "Komunitas", "Keterlibatan", "Level & Aktivitas", "Keanggotaan", "Konten", "Administrasi", "Sistem"];
 
 export function DashboardHome({ data }: { data: BootstrapData }) {
   const cfg = data.config || {};

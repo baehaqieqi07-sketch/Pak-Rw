@@ -1,64 +1,33 @@
-# Pak RW / DESA TULUS v10.10.66
+# Pak RW / DESA TULUS v10.10.68
 
-Pak RW adalah bot dan Balai Warga Digital untuk server **DESA TULUS**. Versi ini menyelesaikan alur **Boost Poin Event** dan menyinkronkan ulang embed Level, Cek Poin, Top Aktif, Papan Aktif Lifetime, Juragan, serta footer DESA TULUS.
+Versi ini adalah **final dashboard finishing pass** untuk Pak RW Control Center. Fokus update hanya pada dashboard web: layout dirapikan, alur Manage dipertegas, picker Discord dibuat lebih aman, Embed Builder diberi batas dan counter, serta halaman Boost Poin dipecah menjadi bagian yang lebih mudah dipahami.
 
-## Update v10.10.66
+## Perubahan utama
 
-### Boost Poin Event
-
-Halaman:
-
-```txt
-/dashboard/manage/boost-poin
-```
-
-Alur dashboard:
-
-1. Tentukan nama event.
-2. Isi multiplier, misalnya `x10`.
-3. Isi durasi dalam menit.
-4. Pilih mode Chat, Voice, atau Chat dan Voice.
-5. Pilih Channel Pengumuman, Channel Chat, Voice Channel, dan user pengaktif langsung dari data Discord.
-6. Pilih apakah event selesai otomatis dan apakah embed awal/akhir dikirim.
-7. Tekan **Mulai event dan kirim embed**.
-8. Saat durasi habis, multiplier kembali ke `x1` dan embed selesai dikirim. Owner juga dapat menekan **Hentikan sekarang**.
-
-Contoh perhitungan:
-
-```txt
-Poin dasar: 5
-Multiplier: x10
-Bonus event: 45
-Total masuk: 50 poin
-```
-
-Event hanya memengaruhi channel dan tipe aktivitas yang dipilih. Data level, poin lifetime, Top Aktif, Papan Aktif, dan MongoDB tidak direset.
-
-### Embed Discord
-
-Template yang diperbarui:
-
-- `levelUp`
-- `levelProfile`
-- `topActiveBoard`
-- `papanAktif`
-- `juragan`
-- `boostPoinActive`
-- `boostPoinEnd`
-
-Semua footer aktif memakai:
-
-```txt
-DESA TULUS • Nama Fitur
-```
-
-Dengan footer icon animasi Discord:
-
-```txt
-https://cdn.discordapp.com/emojis/1516424353934348299.gif
-```
-
-Custom emoji animasi di Title/Description ditampilkan sebagai GIF pada Discord dan pada live preview dashboard. User, role, dan channel dikirim sebagai mention Discord asli menggunakan ID yang dipilih dari dashboard.
+- Navigasi dashboard memakai istilah Indonesia yang lebih jelas.
+- Header fitur, tab, card, spacing, font, dan responsive layout dirapikan.
+- Alur Manage menjadi empat tahap: atur fitur, pilih Discord, edit/preview, simpan/test.
+- Channel/role/user picker:
+  - bisa mencari berdasarkan nama;
+  - hasil dikelompokkan dan diurutkan;
+  - ID lama tetap terlihat jika belum cocok dengan data Discord;
+  - config tetap menyimpan ID asli.
+- Embed Builder:
+  - counter batas karakter Discord;
+  - batas maksimal 25 fields dan 5 buttons;
+  - reset memakai konfirmasi;
+  - reset mempertahankan footer identitas DESA TULUS;
+  - mention hanya dimasukkan pada bagian yang didukung Discord.
+- Boost Poin:
+  - status event dipisah dari form pengaturan;
+  - pengaturan dikunci saat event sedang berjalan;
+  - multiplier harus lebih dari x1;
+  - durasi minimal 1 menit;
+  - ada pemeriksaan kesiapan channel chat/voice/pengumuman;
+  - stop event memakai konfirmasi;
+  - tombol mulai, hentikan, simpan, dan pilih target dibuat terpisah dan jelas.
+- Peringatan perubahan belum disimpan ketika menutup halaman.
+- Topbar dan sidebar dirapikan untuk laptop dan layar kecil.
 
 ## Menjalankan project
 
@@ -69,7 +38,13 @@ npm.cmd run check
 npm.cmd start
 ```
 
-Build ulang dashboard:
+Buka dashboard:
+
+```txt
+http://localhost:3000/dashboard
+```
+
+## Build dashboard
 
 ```powershell
 cd "D:\Pak Rw\dashboard"
@@ -77,29 +52,23 @@ npm.cmd install
 npm.cmd run build
 ```
 
-## Environment
-
-Gunakan Variables Railway/hosting, jangan commit `.env`:
+## Environment dashboard
 
 ```env
-DISCORD_TOKEN=ISI_TOKEN_BOT_DISCORD
-CLIENT_ID=ISI_CLIENT_ID_BOT
-GUILD_ID=ISI_ID_SERVER_DESA_TULUS
-MONGODB_URI=ISI_MONGODB_URI_ATLAS
-OPENROUTER_API_KEY=ISI_OPENROUTER_API_KEY
-AI_KEY=ISI_OPENROUTER_API_KEY
 DASHBOARD_ENABLED=true
 DASHBOARD_PASSWORD=ISI_PASSWORD_DASHBOARD
-NODE_ENV=production
 PORT=3000
 OT_PORT=3000
 ```
 
-Buka dashboard:
+Data Discord picker memerlukan:
 
-```txt
-http://localhost:3000/dashboard
+```env
+DISCORD_TOKEN=ISI_TOKEN_BOT_DISCORD
+GUILD_ID=ISI_ID_SERVER_DESA_TULUS
 ```
+
+Isi rahasia hanya melalui Railway Variables atau environment hosting. Jangan commit `.env`.
 
 ## Push GitHub
 
@@ -107,20 +76,27 @@ http://localhost:3000/dashboard
 cd "D:\Pak Rw"
 git status
 git add .
-git commit -m "update Pak RW boost poin dan embed final v10.10.66"
+git commit -m "finish dashboard Pak RW v10.10.67"
 git push
 ```
 
 ## Keamanan data
 
-Jangan upload:
+Update ini tidak mengubah perhitungan level, poin, voice, Top Aktif, Papan Aktif Lifetime, MOTM, MongoDB schema, collection lama, maupun data warga. Perbandingan config dengan v10.10.66 hanya mengubah:
 
-- `.env`
-- `node_modules`
-- `data`
-- `logs`
-- `runtime-logs`
-- `backups`
-- token/API key/password
+```txt
+version
+dashboard.uiVersion
+```
 
-Update ini mempertahankan MongoDB, level, poin, lifetime point, voice, Top Aktif, Papan Aktif, MOTM, Donatur, Juragan, dan konfigurasi server yang sudah aktif.
+Jangan upload `.env`, `node_modules`, `data`, `logs`, `runtime-logs`, atau `backups`.
+
+
+## v10.10.68 — Top Aktif & Emoji Embed Fix
+
+- Memperbaiki `>>> ` supaya Top Voice, Top Chat, dan Papan Aktif tampil dengan garis kutipan Discord.
+- Mengubah shortcode emoji lama menjadi custom emoji GIF Discord asli.
+- Cek Poin memakai `<a:bar_chart:1516453838117277829>`.
+- Level Up memakai `<a:rocket_animated:1512884173453529288>` dan `<a:Chart_Increasing:1516454160684290219>`.
+- Level Up dan Cek Poin tidak lagi memasang thumbnail/image.
+- Preview dashboard menampilkan blockquote dan custom emoji dengan format yang sama seperti Discord.
