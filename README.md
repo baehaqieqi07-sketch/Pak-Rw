@@ -116,8 +116,11 @@ Dashboard difinishing ulang untuk mengunci simetri layout, merapikan modal picke
 - Tombol Batal dan Simpan muncul otomatis setelah user mengubah setting.
 - Channel Manager, Role Manager, Settings, Banner Manager, dan Manage Page memakai alur simpan yang sama.
 
-## v10.10.74 — Activity Discord Otomatis
+## v10.10.74 — Activity Discord Otomatis (digantikan v10.10.75)
 
-Pak RW sekarang memakai lima activity Discord yang berganti otomatis setiap 15 detik. Status pertama langsung tampil setelah bot ready, status utama selalu `online`, dan sistem mencegah interval ganda.
+Versi ini sebelumnya memakai variasi Playing/Watching/Listening. Sistem tersebut sudah diganti sepenuhnya oleh Custom Status pada v10.10.75.
 
-Daftar activity dan petunjuk perubahan ada di `UPDATE_FINAL_v10.10.74.md`.
+
+## v10.10.75 — Custom Status Discord Otomatis
+
+Sistem activity Playing/Watching/Listening lama diganti menjadi `ActivityType.Custom` dengan properti `state`. Lima Custom Status Pak RW tampil bergantian setiap 15 detik, status pertama langsung tampil saat `ClientReady`, dan hanya satu interval presence yang aktif. Lihat `UPDATE_FINAL_v10.10.75.md`.

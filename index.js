@@ -37,81 +37,79 @@ const DESA_TULUS_EMBED_COLOR_HEX = "#7DBD77";
 const DESA_TULUS_EMBED_COLOR_INT = 0x7DBD77;
 
 
-// Activity Discord Pak RW berganti otomatis setiap 15 detik.
-// Satu interval saja dipakai agar reconnect / pemanggilan ulang tidak membuat rotasi ganda.
-const PAK_RW_ACTIVITY_ROTATION_MS = 15_000;
-const PAK_RW_ACTIVITIES = Object.freeze([
-  {
-    name: "🗣️ Wilujeung Sumping",
-    type: ActivityType.Playing
-  },
-  {
-    name: "🫂 Warga Desa Tulus",
-    type: ActivityType.Watching
-  },
-  {
-    name: "😏 Mau Di Temenin?",
-    type: ActivityType.Listening
-  },
-  {
-    name: "😏 Jadi 08 Berapa?",
-    type: ActivityType.Playing
-  },
-  {
-    name: "👀 Sedang Memantau",
-    type: ActivityType.Watching
-  }
+// Custom Status Discord Pak RW berganti otomatis setiap 15 detik.
+// Hanya satu interval dipakai agar reconnect / pemanggilan ulang tidak membuat rotasi ganda.
+const PAK_RW_CUSTOM_STATUS_ROTATION_MS = 15_000;
+const PAK_RW_CUSTOM_STATUSES = Object.freeze([
+  "🗣️ Wilujeung Sumping",
+  "🫂 Warga Desa Tulus",
+  "😏 Mau Di Temenin?",
+  "😏 Jadi 08 Berapa?",
+  "👀 Sedang Memantau"
 ]);
 
-let pakRwActivityInterval = null;
-let pakRwActivityIndex = 0;
+let pakRwCustomStatusInterval = null;
+let pakRwCustomStatusIndex = 0;
 
-function startPakRwActivityRotation(discordClient) {
-  if (!discordClient?.user || PAK_RW_ACTIVITIES.length === 0) return;
+function startPakRwCustomStatusRotation(discordClient) {
+  if (!discordClient?.user || PAK_RW_CUSTOM_STATUSES.length === 0) {
+    return;
+  }
 
-  if (pakRwActivityInterval) {
-    clearInterval(pakRwActivityInterval);
-    pakRwActivityInterval = null;
+  if (pakRwCustomStatusInterval) {
+    clearInterval(pakRwCustomStatusInterval);
+    pakRwCustomStatusInterval = null;
   }
 
   // Setiap pemanggilan yang sah dimulai lagi dari status pertama.
-  pakRwActivityIndex = 0;
+  pakRwCustomStatusIndex = 0;
 
-  const updateActivity = () => {
-    if (!discordClient?.user) return;
+  const updatePakRwCustomStatus = () => {
+    if (!discordClient?.user) {
+      return;
+    }
 
-    const activity = PAK_RW_ACTIVITIES[
-      pakRwActivityIndex % PAK_RW_ACTIVITIES.length
-    ];
+    const currentStatus =
+      PAK_RW_CUSTOM_STATUSES[
+        pakRwCustomStatusIndex % PAK_RW_CUSTOM_STATUSES.length
+      ];
 
     try {
       discordClient.user.setPresence({
         status: "online",
         activities: [
           {
-            name: activity.name,
-            type: activity.type
+            type: ActivityType.Custom,
+            name: "Custom Status",
+            state: currentStatus
           }
         ]
       });
 
-      pakRwActivityIndex =
-        (pakRwActivityIndex + 1) % PAK_RW_ACTIVITIES.length;
-    } catch (err) {
-      console.log("⚠️ Activity Pak RW gagal diperbarui:", err.message);
+      pakRwCustomStatusIndex =
+        (pakRwCustomStatusIndex + 1) % PAK_RW_CUSTOM_STATUSES.length;
+    } catch (error) {
+      console.error(
+        "[PAK RW CUSTOM STATUS] Gagal mengganti status:",
+        error
+      );
     }
   };
 
   // Status pertama langsung tampil saat bot ready, tanpa menunggu 15 detik.
-  updateActivity();
+  updatePakRwCustomStatus();
 
-  pakRwActivityInterval = setInterval(
-    updateActivity,
-    PAK_RW_ACTIVITY_ROTATION_MS
+  pakRwCustomStatusInterval = setInterval(
+    updatePakRwCustomStatus,
+    PAK_RW_CUSTOM_STATUS_ROTATION_MS
   );
 
+  if (typeof pakRwCustomStatusInterval.unref === "function") {
+    pakRwCustomStatusInterval.unref();
+  }
+
   console.log(
-    `🔄 Rotasi activity Pak RW aktif: ${PAK_RW_ACTIVITIES.length} status • setiap ${PAK_RW_ACTIVITY_ROTATION_MS / 1000} detik.`
+    `🔄 Rotasi Custom Status Pak RW aktif: ${PAK_RW_CUSTOM_STATUSES.length} status • setiap ${PAK_RW_CUSTOM_STATUS_ROTATION_MS / 1000} detik.`
   );
 }
 
@@ -16981,7 +16979,7 @@ client.once(Events.ClientReady, async () => {
 
 
 
-  startPakRwActivityRotation(client);
+  startPakRwCustomStatusRotation(client);
 
 
   for (const guild of client.guilds.cache.values()) {
@@ -19164,10 +19162,10 @@ async function handleOwnerPrefixCommand(message) {
   }
 
   if (cmd === "setactivity") {
-    if (!rest) return safeReply(message, `❌ Contoh: \`${p}setactivity DESA TULUS 🤍\``), true;
-    config.activityText = rest;
-    await client.user?.setActivity(config.activityText, { type: ActivityType.Watching }).catch(() => null);
-    await saveLiveConfigFromOwner(message, `Activity bot diganti jadi **${config.activityText}**`);
+    await safeReply(
+      message,
+      "ℹ️ Pak RW sekarang memakai 5 Custom Status otomatis. Ubah daftar `PAK_RW_CUSTOM_STATUSES` di `index.js` bila ingin mengganti tulisannya."
+    );
     return true;
   }
 

@@ -1,6 +1,6 @@
 {
   "name": "pak-rw-desa-tulus",
-  "version": "10.10.74",
+  "version": "10.10.75",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -19,5 +19,5 @@
   "engines": {
     "node": ">=18"
   },
-  "description": "Pak RW DESA TULUS v10.10.74 - activity Discord otomatis berganti setiap 15 detik dengan satu interval aman"
+  "description": "Pak RW DESA TULUS v10.10.75 - Custom Status Discord berganti otomatis setiap 15 detik dengan satu interval aman"
 }

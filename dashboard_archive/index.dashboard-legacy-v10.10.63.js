@@ -16368,13 +16368,8 @@ client.once(Events.ClientReady, async () => {
 
 
 
-  client.user.setPresence({
-    activities: [{
-      name: config.activityText || "DESA TULUS 🤍",
-      type: ActivityType.Watching
-    }],
-    status: "online"
-  });
+  // Presence tidak diatur oleh arsip dashboard lama.
+  // Runtime aktif memakai Custom Status v10.10.75 dari index.js utama.
 
 
   for (const guild of client.guilds.cache.values()) {
@@ -18553,10 +18548,7 @@ async function handleOwnerPrefixCommand(message) {
   }
 
   if (cmd === "setactivity") {
-    if (!rest) return safeReply(message, `❌ Contoh: \`${p}setactivity DESA TULUS 🤍\``), true;
-    config.activityText = rest;
-    await client.user?.setActivity(config.activityText, { type: ActivityType.Watching }).catch(() => null);
-    await saveLiveConfigFromOwner(message, `Activity bot diganti jadi **${config.activityText}**`);
+    await safeReply(message, "ℹ️ Presence arsip tidak aktif. Runtime utama memakai Custom Status otomatis v10.10.75.");
     return true;
   }
 
