@@ -1,6 +1,6 @@
 {
   "name": "pak-rw-desa-tulus",
-  "version": "10.10.80",
+  "version": "10.10.81",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -22,5 +22,5 @@
   "engines": {
     "node": ">=18"
   },
-  "description": "Pak RW DESA TULUS v10.10.80 - AFK Voice 24/7 terintegrasi dashboard"
+  "description": "Pak RW DESA TULUS v10.10.81 - perbaikan KTP Warga: background baru, layout penuh, data jelas, nomor random unik"
 }

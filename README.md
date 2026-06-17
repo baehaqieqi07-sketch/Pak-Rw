@@ -221,3 +221,22 @@ Penggunaan:
 5. Gunakan **Hubungkan Ulang** jika ingin membuat sesi voice baru tanpa restart.
 
 Pak RW menggunakan self mute dan self deaf. Permission Speak tidak diperlukan karena fitur tidak memutar audio.
+
+## v10.10.81 — Perbaikan Final KTP Warga
+
+Renderer KTP Warga diperbarui agar kartu tidak tampak kosong saat ditampilkan kecil di Discord. Background resmi terbaru dari owner tetap digunakan sebagai dasar, lalu bot menambahkan panel kontras, judul, enam baris data, foto/avatar, tanggal pembuatan, status warga, dan footer Pak RW.
+
+Perubahan utama:
+- Channel aktif KTP sudah diarahkan ke `💳│buat-ktp` (`1516813349957013614`).
+- Ukuran hasil mengikuti background `1011 × 638` agar tidak gepeng atau terpotong.
+- Nomor KTP memakai 18 digit random unik dengan prefix `32`, dibuat satu kali lalu disimpan bersama data warga.
+- Data KTP lama tidak dihapus. Nomor versi lama dimigrasikan aman saat kartu pertama kali dibuka atau diperbarui.
+- Avatar Discord tetap digunakan; jika avatar gagal dimuat, kartu menampilkan inisial nama, bukan kotak kosong.
+- Tes otomatis memeriksa 100 nomor unik dan memastikan hasil render berbeda cukup besar dari background kosong.
+
+Command tetap:
+
+```text
+rwktppanel  → owner/admin mengirim panel KTP
+rwktp       → warga melihat KTP miliknya
+```

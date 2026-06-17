@@ -35,7 +35,7 @@ function defaultKtpConfig() {
   return {
     enabled: true,
     channelId: "",
-    channelName: "ktp-warga",
+    channelName: "buat-ktp",
     cooldownSeconds: 15,
     allowUpdate: true,
     panelTitle: "KARTU TANDA PENDUDUK DESA TULUS",
@@ -47,6 +47,8 @@ function defaultKtpConfig() {
     cardTitle: "KARTU TANDA PENDUDUK",
     cardSubtitle: "DESA TULUS",
     privacyNote: "KARTU KOMUNITAS DIGITAL • BUKAN DOKUMEN RESMI",
+    numberMode: "random_unique_18_digits_v2",
+    rendererVersion: "10.10.81",
     logToConsole: true
   };
 }
@@ -101,7 +103,10 @@ function recordKey(guildId, userId) {
 
 function getKtpRecord(guildId, userId) {
   if (!guildId || !userId) return null;
-  return readKtpStore().records[recordKey(guildId, userId)] || null;
+  const store = readKtpStore();
+  const key = recordKey(guildId, userId);
+  const record = store.records[key] || null;
+  return ensureRecordHasUniqueKtpNumber(store, key, record);
 }
 
 function saveKtpRecord(record) {
@@ -136,7 +141,7 @@ function resolveKtpChannel(guild, config = {}) {
   const byId = cfg.channelId ? guild.channels.cache.get(String(cfg.channelId)) : null;
   if (byId?.isTextBased?.() && typeof byId.send === "function" && !byId.isThread?.()) return byId;
 
-  const wanted = normalizeChannelName(cfg.channelName || "ktp-warga");
+  const wanted = normalizeChannelName(cfg.channelName || "buat-ktp");
   return guild.channels.cache.find((channel) => {
     if (!channel?.isTextBased?.() || channel.isThread?.() || typeof channel.send !== "function") return false;
     const normalized = normalizeChannelName(channel.name);
@@ -166,10 +171,63 @@ function missingBotPermissions(channel, guild) {
   return checks.filter(([flag]) => !permissions.has(flag)).map(([, label]) => label);
 }
 
-function makeKtpNumber(guildId, userId) {
-  const hash = crypto.createHash("sha256").update(`desa-tulus:${guildId}:${userId}`).digest("hex");
-  const decimal = BigInt(`0x${hash.slice(0, 16)}`).toString().padStart(20, "0");
-  return `32${decimal.slice(-16)}`;
+function randomNumericString(length) {
+  let result = "";
+  while (result.length < length) {
+    const bytes = crypto.randomBytes(Math.max(16, length * 2));
+    for (const byte of bytes) {
+      // Hindari bias modulo berlebihan dan hasil tetap numerik.
+      if (byte >= 250) continue;
+      result += String(byte % 10);
+      if (result.length >= length) break;
+    }
+  }
+  return result;
+}
+
+function generateUniqueKtpNumber(store = { records: {} }, guildId = "") {
+  const records = store?.records && typeof store.records === "object" ? store.records : {};
+  const used = new Set(
+    Object.values(records)
+      .filter((item) => !guildId || String(item?.guildId || "") === String(guildId))
+      .map((item) => String(item?.ktpNumber || ""))
+      .filter((number) => /^\d{18}$/.test(number))
+  );
+
+  for (let attempt = 0; attempt < 500; attempt += 1) {
+    const candidate = `32${randomNumericString(16)}`;
+    if (!used.has(candidate)) return candidate;
+  }
+  throw new Error("Gagal membuat nomor KTP unik setelah banyak percobaan.");
+}
+
+function makeKtpNumber(guildId, userId, store = null) {
+  // userId dipertahankan pada signature agar kompatibel dengan kode lama.
+  void userId;
+  return generateUniqueKtpNumber(store || readKtpStore(), guildId);
+}
+
+function ensureRecordHasUniqueKtpNumber(store, key, record) {
+  if (!record) return null;
+  const records = store?.records && typeof store.records === "object" ? store.records : {};
+  const currentNumber = String(record.ktpNumber || "");
+  const duplicateOwner = Object.entries(records).find(([otherKey, item]) =>
+    otherKey !== key && String(item?.guildId || "") === String(record.guildId || "") && String(item?.ktpNumber || "") === currentNumber
+  );
+  const isCurrentNumberValid = /^\d{18}$/.test(currentNumber) && !duplicateOwner;
+  const isCurrentVersion = Number(record.ktpNumberVersion || 0) >= 2;
+
+  if (isCurrentNumberValid && isCurrentVersion) return clone(record);
+
+  const updated = {
+    ...record,
+    ktpNumber: generateUniqueKtpNumber(store, record.guildId),
+    ktpNumberVersion: 2,
+    numberUpdatedAt: Date.now()
+  };
+  records[key] = updated;
+  writeKtpStore(store);
+  return clone(updated);
 }
 
 function formatDateWib(timestamp = Date.now()) {
@@ -202,6 +260,43 @@ function roundedRect(ctx, x, y, width, height, radius) {
   ctx.closePath();
 }
 
+function setCanvasFont(ctx, size, weight = 600) {
+  ctx.font = `${weight} ${size}px sans-serif`;
+}
+
+function drawCoverImage(ctx, image, x, y, width, height) {
+  const sourceRatio = image.width / image.height;
+  const targetRatio = width / height;
+  let sx = 0;
+  let sy = 0;
+  let sw = image.width;
+  let sh = image.height;
+
+  if (sourceRatio > targetRatio) {
+    sw = image.height * targetRatio;
+    sx = (image.width - sw) / 2;
+  } else {
+    sh = image.width / targetRatio;
+    sy = (image.height - sh) / 2;
+  }
+  ctx.drawImage(image, sx, sy, sw, sh, x, y, width, height);
+}
+
+function drawPanel(ctx, x, y, width, height, radius, fill, stroke = "rgba(41, 61, 26, 0.35)") {
+  ctx.save();
+  ctx.shadowColor = "rgba(24, 37, 15, 0.22)";
+  ctx.shadowBlur = 14;
+  ctx.shadowOffsetY = 5;
+  roundedRect(ctx, x, y, width, height, radius);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.shadowColor = "transparent";
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = stroke;
+  ctx.stroke();
+  ctx.restore();
+}
+
 async function loadAvatarImage(avatarUrl) {
   if (!avatarUrl) return null;
   try {
@@ -223,104 +318,129 @@ function resolveBackgroundPath(config = {}) {
 
 async function renderKtpCard({ record, member, config = {}, avatarUrl = "" }) {
   const cfg = getKtpConfig(config);
-  const width = 1200;
-  const height = 758;
+  const width = 1011;
+  const height = 638;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext("2d");
 
   const backgroundPath = resolveBackgroundPath(config);
   if (!fs.existsSync(backgroundPath)) throw new Error(`Background KTP tidak ditemukan: ${backgroundPath}`);
   const background = await loadImage(backgroundPath);
-  ctx.drawImage(background, 0, 0, width, height);
+  drawCoverImage(ctx, background, 0, 0, width, height);
 
-  // Lapisan lembut agar tulisan tetap jelas tanpa menghilangkan background asli pengguna.
-  ctx.fillStyle = "rgba(246, 248, 213, 0.10)";
-  roundedRect(ctx, 40, 32, width - 80, height - 64, 24);
-  ctx.fill();
-  ctx.strokeStyle = "rgba(49, 69, 24, 0.45)";
-  ctx.lineWidth = 3;
-  ctx.stroke();
+  // Lapisan kontras ringan agar background tetap terlihat tetapi semua data terbaca jelas.
+  ctx.fillStyle = "rgba(29, 46, 18, 0.16)";
+  ctx.fillRect(0, 0, width, height);
 
+  drawPanel(ctx, 24, 22, width - 48, height - 44, 24, "rgba(239, 244, 207, 0.18)", "rgba(229, 237, 195, 0.48)");
+
+  // Header resmi DESA TULUS.
+  drawPanel(ctx, 38, 34, width - 76, 92, 18, "rgba(37, 62, 24, 0.92)", "rgba(229, 218, 151, 0.62)");
   ctx.textAlign = "center";
-  ctx.fillStyle = "#1f2d14";
-  ctx.font = "700 46px Arial, sans-serif";
-  ctx.fillText(String(cfg.cardTitle || "KARTU TANDA PENDUDUK").toUpperCase(), width / 2, 88);
-  ctx.font = "700 38px Arial, sans-serif";
-  ctx.fillText(String(cfg.cardSubtitle || "DESA TULUS").toUpperCase(), width / 2, 134);
+  ctx.fillStyle = "#f7f4db";
+  setCanvasFont(ctx, 34, 800);
+  ctx.fillText(String(cfg.cardTitle || "KARTU TANDA PENDUDUK").toUpperCase(), width / 2, 75);
+  ctx.fillStyle = "#dfe9b7";
+  setCanvasFont(ctx, 21, 700);
+  ctx.fillText(String(cfg.cardSubtitle || "DESA TULUS").toUpperCase(), width / 2, 104);
 
-  const leftX = 92;
-  const valueX = 332;
-  const startY = 218;
-  const rowGap = 70;
-  const labels = ["No KTP", "Nama", "Jenis Kelamin", "Domisili", "Agama", "Hobi"];
-  const values = [record.ktpNumber, record.fullName, record.gender, record.domicile, record.religion, record.hobby];
+  const dataPanel = { x: 38, y: 144, w: 650, h: 410 };
+  const photoPanel = { x: 711, y: 144, w: 264, h: 410 };
+  drawPanel(ctx, dataPanel.x, dataPanel.y, dataPanel.w, dataPanel.h, 18, "rgba(250, 250, 230, 0.88)", "rgba(53, 77, 35, 0.48)");
+  drawPanel(ctx, photoPanel.x, photoPanel.y, photoPanel.w, photoPanel.h, 18, "rgba(250, 250, 230, 0.88)", "rgba(53, 77, 35, 0.48)");
+
+  const rows = [
+    ["NO KTP DESA", record.ktpNumber],
+    ["NAMA WARGA", record.fullName],
+    ["JENIS KELAMIN", record.gender],
+    ["DOMISILI", record.domicile],
+    ["AGAMA", record.religion],
+    ["HOBI", record.hobby]
+  ];
+
+  const rowX = dataPanel.x + 22;
+  const rowW = dataPanel.w - 44;
+  const rowH = 52;
+  const rowGap = 8;
+  const firstY = dataPanel.y + 22;
 
   ctx.textAlign = "left";
-  for (let index = 0; index < labels.length; index += 1) {
-    const y = startY + index * rowGap;
-    ctx.fillStyle = "rgba(32, 45, 20, 0.88)";
-    ctx.font = "700 28px Arial, sans-serif";
-    ctx.fillText(labels[index], leftX, y);
-    ctx.fillText(":", valueX - 32, y);
-    ctx.font = "600 29px Arial, sans-serif";
-    const fitted = truncateCanvasText(ctx, values[index] || "-", 470);
-    ctx.fillText(fitted, valueX, y);
-  }
+  rows.forEach(([label, rawValue], index) => {
+    const y = firstY + index * (rowH + rowGap);
+    roundedRect(ctx, rowX, y, rowW, rowH, 11);
+    ctx.fillStyle = index === 0 ? "rgba(83, 111, 48, 0.18)" : "rgba(255, 255, 247, 0.58)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(74, 99, 45, 0.20)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
 
-  const photoX = 875;
-  const photoY = 190;
-  const photoW = 245;
-  const photoH = 315;
-  ctx.fillStyle = "rgba(236, 231, 201, 0.78)";
-  roundedRect(ctx, photoX, photoY, photoW, photoH, 12);
-  ctx.fill();
-  ctx.strokeStyle = "rgba(48, 68, 24, 0.55)";
-  ctx.lineWidth = 3;
-  ctx.stroke();
+    ctx.fillStyle = "#47602f";
+    setCanvasFont(ctx, 14, 800);
+    ctx.fillText(label, rowX + 16, y + 19);
+
+    ctx.fillStyle = "#192612";
+    setCanvasFont(ctx, index === 0 ? 23 : 22, 800);
+    const fitted = truncateCanvasText(ctx, rawValue || "-", rowW - 32);
+    ctx.fillText(fitted, rowX + 16, y + 44);
+  });
+
+  const photoX = photoPanel.x + 28;
+  const photoY = photoPanel.y + 27;
+  const photoW = photoPanel.w - 56;
+  const photoH = 238;
+  drawPanel(ctx, photoX, photoY, photoW, photoH, 14, "rgba(110, 132, 72, 0.78)", "rgba(41, 61, 26, 0.58)");
 
   const avatar = await loadAvatarImage(avatarUrl || member?.user?.displayAvatarURL?.({ extension: "png", size: 512 }));
   ctx.save();
-  roundedRect(ctx, photoX + 9, photoY + 9, photoW - 18, photoH - 18, 9);
+  roundedRect(ctx, photoX + 7, photoY + 7, photoW - 14, photoH - 14, 10);
   ctx.clip();
   if (avatar) {
-    const sourceRatio = avatar.width / avatar.height;
-    const targetRatio = (photoW - 18) / (photoH - 18);
-    let sx = 0; let sy = 0; let sw = avatar.width; let sh = avatar.height;
-    if (sourceRatio > targetRatio) { sw = avatar.height * targetRatio; sx = (avatar.width - sw) / 2; }
-    else { sh = avatar.width / targetRatio; sy = (avatar.height - sh) / 2; }
-    ctx.drawImage(avatar, sx, sy, sw, sh, photoX + 9, photoY + 9, photoW - 18, photoH - 18);
+    drawCoverImage(ctx, avatar, photoX + 7, photoY + 7, photoW - 14, photoH - 14);
   } else {
-    ctx.fillStyle = "rgba(86, 107, 47, 0.72)";
-    ctx.fillRect(photoX + 9, photoY + 9, photoW - 18, photoH - 18);
-    ctx.fillStyle = "#f6f3da";
+    const gradient = ctx.createLinearGradient(photoX, photoY, photoX + photoW, photoY + photoH);
+    gradient.addColorStop(0, "#6d8548");
+    gradient.addColorStop(1, "#405c2e");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(photoX + 7, photoY + 7, photoW - 14, photoH - 14);
+    ctx.fillStyle = "#f8f4d9";
     ctx.textAlign = "center";
-    ctx.font = "700 78px Arial, sans-serif";
+    setCanvasFont(ctx, 76, 800);
     const initials = String(record.fullName || "W").split(/\s+/).slice(0, 2).map((word) => word[0] || "").join("").toUpperCase();
-    ctx.fillText(initials || "W", photoX + photoW / 2, photoY + photoH / 2 + 28);
+    ctx.fillText(initials || "W", photoX + photoW / 2, photoY + photoH / 2 + 25);
   }
   ctx.restore();
 
+  // Informasi penerbitan dibuat padat dan tidak kosong.
   ctx.textAlign = "center";
-  ctx.fillStyle = "#26361a";
-  ctx.font = "700 21px Arial, sans-serif";
-  ctx.fillText("Tanggal Pembuatan", photoX + photoW / 2, 552);
-  ctx.font = "600 22px Arial, sans-serif";
-  ctx.fillText(formatDateWib(record.createdAt), photoX + photoW / 2, 581);
+  ctx.fillStyle = "#486032";
+  setCanvasFont(ctx, 14, 800);
+  ctx.fillText("TANGGAL PEMBUATAN", photoPanel.x + photoPanel.w / 2, photoY + photoH + 37);
+  ctx.fillStyle = "#192612";
+  setCanvasFont(ctx, 22, 800);
+  ctx.fillText(formatDateWib(record.createdAt), photoPanel.x + photoPanel.w / 2, photoY + photoH + 65);
 
+  roundedRect(ctx, photoPanel.x + 28, photoY + photoH + 84, photoPanel.w - 56, 48, 12);
+  ctx.fillStyle = "rgba(65, 96, 42, 0.14)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(65, 96, 42, 0.25)";
+  ctx.stroke();
+  ctx.fillStyle = "#2e4722";
+  setCanvasFont(ctx, 16, 800);
+  ctx.fillText("WARGA DESA TULUS", photoPanel.x + photoPanel.w / 2, photoY + photoH + 114);
+
+  // Footer tetap ringkas agar kartu tidak terlihat berantakan.
   ctx.textAlign = "left";
-  ctx.fillStyle = "rgba(31, 45, 20, 0.78)";
-  ctx.font = "700 21px Arial, sans-serif";
-  ctx.fillText(`ID Warga Discord: ${record.userId}`, 92, 665);
-  ctx.font = "700 18px Arial, sans-serif";
-  ctx.fillText(String(cfg.privacyNote || "KARTU KOMUNITAS DIGITAL • BUKAN DOKUMEN RESMI").toUpperCase(), 92, 705);
+  ctx.fillStyle = "rgba(244, 247, 218, 0.94)";
+  setCanvasFont(ctx, 14, 800);
+  ctx.fillText(String(cfg.privacyNote || "KARTU KOMUNITAS DIGITAL • BUKAN DOKUMEN RESMI").toUpperCase(), 43, 594);
 
   ctx.textAlign = "right";
-  ctx.font = "700 22px Arial, sans-serif";
-  ctx.fillText("PAK RW • DESA TULUS", width - 84, 705);
+  ctx.fillStyle = "rgba(244, 247, 218, 0.94)";
+  setCanvasFont(ctx, 16, 800);
+  ctx.fillText("PAK RW • DESA TULUS", width - 43, 594);
 
   return canvas.toBuffer("image/png");
 }
-
 
 function footerIconUrl(config = {}) {
   return config.embeds?.welcome?.footerIcon ||
@@ -408,7 +528,7 @@ async function sendTemporaryMessage(channel, content, delayMs = 8000) {
 }
 
 function channelSetupMessage() {
-  return "Channel khusus KTP Warga belum diatur. Buat text channel privat bernama `ktp-warga`, lalu pilih channel tersebut melalui Dashboard → Komunitas → KTP Warga.";
+  return "Channel khusus KTP Warga belum diatur. Buat text channel privat bernama `buat-ktp`, lalu pilih channel tersebut melalui Dashboard → Komunitas → KTP Warga.";
 }
 
 function wrongChannelMessage(channel) {
@@ -572,10 +692,12 @@ async function handleKtpInteraction(interaction, config = {}) {
   try {
     const previous = getKtpRecord(interaction.guild.id, interaction.user.id);
     const now = Date.now();
+    const storeForNumber = readKtpStore();
     const record = {
       guildId: interaction.guild.id,
       userId: interaction.user.id,
-      ktpNumber: previous?.ktpNumber || makeKtpNumber(interaction.guild.id, interaction.user.id),
+      ktpNumber: previous?.ktpNumber || generateUniqueKtpNumber(storeForNumber, interaction.guild.id),
+      ktpNumberVersion: previous?.ktpNumberVersion || 2,
       fullName: cleanText(interaction.fields.getTextInputValue(KTP_MODAL_FIELDS.fullName), 40),
       gender: cleanText(interaction.fields.getTextInputValue(KTP_MODAL_FIELDS.gender), 20),
       domicile: cleanText(interaction.fields.getTextInputValue(KTP_MODAL_FIELDS.domicile), 35),
@@ -631,5 +753,6 @@ module.exports = {
   handleKtpMessageCommand,
   handleKtpInteraction,
   makeKtpNumber,
+  generateUniqueKtpNumber,
   formatDateWib
 };

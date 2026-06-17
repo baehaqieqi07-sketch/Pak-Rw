@@ -702,8 +702,8 @@
     "easyEditMode": true,
     "showFeatureFlow": true,
     "showAiStylePanel": true,
-    "releaseVersion": "10.10.80",
-    "releaseName": "AFK Voice 24/7 Pak RW",
+    "releaseVersion": "10.10.81",
+    "releaseName": "KTP Warga Renderer Final",
     "premiumMode": true,
     "comfortMode": true,
     "quickActionMode": "manage_edit_preview_save_test_backup",
@@ -728,7 +728,7 @@
     "placeholderSelectionMode": "channel_role_user_server_bot_live_from_discord",
     "discordPickerMode": "live_api",
     "discordPickerAutoRefresh": true,
-    "uiVersion": "10.10.80",
+    "uiVersion": "10.10.81",
     "architecture": "react_vite_static_dashboard_only",
     "backgroundStyle": "2d-village-premium",
     "embedColorLocked": "#7DBD77",
@@ -1170,7 +1170,7 @@
       "Discord Manager"
     ]
   },
-  "version": "10.10.80",
+  "version": "10.10.81",
   "bigBot": {
     "releaseName": "Pak RW KTP Warga DESA TULUS v10.10.78"
   },
@@ -1407,7 +1407,7 @@
   "ktpSystem": {
     "enabled": true,
     "channelId": "",
-    "channelName": "ktp-warga",
+    "channelName": "buat-ktp",
     "cooldownSeconds": 15,
     "allowUpdate": true,
     "panelTitle": "KARTU TANDA PENDUDUK DESA TULUS",
@@ -1419,7 +1419,9 @@
     "cardTitle": "KARTU TANDA PENDUDUK",
     "cardSubtitle": "DESA TULUS",
     "privacyNote": "KARTU KOMUNITAS DIGITAL • BUKAN DOKUMEN RESMI",
-    "logToConsole": true
+    "logToConsole": true,
+    "numberMode": "random_unique_18_digits_v2",
+    "rendererVersion": "10.10.81"
   },
   "afkVoice": {
     "enabled": false,
