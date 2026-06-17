@@ -129,6 +129,7 @@ try {
 }
 
 const { handleRwIdCommand } = require("./services/serverIdExporter");
+const { handleKtpMessageCommand, handleKtpInteraction } = require("./services/ktpWarga");
 const { askAI } = require("./ai/brain");
 const { isCooldown, getRemaining } = require("./utils/cooldown");
 const {
@@ -18622,7 +18623,7 @@ client.on(Events.MessageCreate, async (message) => {
 // ================= PAK RW COMMAND CENTER v10.10.63 =================
 // Update ini sengaja tidak menyentuh logic Level, Top Aktif/MOTM, dan Cek Poin.
 const COMMAND_THEME_COLOR = 0x7c6dff;
-const COMMAND_SAFE_FEATURES = ["ai", "curhat", "anonim", "saran", "welcome", "juragan", "donatur", "mabar"];
+const COMMAND_SAFE_FEATURES = ["ai", "curhat", "anonim", "saran", "welcome", "juragan", "donatur", "mabar", "ktp"];
 const COMMAND_PROTECTED_FEATURES = ["level", "topaktif", "topactive", "motm", "cekpoin", "poin", "rank", "toplevel", "posttop"];
 
 function commandCenterConfig() {
@@ -18721,6 +18722,7 @@ function featureEnabledStatus(feature) {
   if (f === "juragan") return config.juragan?.enabled !== false;
   if (f === "donatur") return Boolean(config.donaturRoleId);
   if (f === "mabar") return config.mabar?.enabled !== false;
+  if (f === "ktp") return config.ktpSystem?.enabled !== false;
   return false;
 }
 
@@ -18733,7 +18735,8 @@ function commandFeatureRows() {
     welcome: "👋 Welcome",
     juragan: "💎 Juragan / Booster",
     donatur: "💸 Donatur",
-    mabar: "🎮 Cari Mabar"
+    mabar: "🎮 Cari Mabar",
+    ktp: "🪪 KTP Warga"
   };
   return COMMAND_SAFE_FEATURES.map((key) => `${labels[key] || key}: **${featureEnabledStatus(key) ? "Aktif ✅" : "Butuh setting ⚠️"}**`).join("\n");
 }
@@ -18748,12 +18751,13 @@ function ownerCommandHelpEmbed(message) {
     `\`${p}reload\` • reload config tanpa restart`,
     `\`${p}backup\` • backup config aman tanpa token/env`,
     `\`${p}panel saran|anonim|mabar|juragan|donatur\` • kirim panel yang sudah disediakan`,
-    `\`${p}setchannel ai|curhat|anonim|saran|welcome|juragan|donatur|mabar #channel\``,
+    `\`${p}ktppanel\` • kirim panel pembuatan KTP ke channel KTP Warga`,
+    `\`${p}setchannel ai|curhat|anonim|saran|welcome|juragan|donatur|mabar|ktp #channel\``,
     `\`${p}setrole juragan|donatur|staff @role\``,
-    `\`${p}fitur ai|curhat|anonim|saran|welcome|juragan|donatur|mabar on/off\``,
+    `\`${p}fitur ai|curhat|anonim|saran|welcome|juragan|donatur|mabar|ktp on/off\``,
     `\`${p}ai status|model|cooldown|max|channel|style ...\``,
     `\`${p}maintenance on/off [alasan]\``,
-    `\`${p}test ai|curhat|saran|juragan|donatur|mabar|welcome\``,
+    `\`${p}test ai|curhat|saran|juragan|donatur|mabar|ktp|welcome\``,
     "",
     "**Aman:** command ini tidak menyediakan edit Level, Top Aktif/MOTM, atau Cek Poin."
   ]);
@@ -18786,6 +18790,7 @@ function memberCommandHelpEmbed(message) {
     `\`${p}curhat <cerita>\` • curhat ke Pak RW`,
     `\`${p}saran\` • buka panel saran`,
     `\`${p}mabar\` • buat ajakan cari mabar`,
+    `\`${p}ktp\` • melihat KTP DESA TULUS milik kamu`,
     "",
     "Command setting penting disembunyikan supaya member tidak bingung dan server tetap aman."
   ]);
@@ -18820,6 +18825,9 @@ function setFeatureEnabled(feature, value) {
   } else if (safe === "mabar") {
     config.mabar = config.mabar || {};
     config.mabar.enabled = Boolean(value);
+  } else if (safe === "ktp") {
+    config.ktpSystem = config.ktpSystem || {};
+    config.ktpSystem.enabled = Boolean(value);
   }
   return true;
 }
@@ -18830,7 +18838,8 @@ function featureChannelKey(feature) {
     curhat: "curhatChannelId",
     anonim: "anonymousCurhatChannelId",
     saran: "suggestionChannelId",
-    welcome: "chatWargaChannelId"
+    welcome: "chatWargaChannelId",
+    ktp: "ktpSystem.channelId"
   }[feature] || null;
 }
 
@@ -19002,7 +19011,10 @@ async function handlePakRwCommandCenterPrefix(message, cmd, args = []) {
     const channel = resolveTextChannelArg(message, args[1]);
     if (!channel) return safeReply(message, `❌ Channel tidak ditemukan. Contoh: \`${p}setchannel ${feature || "ai"} #channel\``), true;
     const rootKey = featureChannelKey(feature);
-    if (rootKey) config[rootKey] = channel.id;
+    if (rootKey === "ktpSystem.channelId") {
+      config.ktpSystem = config.ktpSystem || {};
+      config.ktpSystem.channelId = channel.id;
+    } else if (rootKey) config[rootKey] = channel.id;
     else {
       config[feature] = config[feature] || {};
       config[feature].channelId = channel.id;
@@ -19035,7 +19047,7 @@ async function handlePakRwCommandCenterPrefix(message, cmd, args = []) {
     if (!isPakRwOwner(message)) return safeReply(message, denyOwnerText()), true;
     if (isProtectedCommandFeature(feature)) return safeReply(message, "❌ Fitur Level, Top Aktif/MOTM, dan Cek Poin dikunci aman. Tidak bisa diubah dari command ini."), true;
     if (value === null) return safeReply(message, `⚠️ Format kurang tepat. Contoh: \`${p}fitur ai on\` atau \`${p}fitur mabar off\``), true;
-    if (!setFeatureEnabled(feature, value)) return safeReply(message, "❌ Fitur tidak dikenal. Pilihan: ai, curhat, anonim, saran, welcome, juragan, donatur, mabar."), true;
+    if (!setFeatureEnabled(feature, value)) return safeReply(message, "❌ Fitur tidak dikenal. Pilihan: ai, curhat, anonim, saran, welcome, juragan, donatur, mabar, ktp."), true;
     await saveLiveConfigFromOwner(message, `Fitur **${feature}** sekarang **${value ? "Aktif" : "Nonaktif"}**`);
     return true;
   }
@@ -20000,6 +20012,7 @@ client.on(Events.MessageCreate, async (message) => {
     if (message.author.bot || !message.guild) return;
 
     if (await handleRwIdCommand(message, config)) return;
+    if (await handleKtpMessageCommand(message, config)) return;
 
     await handleOwoAutoRole(message);
 
@@ -20066,6 +20079,7 @@ client.on(Events.MessageCreate, async (message) => {
             `**MONGODB_URI:** ${dbStatus.uriSet ? "terisi" : "belum diisi"}`,
             `**Level users:** ${dbStatus.levelUsers}`,
             `**Temp roles:** ${dbStatus.tempRoles}`,
+            `**KTP Warga:** ${dbStatus.ktpRecords || 0}`,
             `**Snapshot member:** ${dbStatus.memberSnapshots}`,
             "",
             dbStatus.active
@@ -20874,6 +20888,8 @@ async function handlePakRwVisibleSlashCommand(interaction) {
 // ================= INTERACTION SARAN =================
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
+
+    if (await handleKtpInteraction(interaction, config)) return;
 
     if (interaction.isChatInputCommand() && await handlePakRwVisibleSlashCommand(interaction)) return;
 

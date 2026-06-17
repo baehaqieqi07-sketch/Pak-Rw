@@ -11,7 +11,7 @@
   "ticketChannelId": "",
   "chatWargaChannelId": "1504495053400441081",
   "logChannelId": "",
-  "rulesChannelId": "",
+  "rulesChannelId": "1504495423883186287",
   "infoChannelId": "",
   "eventChannelId": "",
   "juragan": {
@@ -22,7 +22,7 @@
     "aiChannelName": "🤖・pak-rw-juragan",
     "autoSetupChannels": false,
     "vipVoiceChannelId": "",
-    "chatChannelId": "",
+    "chatChannelId": "1512487010948874430",
     "bonusPercent": 15
   },
   "welcome": {
@@ -36,7 +36,8 @@
     "memberRoleId": "",
     "memberRoleName": "Member Tulus",
     "imageUrl": "",
-    "thumbnailMode": "user"
+    "thumbnailMode": "user",
+    "channelId": "1504495053224284400"
   },
   "ai": {
     "cooldownMs": 12000,
@@ -322,7 +323,7 @@
       "previewMustMatchDiscord": true
     },
     "dashboard": {
-      "brandTitle": "Pak RW v10.10.63",
+      "brandTitle": "Pak RW v10.10.78",
       "brandSubtitle": "DESA TULUS • Balai Warga Digital Premium",
       "homeTitle": "Pak RW Unified Control Center DESA TULUS",
       "homeSubtitle": "Dashboard all-in-one dengan alur jelas, modul rapi, preview mudah, dan bahasa embed yang mudah dipahami warga.",
@@ -340,7 +341,7 @@
       "themeMode": "ot_unified_inspired_village_premium_readable_id",
       "accentColor": "#8B7CFF",
       "accentColor2": "#FF78D7",
-      "releaseVersion": "10.10.63",
+      "releaseVersion": "10.10.78",
       "flow": "pilih fitur → Manage → edit channel/role/embed → preview → simpan → kirim/test",
       "placeholderGuide": [
         "{user}",
@@ -636,7 +637,7 @@
     "motmAwardMode": "auto_cycle_100k",
     "autoMotmRole": true,
     "manualMotmDashboardEnabled": true,
-    "leaderboardActiveChannelId": "",
+    "leaderboardActiveChannelId": "1516167288066281672",
     "leaderboardActiveTopLimit": 10,
     "leaderboardActiveTitleTemplate": "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU",
     "leaderboardActiveSubtitle": "Papan ini mencatat total poin warga dari awal bergabung sampai seterusnya. Data ini tidak di-reset meskipun siklus level kembali dari awal setelah 100.000 poin.",
@@ -701,8 +702,8 @@
     "easyEditMode": true,
     "showFeatureFlow": true,
     "showAiStylePanel": true,
-    "releaseVersion": "10.10.77",
-    "releaseName": "Data ID Server RWID",
+    "releaseVersion": "10.10.78",
+    "releaseName": "KTP Warga DESA TULUS",
     "premiumMode": true,
     "comfortMode": true,
     "quickActionMode": "manage_edit_preview_save_test_backup",
@@ -727,11 +728,12 @@
     "placeholderSelectionMode": "channel_role_user_server_bot_live_from_discord",
     "discordPickerMode": "live_api",
     "discordPickerAutoRefresh": true,
-    "uiVersion": "10.10.77",
+    "uiVersion": "10.10.78",
     "architecture": "react_vite_static_dashboard_only",
     "backgroundStyle": "2d-village-premium",
     "embedColorLocked": "#7DBD77",
-    "embedColorPolicy": "Semua embed Discord Pak RW memakai warna #7DBD77 agar konsisten."
+    "embedColorPolicy": "Semua embed Discord Pak RW memakai warna #7DBD77 agar konsisten.",
+    "ktpWargaEnabled": true
   },
   "featureFlow": {
     "step1": "Pilih modul dari Suite Fitur: Tanya Pak RW, Curhat, Saran, Welcome, Juragan, Donatur, Level, Top Aktif, Embed Builder, Banner Manual, atau Discord Manager.",
@@ -741,7 +743,7 @@
     "step5": "Backup config setelah cocok supaya update berikutnya tetap aman dan tidak reset."
   },
   "featureSuite": {
-    "version": "10.10.59",
+    "version": "10.10.78",
     "layout": "premium_big_bot_clear_flow_safe_locked_level",
     "modules": [
       {
@@ -879,6 +881,14 @@
         "status": "Standby",
         "menu": "/boost-poin",
         "flow": "Owner aktifkan event chat/voice manual, pilih channel event, lalu Pak RW memberi boost +5% dan mencatat peserta otomatis."
+      },
+      {
+        "id": "ktpWarga",
+        "name": "KTP Warga",
+        "icon": "🪪",
+        "status": "Aktif",
+        "menu": "/ktp-warga",
+        "flow": "Pilih channel privat KTP, kirim panel, warga klik Buat KTP, isi modal, lalu Pak RW membuat kartu dengan background DESA TULUS."
       }
     ],
     "quality": "premium_big_bot",
@@ -890,7 +900,7 @@
   "cekPoinChannelId": "1512878244431532053",
   "premiumSuite": {
     "enabled": true,
-    "version": "10.10.59",
+    "version": "10.10.78",
     "name": "Pak RW Sunda Village Suite",
     "server": "DESA TULUS",
     "style": "perdesaan Sunda, sopan formal, rapi, ngayomi warga, stabil, hemat AI",
@@ -1007,7 +1017,8 @@
     "permissionCenter": true,
     "logsHealth": true,
     "backupCenter": true,
-    "serverIdExporter": true
+    "serverIdExporter": true,
+    "ktpWarga": true
   },
   "dashboardRoleDisplay": {
     "enabled": true,
@@ -1060,7 +1071,7 @@
     "eventName": "Boost Poin DESA TULUS",
     "eventMode": "chat_voice",
     "boostPercent": 900,
-    "channelId": "ISI_ID_CHANNEL_BOOST_POIN",
+    "channelId": "1513924425374892172",
     "channelName": "⚡・boost-poin",
     "chatChannelIds": [],
     "voiceChannelIds": [],
@@ -1127,7 +1138,7 @@
   "desaTulusBigBot": {
     "enabled": true,
     "name": "Pak RW Desa Tulus Big Bot",
-    "version": "10.10.59",
+    "version": "10.10.78",
     "theme": "perdesaan modern, pos ronda, balai warga, sawah, rukun",
     "mission": "menjadi bot besar untuk mengatur warga, mendengar curhat, menyambut warga anyar, membantu staff, menjaga poin/level, saran, donatur, juragan, top aktif, papan aktif, dan informasi desa digital dengan bahasa yang jelas.",
     "languagePolicy": {
@@ -1159,9 +1170,9 @@
       "Discord Manager"
     ]
   },
-  "version": "10.10.77",
+  "version": "10.10.78",
   "bigBot": {
-    "releaseName": "Pak RW AI Natural + Welcome Mention v10.10.59"
+    "releaseName": "Pak RW KTP Warga DESA TULUS v10.10.78"
   },
   "embedStudio": {
     "enabled": true,
@@ -1315,7 +1326,7 @@
   },
   "papanAktif": {
     "enabled": true,
-    "channelId": "",
+    "channelId": "1516167288066281672",
     "title": "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU",
     "description": "Papan ini mencatat total poin warga dari awal bergabung sampai seterusnya. Data ini tidak di-reset meskipun siklus level kembali dari awal setelah 100.000 poin.",
     "topLimit": 10,
@@ -1327,7 +1338,7 @@
   },
   "leaderboardAktif": {
     "enabled": true,
-    "channelId": "",
+    "channelId": "1516167288066281672",
     "title": "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU",
     "description": "Papan ini mencatat total poin warga dari awal bergabung sampai seterusnya. Data ini tidak di-reset meskipun siklus level kembali dari awal setelah 100.000 poin.",
     "topLimit": 10,
@@ -1392,5 +1403,22 @@
     "loadingMessage": "Pak RW sedang mendata seluruh channel, kategori, voice, dan role server...",
     "successMessage": "Data ID server berhasil dibuat.",
     "errorMessage": "Pak RW gagal membuat Data ID Server. Periksa izin bot, channel khusus, dan konfigurasi fitur."
+  },
+  "ktpSystem": {
+    "enabled": true,
+    "channelId": "",
+    "channelName": "ktp-warga",
+    "cooldownSeconds": 15,
+    "allowUpdate": true,
+    "panelTitle": "KARTU TANDA PENDUDUK DESA TULUS",
+    "panelDescription": "Klik tombol **Buat KTP** untuk mengisi data warga. Gunakan nama panggilan dan domisili umum saja—jangan tulis alamat rumah, nomor telepon, kata sandi, atau data pribadi sensitif.",
+    "buttonLabel": "Buat KTP",
+    "resultContent": "🪪 Kartu Tanda Penduduk milik {user}",
+    "footerText": "DESA TULUS • Ketik rwktp untuk melihat KTP",
+    "backgroundPath": "assets/ktp-desa-tulus-background.png",
+    "cardTitle": "KARTU TANDA PENDUDUK",
+    "cardSubtitle": "DESA TULUS",
+    "privacyNote": "KARTU KOMUNITAS DIGITAL • BUKAN DOKUMEN RESMI",
+    "logToConsole": true
   }
 }

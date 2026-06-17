@@ -1,6 +1,6 @@
-# Pak RW / DESA TULUS v10.10.76
+# Pak RW / DESA TULUS v10.10.78
 
-Versi ini menambahkan **Auto Level Role terpusat** yang langsung memakai data level Pak RW yang sudah ada. Dashboard, Custom Status, Boost Poin, Top Aktif, Papan Aktif, MOTM, MongoDB, dan fitur lama tetap dipertahankan tanpa reset data.
+Versi ini menambahkan **KTP Warga DESA TULUS** dengan tombol Discord, modal lima kolom, background resmi yang diberikan owner, avatar Discord, dashboard channel picker, serta penyimpanan MongoDB/fallback lokal. Auto Level Role, Custom Status, Boost Poin, Top Aktif, Papan Aktif, MOTM, dan seluruh fitur lama tetap dipertahankan tanpa reset data.
 
 ## Perubahan utama
 
@@ -164,3 +164,40 @@ Command `rwid` membuat satu file TXT berisi Server ID, seluruh category, text ch
 
 ### Rollback
 Nonaktifkan `serverIdExporter.enabled`, hapus pemanggilan `handleRwIdCommand` dan file `services/serverIdExporter.js`, lalu restart bot. Tidak ada data member yang perlu dihapus.
+
+## v10.10.78 — KTP Warga DESA TULUS
+
+Fitur KTP Warga memakai background yang diberikan owner dan menghasilkan kartu digital langsung dari bot. Pak RW tidak membuat channel otomatis. Owner harus membuat channel text privat, lalu memilihnya melalui dashboard.
+
+### Alur penggunaan
+
+1. Buat text channel privat bernama `ktp-warga` atau `🪪・ktp-warga`.
+2. Berikan Pak RW izin `View Channel`, `Send Messages`, `Attach Files`, `Embed Links`, dan `Read Message History`.
+3. Buka Dashboard → Komunitas → KTP Warga.
+4. Pilih channel KTP lalu klik Simpan Pengaturan.
+5. Di channel tersebut, owner/admin mengetik `rwktppanel`.
+6. Warga menekan tombol **Buat KTP**.
+7. Modal menampilkan lima kolom wajib: Nama Lengkap, Jenis Kelamin, Domisili, Agama, dan Hobi.
+8. Pak RW membuat kartu memakai background `assets/ktp-desa-tulus-background.png` dan avatar Discord warga.
+9. Warga dapat mengetik `rwktp` untuk menampilkan kartu lagi.
+
+Kartu yang sudah ada akan diperbarui pada pesan lama bila masih dapat ditemukan, sehingga hasil tidak menumpuk. Data KTP disimpan ke MongoDB melalui store `ktpWarga` dan memiliki fallback lokal `data/ktp.json`. Data level, poin, role, leaderboard, dan database lama tidak diubah.
+
+### Catatan privasi
+
+Gunakan nama panggilan dan domisili umum seperti kota/kabupaten serta provinsi. Jangan memasukkan alamat rumah lengkap, nomor telepon, kata sandi, token, atau data akun. Kartu diberi label **Kartu Komunitas Digital — Bukan Dokumen Resmi**.
+
+### Command
+
+```text
+rwktppanel  → owner/admin mengirim panel KTP
+rwktp       → warga melihat KTP miliknya
+```
+
+### Background
+
+```text
+assets/ktp-desa-tulus-background.png
+```
+
+Background tersebut berasal dari file yang diberikan owner dan tidak dibuat ulang oleh bot.

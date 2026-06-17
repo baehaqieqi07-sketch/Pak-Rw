@@ -11,7 +11,8 @@ const pendingSaves = new Map();
 const DEFAULTS = {
   level: { users: {} },
   tempRoles: { roles: [] },
-  memory: { users: {} }
+  memory: { users: {} },
+  ktpWarga: { records: {} }
 };
 
 function clone(value) {
@@ -217,15 +218,18 @@ async function getMongoStatus(guildId = null) {
     uriSet: Boolean(getMongoUri()),
     levelUsers: 0,
     tempRoles: 0,
-    memberSnapshots: 0
+    memberSnapshots: 0,
+    ktpRecords: 0
   };
 
   try {
     const level = readStore("level", DEFAULTS.level) || DEFAULTS.level;
     const tempRoles = readStore("tempRoles", DEFAULTS.tempRoles) || DEFAULTS.tempRoles;
+    const ktpWarga = readStore("ktpWarga", DEFAULTS.ktpWarga) || DEFAULTS.ktpWarga;
 
     status.levelUsers = Object.values(level.users || {}).filter((u) => !guildId || u.guildId === guildId).length;
     status.tempRoles = (tempRoles.roles || []).filter((r) => !guildId || r.guildId === guildId).length;
+    status.ktpRecords = Object.values(ktpWarga.records || {}).filter((r) => !guildId || r.guildId === guildId).length;
 
     if (isMongoActive() && MemberSnapshotModel) {
       status.memberSnapshots = await MemberSnapshotModel.countDocuments(guildId ? { guildId } : {});

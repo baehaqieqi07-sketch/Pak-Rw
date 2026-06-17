@@ -12,6 +12,8 @@ backups
 # data aktif / runtime, jangan upload ke GitHub
 data/level.json
 data/tempRoles.json
+data/ktp.json
+data/*.tmp
 data/*.backup.json
 level.json
 tempRoles.json

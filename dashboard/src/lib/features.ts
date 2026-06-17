@@ -32,7 +32,8 @@ export const featureGroups = [
       { slug: "curhat", name: "Curhat", icon: MessageCircleHeart, path: "/manage/curhat" },
       { slug: "curhat-anonim", name: "Curhat Anonim", icon: ShieldQuestion, path: "/manage/curhat-anonim" },
       { slug: "saran", name: "Saran & Voting", icon: MessagesSquare, path: "/manage/saran" },
-      { slug: "mabar", name: "Cari Mabar", icon: Gamepad2, path: "/manage/mabar" }
+      { slug: "mabar", name: "Cari Mabar", icon: Gamepad2, path: "/manage/mabar" },
+      { slug: "ktp-warga", name: "KTP Warga", icon: IdCard, path: "/ktp-warga" }
     ]
   },
   {
@@ -101,6 +102,7 @@ export const features: FeatureDefinition[] = [
   { slug: "donatur", name: "Donatur Desa", description: "Pengaturan role donatur dan masa aktif benefit.", group: "Keanggotaan", icon: BadgeDollarSign, configPath: "donatur.enabled", rolePath: "donaturRoleId", embedKey: "donatur" },
   { slug: "juragan", name: "Juragan Desa", description: "Benefit juragan, role, dan channel terkait.", group: "Keanggotaan", icon: Gem, configPath: "juragan.enabled", channelPath: "juragan.boostChannelId", rolePath: "juragan.roleId", embedKey: "juragan" },
   { slug: "mabar", name: "Cari Mabar", description: "Panel warga untuk mencari teman bermain.", group: "Komunitas", icon: Gamepad2, configPath: "mabar.enabled", channelPath: "mabar.channelId", embedKey: "cariMabar" },
+  { slug: "ktp-warga", name: "KTP Warga", description: "Panel tombol dan modal untuk membuat kartu warga DESA TULUS dengan background resmi server.", group: "Komunitas", icon: IdCard, configPath: "ktpSystem.enabled", channelPath: "ktpSystem.channelId" },
   { slug: "boost-poin", name: "Boost Poin", description: "Event multiplier poin untuk channel yang dipilih.", group: "Keterlibatan", icon: Gauge, configPath: "boostPoin.enabled", channelPath: "boostPoin.channelId", embedKey: "boostPoinActive" },
   { slug: "embed", name: "Embed Builder", description: "Editor universal untuk seluruh template Discord Pak RW.", group: "Konten", icon: FileText, embedKey: "welcome" },
   { slug: "channel-manager", name: "Kelola Channel", description: "Pilih channel Discord asli berdasarkan nama dan kategori.", group: "Administrasi", icon: Radio },

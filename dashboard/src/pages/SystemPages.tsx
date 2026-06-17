@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Archive, CheckCircle2, CircleAlert, DatabaseBackup, FileImage, Hash, RefreshCcw, Save, Search, Server, Settings, Shield, ShieldCheck, TerminalSquare, Users } from "lucide-react";
+import { Activity, Archive, CheckCircle2, CircleAlert, DatabaseBackup, FileImage, Hash, IdCard, RefreshCcw, Save, Search, Server, Settings, Shield, ShieldCheck, TerminalSquare, Users } from "lucide-react";
 import { useDashboard } from "../app/DashboardContext";
 import { Card, CardHeader } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
@@ -17,7 +17,7 @@ export function ActivityPage() {
 }
 
 const channelBindings = [
-  ["welcome.channelId", "Welcome", "Channel sambutan warga baru"], ["rulesChannelId", "Aturan Desa", "Channel aturan"], ["chatWargaChannelId", "Chat Warga", "Channel percakapan utama"], ["ticketChannelId", "Ticket", "Channel bantuan"], ["aiChannelId", "AI Pak RW", "Channel tanya Pak RW"], ["curhatChannelId", "Curhat", "Channel curhat warga"], ["anonymousCurhatChannelId", "Curhat Anonim", "Channel curhat anonim"], ["suggestionChannelId", "Saran", "Channel kotak saran"], ["levelChannelId", "Level", "Channel level warga"], ["cekPoinChannelId", "Cek Poin", "Channel cek poin"], ["topActive.channelId", "Top Aktif", "Channel leaderboard bulanan"], ["leaderboardAktif.channelId", "Papan Aktif", "Channel leaderboard lifetime"], ["mabar.channelId", "Cari Mabar", "Channel panel mabar"], ["boostPoin.channelId", "Boost Poin", "Channel event boost poin"]
+  ["welcome.channelId", "Welcome", "Channel sambutan warga baru"], ["rulesChannelId", "Aturan Desa", "Channel aturan"], ["chatWargaChannelId", "Chat Warga", "Channel percakapan utama"], ["ticketChannelId", "Ticket", "Channel bantuan"], ["aiChannelId", "AI Pak RW", "Channel tanya Pak RW"], ["curhatChannelId", "Curhat", "Channel curhat warga"], ["anonymousCurhatChannelId", "Curhat Anonim", "Channel curhat anonim"], ["suggestionChannelId", "Saran", "Channel kotak saran"], ["levelChannelId", "Level", "Channel level warga"], ["cekPoinChannelId", "Cek Poin", "Channel cek poin"], ["topActive.channelId", "Top Aktif", "Channel leaderboard bulanan"], ["leaderboardAktif.channelId", "Papan Aktif", "Channel leaderboard lifetime"], ["mabar.channelId", "Cari Mabar", "Channel panel mabar"], ["ktpSystem.channelId", "KTP Warga", "Channel privat pembuatan KTP"], ["boostPoin.channelId", "Boost Poin", "Channel event boost poin"]
 ] as const;
 
 const roleBindings = [
@@ -57,7 +57,7 @@ export function RoleManagerPage() {
 
 export function CommandCenterPage() {
   const { data } = useDashboard();
-  const commands = ["rwhelp", "rwtanya", "rwcurhat", "rwcekpoin", "rwlevel", "rwrank", "rwtopaktif", "rwpapanaktif", "rwleaderboardaktif", "rwpostpapanaktif", "rwai", "rwfitur", "rwid"];
+  const commands = ["rwhelp", "rwtanya", "rwcurhat", "rwcekpoin", "rwlevel", "rwrank", "rwtopaktif", "rwpapanaktif", "rwleaderboardaktif", "rwpostpapanaktif", "rwai", "rwfitur", "rwktp", "rwktppanel", "rwid"];
   return <div className="page-stack page-enter"><PageHeader icon={TerminalSquare} kicker="Administration" title="Command Center" description="Daftar command publik Pak RW dengan prefix aktif." /><Card><CardHeader title="Command publik" description={`Prefix aktif: ${data.status.prefix}`} /><div className="command-table">{commands.map((command) => <div key={command}><code>{command}</code><span>Aktif</span></div>)}</div></Card></div>;
 }
 
@@ -97,6 +97,70 @@ export function BannerManagerPage() {
   const cancel = () => { setValues(initial); notify("Perubahan gambar dibatalkan.", "info"); };
   const save = async () => { setSaving(true); try { await api.savePatches([{ path: "topActive.manualBannerUrl", value: values.motm }, { path: "leaderboardAktif.imageUrl", value: values.leaderboard }, { path: "embeds.dashboard.media.backgroundUrl", value: values.dashboard }]); await refresh(); notify("Banner berhasil disimpan."); } catch (error) { notify(error instanceof Error ? error.message : String(error), "error"); } finally { setSaving(false); } };
   return <div className="page-stack page-enter"><PageHeader icon={FileImage} kicker="Content" title="Banner Manager" description="Kelola gambar dashboard, MOTM, dan leaderboard dengan URL aman." /><Card><CardHeader title="Image sources" description="Gunakan URL HTTPS dari Discord CDN, GitHub raw, atau hosting gambar." /><div className="form-grid"><div className="form-field"><label>Banner MOTM</label><input value={values.motm} onChange={(event) => setValues({ ...values, motm: event.target.value })} placeholder="https://..." /></div><div className="form-field"><label>Image leaderboard lifetime</label><input value={values.leaderboard} onChange={(event) => setValues({ ...values, leaderboard: event.target.value })} placeholder="https://..." /></div><div className="form-field"><label>Background dashboard custom</label><input value={values.dashboard} onChange={(event) => setValues({ ...values, dashboard: event.target.value })} placeholder="https://..." /></div></div></Card>{dirty ? <div className="page-save-bar page-save-bar-dirty"><div><strong>Perubahan gambar belum disimpan</strong><span>Simpan untuk memakai URL baru, atau Batal untuk kembali ke gambar sebelumnya.</span></div><div><Button variant="secondary" icon={<RefreshCcw size={16} />} onClick={cancel} disabled={saving}>Batal</Button><Button icon={<Save size={16} />} onClick={save} disabled={saving}>{saving ? "Menyimpan" : "Simpan"}</Button></div></div> : null}</div>;
+}
+
+export function KtpWargaPage() {
+  const { data, picker, pickerLoading, refresh, refreshPicker, notify } = useDashboard();
+  const defaults: any = {
+    enabled: true,
+    channelId: "",
+    channelName: "ktp-warga",
+    cooldownSeconds: 15,
+    allowUpdate: true,
+    panelTitle: "KARTU TANDA PENDUDUK DESA TULUS",
+    panelDescription: "Klik tombol **Buat KTP** untuk mengisi data warga. Gunakan nama panggilan dan domisili umum saja—jangan tulis alamat rumah, nomor telepon, kata sandi, atau data pribadi sensitif.",
+    buttonLabel: "Buat KTP",
+    resultContent: "🪪 Kartu Tanda Penduduk milik {user}",
+    footerText: "DESA TULUS • Ketik rwktp untuk melihat KTP",
+    backgroundPath: "assets/ktp-desa-tulus-background.png",
+    cardTitle: "KARTU TANDA PENDUDUK",
+    cardSubtitle: "DESA TULUS",
+    privacyNote: "KARTU KOMUNITAS DIGITAL • BUKAN DOKUMEN RESMI",
+    logToConsole: true
+  };
+  const [values, setValues] = useState<any>(defaults);
+  const [initial, setInitial] = useState<any>(defaults);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    const next = { ...defaults, ...(data.config.ktpSystem || {}) };
+    setValues(next);
+    setInitial(next);
+  }, [data]);
+  const dirty = JSON.stringify(values) !== JSON.stringify(initial);
+  const textChannels = (picker.channel || []).filter((item: any) => /text|announcement/i.test(String(item.typeLabel || item.meta || "")) && !/voice|stage|category|forum|media/i.test(String(item.typeLabel || item.meta || "")));
+  const set = (key: string, value: any) => setValues((current: any) => ({ ...current, [key]: value }));
+  const save = async () => {
+    const selected = (picker.channel || []).find((item: any) => item.id === values.channelId) as any;
+    if (!values.channelId) { notify("Pilih channel privat KTP Warga terlebih dahulu.", "error"); return; }
+    if (selected && !/text|announcement/i.test(String(selected.typeLabel || selected.meta || ""))) { notify("Channel KTP Warga harus berupa text channel.", "error"); return; }
+    setSaving(true);
+    try {
+      await api.savePatches(Object.entries(values).map(([key, value]) => ({ path: `ktpSystem.${key}`, value })));
+      await refresh();
+      setInitial(values);
+      notify("Pengaturan KTP Warga berhasil disimpan.");
+    } catch (error) { notify(error instanceof Error ? error.message : String(error), "error"); }
+    finally { setSaving(false); }
+  };
+  const cancel = () => { setValues(initial); notify("Perubahan KTP Warga dibatalkan.", "info"); };
+  return <div className="page-stack page-enter">
+    <PageHeader icon={IdCard} kicker="Komunitas" title="KTP Warga" description="Atur channel khusus, panel tombol, modal lima kolom, dan kartu warga DESA TULUS." />
+    <Card><CardHeader title="Status fitur" description="Pak RW tidak membuat channel otomatis. Buat channel privat terlebih dahulu, lalu pilih dari dropdown." />
+      <div className="setting-row setting-row-large"><div><strong>Aktifkan KTP Warga</strong><span>Warga dapat membuat dan memperbarui kartu lewat tombol Discord.</span></div><Toggle checked={Boolean(values.enabled)} onChange={(next) => set("enabled", next)} /></div>
+      <div className="connection-strip"><span className={values.enabled && values.channelId ? "is-online" : ""} />{!values.enabled ? "Fitur Nonaktif" : values.channelId ? "Siap Digunakan" : "Channel Belum Dipilih"}</div>
+    </Card>
+    <Card><CardHeader title="Channel khusus KTP" description="Disarankan membuat channel privat bernama 🪪・ktp-warga. Jangan gunakan channel umum." action={<Button variant="secondary" icon={<RefreshCcw size={16} />} onClick={refreshPicker}>Muat ulang Discord</Button>} />
+      <div className="form-grid two-columns"><DiscordPicker kind="channel" label="Channel KTP Warga" helper="Channel tempat panel dan hasil KTP dikirim" items={textChannels} value={values.channelId} loading={pickerLoading} required onChange={(id) => set("channelId", id)} />
+      <div className="form-field"><label>Cooldown pembuatan (detik)</label><input type="number" min={1} max={3600} value={values.cooldownSeconds} onChange={(e) => set("cooldownSeconds", Math.max(1, Number(e.target.value || 15)))} /><small className="field-helper">Mencegah tombol dan modal digunakan berulang terlalu cepat.</small></div></div>
+    </Card>
+    <Card><CardHeader title="Alur kartu warga" description="Klik tombol membuka modal berisi Nama Lengkap, Jenis Kelamin, Domisili, Agama, dan Hobi." />
+      <div className="settings-list"><div className="setting-row"><div><strong>Izinkan pembaruan KTP</strong><span>Kartu lama diedit menjadi versi terbaru agar tidak menumpuk.</span></div><Toggle checked={Boolean(values.allowUpdate)} onChange={(next) => set("allowUpdate", next)} /></div></div>
+      <div className="form-grid two-columns"><div className="form-field"><label>Judul panel</label><input value={values.panelTitle} onChange={(e) => set("panelTitle", e.target.value)} /></div><div className="form-field"><label>Teks tombol</label><input value={values.buttonLabel} onChange={(e) => set("buttonLabel", e.target.value)} maxLength={80} /></div><div className="form-field form-field-full"><label>Deskripsi panel</label><textarea rows={5} value={values.panelDescription} onChange={(e) => set("panelDescription", e.target.value)} /></div><div className="form-field"><label>Judul pada kartu</label><input value={values.cardTitle} onChange={(e) => set("cardTitle", e.target.value)} /></div><div className="form-field"><label>Subjudul pada kartu</label><input value={values.cardSubtitle} onChange={(e) => set("cardSubtitle", e.target.value)} /></div><div className="form-field"><label>Pesan hasil</label><input value={values.resultContent} onChange={(e) => set("resultContent", e.target.value)} /><small className="field-helper">Placeholder: {'{user}'}, {'{username}'}, {'{displayName}'}</small></div><div className="form-field"><label>Footer Discord</label><input value={values.footerText} onChange={(e) => set("footerText", e.target.value)} /></div><div className="form-field form-field-full"><label>Catatan pada kartu</label><input value={values.privacyNote} onChange={(e) => set("privacyNote", e.target.value)} /></div></div>
+    </Card>
+    <Card><CardHeader title="Background KTP" description="Background yang kamu kirim sudah dimasukkan langsung ke project dan dipakai otomatis saat kartu dibuat." /><div className="info-panel"><FileImage size={19} /><p><code>{values.backgroundPath}</code><br />Foto pada kartu memakai avatar Discord warga. Pak RW tidak meminta upload foto pribadi.</p></div></Card>
+    <Card><CardHeader title="Cara menjalankan" description="Setelah channel disimpan dan bot direstart." /><div className="info-panel"><TerminalSquare size={19} /><p>Ketik <code>rwktppanel</code> sebagai owner/admin di channel KTP untuk mengirim panel. Warga klik <strong>Buat KTP</strong>, mengisi modal, lalu memakai <code>rwktp</code> untuk melihat kartu lagi.</p></div></Card>
+    {dirty ? <div className="page-save-bar page-save-bar-dirty"><div><strong>Perubahan KTP Warga belum disimpan</strong><span>Simpan untuk menerapkan pengaturan, atau Batal untuk kembali.</span></div><div><Button variant="secondary" icon={<RefreshCcw size={16} />} onClick={cancel} disabled={saving}>Batal</Button><Button icon={<Save size={16} />} onClick={save} disabled={saving}>{saving ? "Menyimpan" : "Simpan Pengaturan"}</Button></div></div> : null}
+  </div>;
 }
 
 export function DataIdServerPage() {

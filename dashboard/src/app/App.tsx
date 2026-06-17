@@ -8,7 +8,7 @@ import { AppShell } from "../layouts/AppShell";
 import { DashboardHome } from "../pages/DashboardHome";
 import { ManagePage } from "../pages/manage/ManagePage";
 import { PlaceholderCenter } from "../pages/PlaceholderCenter";
-import { ActivityPage, BackupPage, ChannelManagerPage, CommandCenterPage, LogsPage, PermissionCenterPage, RoleManagerPage, SettingsPage, BannerManagerPage, DataIdServerPage } from "../pages/SystemPages";
+import { ActivityPage, BackupPage, ChannelManagerPage, CommandCenterPage, LogsPage, PermissionCenterPage, RoleManagerPage, SettingsPage, BannerManagerPage, DataIdServerPage, KtpWargaPage } from "../pages/SystemPages";
 import { ToastArea, type ToastState } from "../components/ui/Toast";
 
 const emptyPicker: PickerData = { ok: false, channel: [], role: [], user: [] };
@@ -83,6 +83,7 @@ export function App() {
           <Route path="backup" element={<BackupPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="data-id-server" element={<DataIdServerPage />} />
+          <Route path="ktp-warga" element={<KtpWargaPage />} />
           <Route path="banner-manager" element={<BannerManagerPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
