@@ -702,8 +702,8 @@
     "easyEditMode": true,
     "showFeatureFlow": true,
     "showAiStylePanel": true,
-    "releaseVersion": "10.10.82",
-    "releaseName": "Railway npm Registry Lock Fix",
+    "releaseVersion": "10.10.86",
+    "releaseName": "KTP Warga dan AFK Voice Stabil",
     "premiumMode": true,
     "comfortMode": true,
     "quickActionMode": "manage_edit_preview_save_test_backup",
@@ -728,7 +728,7 @@
     "placeholderSelectionMode": "channel_role_user_server_bot_live_from_discord",
     "discordPickerMode": "live_api",
     "discordPickerAutoRefresh": true,
-    "uiVersion": "10.10.82",
+    "uiVersion": "10.10.86",
     "architecture": "react_vite_static_dashboard_only",
     "backgroundStyle": "2d-village-premium",
     "embedColorLocked": "#7DBD77",
@@ -1170,9 +1170,9 @@
       "Discord Manager"
     ]
   },
-  "version": "10.10.82",
+  "version": "10.10.86",
   "bigBot": {
-    "releaseName": "Pak RW KTP Warga DESA TULUS v10.10.78"
+    "releaseName": "Pak RW KTP Warga dan AFK Voice Stabil"
   },
   "embedStudio": {
     "enabled": true,
@@ -1414,14 +1414,14 @@
     "panelDescription": "Klik tombol **Buat KTP** untuk mengisi data warga. Gunakan nama panggilan dan domisili umum saja—jangan tulis alamat rumah, nomor telepon, kata sandi, atau data pribadi sensitif.",
     "buttonLabel": "Buat KTP",
     "resultContent": "🪪 Kartu Tanda Penduduk milik {user}",
-    "footerText": "DESA TULUS • Ketik rwktp untuk melihat KTP",
+    "footerText": "DESA TULUS • Ketik perintah rwktp untuk melihat KTP",
     "backgroundPath": "assets/ktp-desa-tulus-background.png",
     "cardTitle": "KARTU TANDA PENDUDUK",
     "cardSubtitle": "DESA TULUS",
     "privacyNote": "KARTU KOMUNITAS DIGITAL • BUKAN DOKUMEN RESMI",
     "logToConsole": true,
     "numberMode": "random_unique_18_digits_v2",
-    "rendererVersion": "10.10.81"
+    "rendererVersion": "10.10.86"
   },
   "afkVoice": {
     "enabled": false,

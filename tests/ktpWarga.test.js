@@ -5,7 +5,8 @@ const { createCanvas, loadImage } = require("@napi-rs/canvas");
 const {
   renderKtpCard,
   generateUniqueKtpNumber,
-  defaultKtpConfig
+  defaultKtpConfig,
+  makeKtpAttachmentName
 } = require("../services/ktpWarga");
 
 (async () => {
@@ -39,14 +40,20 @@ const {
     createdAt: Date.now()
   };
 
+
+  const attachmentA = makeKtpAttachmentName(record);
+  const attachmentB = makeKtpAttachmentName({ ...record, updatedAt: Date.now() + 1 });
+  assert.ok(/^ktp-desa-tulus-[0-9a-z_-]+-[0-9]+\.png$/i.test(attachmentA), "Nama attachment KTP harus aman");
+  assert.notStrictEqual(attachmentA, attachmentB, "Nama attachment harus berubah agar Discord tidak memakai cache gambar kosong lama");
+
   const buffer = await renderKtpCard({ record, member: null, config, avatarUrl: "" });
   assert.ok(Buffer.isBuffer(buffer), "Output harus Buffer");
   assert.ok(buffer.length > 100000, "PNG hasil render terlalu kecil atau terlihat kosong");
   assert.strictEqual(buffer.subarray(1, 4).toString("ascii"), "PNG", "Output bukan PNG");
 
   const rendered = await loadImage(buffer);
-  assert.strictEqual(rendered.width, 1011, "Lebar kartu harus sama dengan background baru");
-  assert.strictEqual(rendered.height, 638, "Tinggi kartu harus sama dengan background baru");
+  assert.strictEqual(rendered.width, 1011, "Lebar kartu harus mengikuti background resmi");
+  assert.strictEqual(rendered.height, 638, "Tinggi kartu harus mengikuti background resmi");
 
   const backgroundPath = path.join(__dirname, "..", "assets", "ktp-desa-tulus-background.png");
   const background = await loadImage(backgroundPath);
@@ -65,13 +72,18 @@ const {
       Math.abs(basePixels[index + 2] - renderedPixels[index + 2]);
     if (difference > 45) changedPixels += 1;
   }
-  assert.ok(changedPixels > 15000, "Renderer tidak menambahkan cukup panel, tulisan, atau foto pada background");
+  assert.ok(changedPixels > 13000, "Renderer tidak menambahkan cukup tema, tulisan, atau foto pada background");
+
+  const corner = compareCtx.getImageData(2, 2, 1, 1).data;
+  const inside = compareCtx.getImageData(30, 30, 1, 1).data;
+  const cornerDifference = Math.abs(corner[0] - inside[0]) + Math.abs(corner[1] - inside[1]) + Math.abs(corner[2] - inside[2]);
+  assert.ok(cornerDifference > 20, "Background harus berhenti di dalam garis kartu dan tidak memenuhi area luar bingkai");
 
   const temp = path.join(__dirname, "..", "data", "ktp-render-test.png");
   fs.mkdirSync(path.dirname(temp), { recursive: true });
   fs.writeFileSync(temp, buffer);
   fs.unlinkSync(temp);
-  console.log("✅ KTP Warga tests berhasil: 100 nomor random unik, background baru terbaca, kartu tidak kosong, PNG rapi berhasil dirender.");
+  console.log("✅ KTP Warga tests berhasil: 100 nomor random unik, background Desa Tulus terbaca, layout native 1011x638 tidak kosong dan background tidak keluar bingkai, attachment anti-cache, PNG rapi berhasil dirender.");
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;

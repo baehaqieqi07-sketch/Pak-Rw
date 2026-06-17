@@ -1,0 +1,28 @@
+PAK RW v10.10.86 — CARA PUSH KE GITHUB
+
+Pilihan A — Setelah menimpa folder D:\Pak Rw dengan isi ZIP:
+
+1. Buka PowerShell atau terminal VS Code.
+2. Jalankan:
+
+cd "D:\Pak Rw"
+git status
+git add -A
+git commit -m "update Pak RW v10.10.86 KTP watermark desa premium"
+git push origin main
+
+Pilihan B — Memakai file patch pada repo Pak RW yang masih di v10.10.82:
+
+cd "D:\Pak Rw"
+git status
+git am "D:\lokasi-file\Pak-RW-v10.10.86-GitHub.patch"
+git push origin main
+
+Commit lokal yang sudah disiapkan: e67521a
+Remote repo: https://github.com/baehaqieqi07-sketch/Pak-Rw.git
+
+CATATAN DATA:
+- Jangan hapus .env.
+- Jangan hapus folder data.
+- Jangan mengganti database MongoDB.
+- Jangan menjalankan perintah reset data.

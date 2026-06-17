@@ -245,3 +245,32 @@ rwktp       → warga melihat KTP miliknya
 
 Lockfile project sudah dibersihkan dari URL registry internal dan sekarang memakai `https://registry.npmjs.org/`, sehingga `npm ci` di Railway tidak mencoba mengakses host internal yang tidak tersedia.
 
+
+
+## Pak RW v10.10.83 — KTP dan AFK Voice Stabil
+
+- Renderer KTP memuat background lebih dulu, membuat canvas dari ukuran asli, lalu menggambar seluruh data sebelum PNG dibuat.
+- Attachment KTP memakai nama unik per revisi agar Discord tidak menampilkan cache gambar kosong lama.
+- Record KTP, nomor KTP valid, MongoDB, level, poin, role, dan data warga tidak direset.
+- AFK Voice menangani error `joinVoiceChannel`, memastikan voice state bot benar-benar masuk, membaca status koneksi nyata, dan reconnect bertahap tanpa loop pada channel hilang atau permission kurang.
+- Kegagalan AFK Voice saat startup tidak menghentikan fitur Pak RW lainnya.
+
+## Pak RW v10.10.84 — KTP Desa Tulus Rapi
+Renderer KTP kini memakai layout 16:9 seperti kartu referensi: data rata di kiri, foto di kanan, tanggal di bawah foto, serta background Desa Tulus yang tetap terisi tetapi tidak ramai. Update ini tidak mereset data warga atau konfigurasi lama.
+
+
+## Pak RW v10.10.85 — KTP Background Resmi Terbingkai
+
+- Renderer KTP memakai background resmi Desa Tulus berukuran 1011 × 638.
+- Background diklip di dalam bingkai membulat sehingga pola tidak keluar melewati garis kartu.
+- Tata letak data, foto, tanggal, watermark, dan footer dirapikan agar lebih premium dan mudah dibaca.
+- Perbaikan anti-cache KTP dan AFK Voice 24/7 dari versi sebelumnya tetap dipertahankan.
+- Tidak mengubah atau mereset data KTP, level, poin, role, MongoDB, maupun konfigurasi server.
+
+## Pak RW v10.10.86 — KTP Watermark Desa Premium
+
+- Renderer KTP memakai watermark **DESA TULUS** transparan di bagian tengah.
+- Ornamen perdesaan dibuat sederhana: gunung, matahari, bale desa, dan garis sawah tipis.
+- Watermark, lanskap, background, serta seluruh dekorasi selalu dipotong di dalam garis kartu.
+- Jarak judul, foto, tanggal, data warga, dan footer dirapikan tanpa mengubah data KTP lama.
+- AFK Voice 24/7 dan seluruh fitur/data dari versi sebelumnya tetap dipertahankan.
