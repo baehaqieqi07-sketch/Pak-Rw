@@ -10076,7 +10076,7 @@ function renderCommands() {
 
 
 /* ===================== PAK RW FULL PREMIUM DASHBOARD REBUILD v10.10.63 ===================== */
-const PAKRW_DASHBOARD_RELEASE = "10.10.77";
+const PAKRW_DASHBOARD_RELEASE = "10.10.79";
 const PAKRW_DASHBOARD_RELEASE_NAME = "Auto Level Role Terpusat";
 
 const PAKRW_PLACEHOLDER_GROUPS = [
@@ -11110,7 +11110,7 @@ const pakRwDashboardAllowedRoots = new Set([
   "logChannelId", "donaturRoleId", "level100RoleId", "welcome", "ai", "curhat", "anonymousCurhat",
   "suggestion", "level", "levelSystem", "topActive", "leaderboardAktif", "papanAktif", "boostPoin", "mabar",
   "juragan", "donatur", "features", "commandPermissions", "embeds", "dashboard", "panels", "mentions",
-  "mentionPlaceholders", "placeholderLibrary", "texts", "serverIdExporter"
+  "mentionPlaceholders", "placeholderLibrary", "texts", "serverIdExporter", "ktpSystem"
 ]);
 
 function isSafeDashboardPath(input = "") {
@@ -11224,7 +11224,7 @@ app.get("/api/dashboard/bootstrap", requireDashboardAuth, (req, res) => {
       dashboardEnabled: isDashboardEnabled,
       activeFeatureCount: featureCount.active,
       totalFeatureCount: featureCount.total,
-      version: String(cfg.version || "10.10.77"),
+      version: String(cfg.version || "10.10.79"),
       prefix: String(cfg.prefix || "rw"),
       environment: String(process.env.NODE_ENV || "development")
     },
@@ -11248,7 +11248,7 @@ app.put("/api/dashboard/settings", requireDashboardAuth, (req, res) => {
       if (!isSafeDashboardPath(pathText)) return res.status(400).json({ ok: false, error: `Path config tidak diizinkan: ${pathText}` });
       setDashboardPath(cfg, pathText, patch.value);
     }
-    cfg.version = "10.10.77";
+    cfg.version = "10.10.79";
     writeConfigFile(cfg);
     appendDashboardActivity("settings", "Setting dashboard disimpan", `${patches.length} field diperbarui melalui adapter aman.`);
     if (levelRoleConfigChanged) {
@@ -11268,7 +11268,7 @@ app.put("/api/dashboard/embed/:key", requireDashboardAuth, (req, res) => {
     const cfg = readConfigFile();
     cfg.embeds = cfg.embeds || {};
     cfg.embeds[key] = mergeDashboardEmbed(cfg.embeds[key] || {}, req.body?.embed || {});
-    cfg.version = "10.10.77";
+    cfg.version = "10.10.79";
     writeConfigFile(cfg);
     appendDashboardActivity("embed", "Template embed disimpan", `Template ${key} diperbarui dari Embed Builder.`);
     return res.json({ ok: true, embed: cfg.embeds[key] });
@@ -20338,7 +20338,7 @@ client.on(Events.MessageCreate, async (message) => {
 
       if (cmd === "premium" || cmd === "mahal" || cmd === "suitepremium") {
         return safeReply(message, [
-          "💎 **Pak RW v10.10.77 — Auto Level Role DESA TULUS**",
+          "💎 **Pak RW v10.10.79 — Auto Level Role DESA TULUS**",
           "",
           "Pak RW sekarang jadi bot besar DESA TULUS: satu balai warga digital yang rapi untuk AI, curhat, saran, welcome, level, top aktif, voice, donatur, juragan, boost poin, dashboard, dan pengumuman desa.",
           "",
@@ -20362,7 +20362,7 @@ client.on(Events.MessageCreate, async (message) => {
       if (cmd === "fitur" || cmd === "alur" || cmd === "features" || cmd === "suite") {
         const p = config.prefix || "rw";
         return safeReply(message, [
-          "🧭 **Pak RW Balai Warga Digital v10.10.77**",
+          "🧭 **Pak RW Balai Warga Digital v10.10.79**",
           "",
           "Alurnya sekarang dibuat seperti bot besar balai warga digital:",
           "**warga butuh bantuan → Pak RW baca konteks → pilih fitur → eksekusi/preview → data tetap aman**.",
@@ -20623,7 +20623,7 @@ async function handlePakRwVisibleSlashCommand(interaction) {
   if (cmd === "fitur") {
     await interaction.reply({
       content: [
-        "🧭 **Pak RW Balai Warga Digital v10.10.77**",
+        "🧭 **Pak RW Balai Warga Digital v10.10.79**",
         "",
         "**Alur bot besar:** pilih fitur → edit setting → preview → test → backup.",
         "",
@@ -20648,7 +20648,7 @@ async function handlePakRwVisibleSlashCommand(interaction) {
   if (cmd === "premium") {
     await interaction.reply({
       content: [
-        "💎 **Pak RW v10.10.77 — Auto Level Role DESA TULUS**",
+        "💎 **Pak RW v10.10.79 — Auto Level Role DESA TULUS**",
         "",
         "**Alur utama:** edit → preview → test aman → backup.",
         "",

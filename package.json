@@ -1,10 +1,10 @@
 {
   "name": "pak-rw-desa-tulus",
-  "version": "10.10.78",
+  "version": "10.10.79",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "check": "node --check index.js && node --check services/serverIdExporter.js && node --check services/ktpWarga.js && node --check ai/brain.js && node --check utils/cooldown.js && node --check db/mongoStore.js && node --check level/levelRoleTiers.js && node tests/levelRoleTiers.test.js && node tests/ktpWarga.test.js",
+    "check": "node --check index.js && node --check services/serverIdExporter.js && node --check services/ktpWarga.js && node --check ai/brain.js && node --check utils/cooldown.js && node --check db/mongoStore.js && node --check level/levelRoleTiers.js && node tests/levelRoleTiers.test.js && node tests/ktpWarga.test.js && node tests/dashboardAllowedPaths.test.js",
     "dashboard:build": "npm --prefix dashboard run build",
     "dashboard:dev": "npm --prefix dashboard run dev",
     "test:level-roles": "node tests/levelRoleTiers.test.js",
@@ -21,5 +21,5 @@
   "engines": {
     "node": ">=18"
   },
-  "description": "Pak RW DESA TULUS v10.10.78 - KTP Warga dengan tombol, modal, background DESA TULUS, dan penyimpanan aman"
+  "description": "Pak RW DESA TULUS v10.10.79 - perbaikan penyimpanan pengaturan KTP Warga dari dashboard"
 }
