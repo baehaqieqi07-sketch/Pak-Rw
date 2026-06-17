@@ -1,0 +1,14 @@
+"use strict";
+const assert = require("node:assert/strict");
+const manager = require("../services/afkVoiceManager");
+assert.equal(manager.DEFAULTS.guildId, "1504495052217651343");
+assert.equal(manager.DEFAULTS.enabled, false);
+assert.equal(manager.DEFAULTS.selfMute, true);
+assert.equal(manager.DEFAULTS.selfDeaf, true);
+assert.equal(manager.DEFAULTS.autoReconnect, true);
+assert.equal(manager.DEFAULTS.reconnectDelayMs, 5000);
+assert.equal(manager.DEFAULTS.maxReconnectDelayMs, 60000);
+const status = manager.getAfkVoiceStatus();
+assert.ok(["Dinonaktifkan", "Terputus"].includes(status.state));
+manager._resetForTests();
+console.log("AFK Voice configuration tests: berhasil");

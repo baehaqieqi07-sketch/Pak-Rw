@@ -6,7 +6,7 @@ async function parseJson<T>(res: Response): Promise<T> {
     throw new Error("Sesi dashboard berakhir.");
   }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as any).error || `HTTP ${res.status}`);
+  if (!res.ok) throw new Error((data as any).error || (data as any).message || `HTTP ${res.status}`);
   return data as T;
 }
 
@@ -34,5 +34,10 @@ export const api = {
   health: async () => parseJson<any>(await fetch("/api/dashboard/health", { credentials: "same-origin", cache: "no-store" })),
   boostStatus: async () => parseJson<any>(await fetch("/api/dashboard/boost-poin/status", { credentials: "same-origin", cache: "no-store" })),
   startBoost: async () => parseJson<{ ok: boolean; message: string; config?: Record<string, any> }>(await fetch("/api/dashboard/boost-poin/start", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: "{}" })),
+  afkVoiceStatus: async () => parseJson<any>(await fetch("/api/afk-voice/status", { credentials: "same-origin", cache: "no-store" })),
+  saveAfkVoice: async (config: Record<string, any>) => parseJson<any>(await fetch("/api/afk-voice/config", { method: "PUT", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(config) })),
+  connectAfkVoice: async () => parseJson<any>(await fetch("/api/afk-voice/connect", { method: "POST", credentials: "same-origin" })),
+  reconnectAfkVoice: async () => parseJson<any>(await fetch("/api/afk-voice/reconnect", { method: "POST", credentials: "same-origin" })),
+  disconnectAfkVoice: async () => parseJson<any>(await fetch("/api/afk-voice/disconnect", { method: "POST", credentials: "same-origin" })),
   stopBoost: async () => parseJson<{ ok: boolean; message: string; config?: Record<string, any> }>(await fetch("/api/dashboard/boost-poin/stop", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: "{}" }))
 };

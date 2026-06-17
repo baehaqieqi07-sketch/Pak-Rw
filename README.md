@@ -201,3 +201,23 @@ assets/ktp-desa-tulus-background.png
 ```
 
 Background tersebut berasal dari file yang diberikan owner dan tidak dibuat ulang oleh bot.
+
+
+## AFK Voice 24/7 Pak RW — v10.10.80
+
+Menu dashboard: `Pak RW → Pengaturan Bot → AFK Voice 24/7`.
+
+Fitur ini membuat Pak RW bergabung ke satu voice channel biasa dan menjaga koneksi selama proses bot/hosting aktif tanpa memutar audio. Konfigurasi disimpan pada `afkVoice` di config aktif.
+
+Permission minimum pada voice channel:
+- View Channel
+- Connect
+
+Penggunaan:
+1. Aktifkan dashboard dengan `DASHBOARD_ENABLED=true`.
+2. Buka `/dashboard/afk-voice`.
+3. Aktifkan fitur dan pilih voice channel.
+4. Klik **Simpan dan Terapkan**.
+5. Gunakan **Hubungkan Ulang** jika ingin membuat sesi voice baru tanpa restart.
+
+Pak RW menggunakan self mute dan self deaf. Permission Speak tidak diperlukan karena fitur tidak memutar audio.

@@ -130,6 +130,10 @@ try {
 
 const { handleRwIdCommand } = require("./services/serverIdExporter");
 const { handleKtpMessageCommand, handleKtpInteraction } = require("./services/ktpWarga");
+const {
+  initializeAfkVoiceManager, connectAfkVoice, disconnectAfkVoice, reconnectAfkVoice,
+  getAfkVoiceStatus, validateAfkVoiceChannel, shutdownAfkVoice, checkActionRateLimit
+} = require("./services/afkVoiceManager");
 const { askAI } = require("./ai/brain");
 const { isCooldown, getRemaining } = require("./utils/cooldown");
 const {
@@ -11110,7 +11114,7 @@ const pakRwDashboardAllowedRoots = new Set([
   "logChannelId", "donaturRoleId", "level100RoleId", "welcome", "ai", "curhat", "anonymousCurhat",
   "suggestion", "level", "levelSystem", "topActive", "leaderboardAktif", "papanAktif", "boostPoin", "mabar",
   "juragan", "donatur", "features", "commandPermissions", "embeds", "dashboard", "panels", "mentions",
-  "mentionPlaceholders", "placeholderLibrary", "texts", "serverIdExporter", "ktpSystem"
+  "mentionPlaceholders", "placeholderLibrary", "texts", "serverIdExporter", "ktpSystem", "afkVoice"
 ]);
 
 function isSafeDashboardPath(input = "") {
@@ -11224,7 +11228,7 @@ app.get("/api/dashboard/bootstrap", requireDashboardAuth, (req, res) => {
       dashboardEnabled: isDashboardEnabled,
       activeFeatureCount: featureCount.active,
       totalFeatureCount: featureCount.total,
-      version: String(cfg.version || "10.10.79"),
+      version: String(cfg.version || "10.10.80"),
       prefix: String(cfg.prefix || "rw"),
       environment: String(process.env.NODE_ENV || "development")
     },
@@ -11248,7 +11252,7 @@ app.put("/api/dashboard/settings", requireDashboardAuth, (req, res) => {
       if (!isSafeDashboardPath(pathText)) return res.status(400).json({ ok: false, error: `Path config tidak diizinkan: ${pathText}` });
       setDashboardPath(cfg, pathText, patch.value);
     }
-    cfg.version = "10.10.79";
+    cfg.version = "10.10.80";
     writeConfigFile(cfg);
     appendDashboardActivity("settings", "Setting dashboard disimpan", `${patches.length} field diperbarui melalui adapter aman.`);
     if (levelRoleConfigChanged) {
@@ -11268,7 +11272,7 @@ app.put("/api/dashboard/embed/:key", requireDashboardAuth, (req, res) => {
     const cfg = readConfigFile();
     cfg.embeds = cfg.embeds || {};
     cfg.embeds[key] = mergeDashboardEmbed(cfg.embeds[key] || {}, req.body?.embed || {});
-    cfg.version = "10.10.79";
+    cfg.version = "10.10.80";
     writeConfigFile(cfg);
     appendDashboardActivity("embed", "Template embed disimpan", `Template ${key} diperbarui dari Embed Builder.`);
     return res.json({ ok: true, embed: cfg.embeds[key] });
@@ -11318,6 +11322,73 @@ app.get("/api/dashboard/health", requireDashboardAuth, (req, res) => {
     dashboardEnabled: isDashboardEnabled,
     uptimeSeconds: Math.floor(process.uptime())
   });
+});
+
+app.get("/api/afk-voice/config", requireDashboardAuth, async (req, res) => {
+  const cfg = readConfigFile();
+  const afk = cfg.afkVoice || {};
+  const valid = afk.channelId ? await validateAfkVoiceChannel(afk) : null;
+  return res.json({ success: true, message: "Konfigurasi AFK Voice berhasil dibaca.", data: { config: afk, channelValid: valid?.ok ?? false, validation: valid?.ok ? null : valid } });
+});
+
+app.get("/api/afk-voice/status", requireDashboardAuth, (req, res) => {
+  res.set("Cache-Control", "no-store");
+  return res.json({ success: true, message: "Status AFK Voice terbaru.", data: getAfkVoiceStatus() });
+});
+
+app.put("/api/afk-voice/config", requireDashboardAuth, async (req, res) => {
+  try {
+    const cfg = readConfigFile();
+    const previous = { ...(cfg.afkVoice || {}) };
+    const input = req.body || {};
+    const next = {
+      ...previous,
+      enabled: Boolean(input.enabled),
+      guildId: String(input.guildId || previous.guildId || "1504495052217651343"),
+      channelId: String(input.channelId || "").match(/\d{15,25}/)?.[0] || "",
+      selfMute: input.selfMute !== false,
+      selfDeaf: input.selfDeaf !== false,
+      autoReconnect: input.autoReconnect !== false,
+      reconnectDelayMs: Math.max(1000, Math.min(60000, Number(input.reconnectDelayMs) || 5000)),
+      maxReconnectDelayMs: Math.max(5000, Math.min(300000, Number(input.maxReconnectDelayMs) || 60000)),
+      updatedAt: new Date().toISOString(),
+      updatedBy: "dashboard"
+    };
+    if (next.enabled) {
+      const valid = await validateAfkVoiceChannel(next);
+      if (!valid.ok) return res.status(400).json({ success: false, message: valid.message, errorCode: valid.errorCode });
+    }
+    cfg.afkVoice = next;
+    cfg.version = "10.10.80";
+    writeConfigFile(cfg);
+    appendDashboardActivity("afk-voice", "AFK Voice diperbarui", next.enabled ? `Channel voice ${next.channelId} diterapkan.` : "Fitur dinonaktifkan.");
+    const result = next.enabled ? await reconnectAfkVoice() : await disconnectAfkVoice({ disable: true });
+    return res.status(result.success ? 200 : 502).json(result);
+  } catch (err) {
+    return res.status(500).json({ success: false, message: "Pengaturan AFK Voice gagal disimpan.", errorCode: "SAVE_FAILED", error: err.message || String(err) });
+  }
+});
+
+app.post("/api/afk-voice/connect", requireDashboardAuth, async (req, res) => {
+  if (!checkActionRateLimit()) return res.status(429).json({ success: false, message: "Tunggu sebentar sebelum mencoba lagi.", errorCode: "RATE_LIMITED" });
+  const result = await connectAfkVoice({ reason: "dashboard-connect" });
+  return res.status(result.success ? 200 : 502).json(result);
+});
+
+app.post("/api/afk-voice/reconnect", requireDashboardAuth, async (req, res) => {
+  if (!checkActionRateLimit()) return res.status(429).json({ success: false, message: "Tunggu sebentar sebelum menghubungkan ulang.", errorCode: "RATE_LIMITED" });
+  const result = await reconnectAfkVoice();
+  return res.status(result.success ? 200 : 502).json(result);
+});
+
+app.post("/api/afk-voice/disconnect", requireDashboardAuth, async (req, res) => {
+  if (!checkActionRateLimit()) return res.status(429).json({ success: false, message: "Tunggu sebentar sebelum memutus koneksi.", errorCode: "RATE_LIMITED" });
+  const cfg = readConfigFile();
+  cfg.afkVoice = { ...(cfg.afkVoice || {}), enabled: false, updatedAt: new Date().toISOString(), updatedBy: "dashboard" };
+  cfg.version = "10.10.80";
+  writeConfigFile(cfg);
+  const result = await disconnectAfkVoice({ disable: true });
+  return res.json(result);
 });
 
 app.get("/api/dashboard/boost-poin/status", requireDashboardAuth, (req, res) => {
@@ -13184,14 +13255,29 @@ app.get("/api/status", requireDashboardAuth, (req, res) => {
 });
 
 
+let dashboardHttpServer = null;
 if (isDashboardEnabled) {
   const dashboardPort = process.env.PORT || process.env.OT_PORT || 3000;
-  app.listen(dashboardPort, () => {
+  dashboardHttpServer = app.listen(dashboardPort, () => {
     console.log(`🌐 Dashboard Pak RW aktif di port ${dashboardPort}`);
   });
 } else {
   console.log("🌐 Dashboard Pak RW dimatikan sementara untuk mode DisCloud.");
 }
+
+let pakRwShuttingDown = false;
+async function gracefulPakRwShutdown(signal) {
+  if (pakRwShuttingDown) return;
+  pakRwShuttingDown = true;
+  console.log(`[SHUTDOWN] ${signal} diterima. Menutup AFK Voice dan layanan Pak RW.`);
+  try { await shutdownAfkVoice(); } catch (error) { console.log("[AFK VOICE] Gagal shutdown:", error.message); }
+  try { if (pakRwCustomStatusInterval) clearInterval(pakRwCustomStatusInterval); } catch {}
+  try { client.destroy(); } catch {}
+  try { dashboardHttpServer?.close?.(() => process.exit(0)); } catch {}
+  setTimeout(() => process.exit(0), 4000).unref?.();
+}
+process.once("SIGINT", () => gracefulPakRwShutdown("SIGINT"));
+process.once("SIGTERM", () => gracefulPakRwShutdown("SIGTERM"));
 
 process.on("unhandledRejection", (reason) => {
   console.log("UNHANDLED REJECTION:", reason);
@@ -16695,6 +16781,8 @@ const client = new Client({
   ]
 });
 
+initializeAfkVoiceManager({ client, getConfig: () => readConfigFile() });
+
 
 function hexColor(value, fallback = DESA_TULUS_EMBED_COLOR_INT) {
   return DESA_TULUS_EMBED_COLOR_INT;
@@ -17327,6 +17415,12 @@ client.once(Events.ClientReady, async () => {
 
 
   startPakRwCustomStatusRotation(client);
+
+  const afkVoiceConfig = readConfigFile().afkVoice || {};
+  if (afkVoiceConfig.enabled) {
+    console.log("[AFK VOICE] Fitur aktif.");
+    await connectAfkVoice({ reason: "client-ready" });
+  }
 
 
   for (const guild of client.guilds.cache.values()) {

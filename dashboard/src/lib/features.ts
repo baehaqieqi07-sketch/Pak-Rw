@@ -2,7 +2,7 @@ import {
   Bot, UserPlus, MessageCircleHeart, ShieldQuestion, MessagesSquare, Gamepad2,
   BrainCircuit, Gauge, BarChart3, WalletCards, Trophy, Medal, Crown, BadgeDollarSign,
   Gem, Image, FileText, Radio, Users, TerminalSquare, ShieldCheck, Activity,
-  DatabaseBackup, Settings, LayoutDashboard, ChartNoAxesCombined, Megaphone, Tags, IdCard
+  DatabaseBackup, Settings, LayoutDashboard, ChartNoAxesCombined, Megaphone, Tags, IdCard, Headphones
 } from "lucide-react";
 
 export type FeatureDefinition = {
@@ -79,6 +79,12 @@ export const featureGroups = [
     ]
   },
   {
+    label: "Pengaturan Bot",
+    items: [
+      { slug: "afk-voice", name: "AFK Voice 24/7", icon: Headphones, path: "/afk-voice" }
+    ]
+  },
+  {
     label: "Sistem",
     items: [
       { slug: "logs", name: "Log & Kesehatan", icon: Activity, path: "/logs" },
@@ -114,6 +120,7 @@ export const features: FeatureDefinition[] = [
   { slug: "backup-center", name: "Pusat Backup", description: "Informasi backup aman tanpa menyentuh data aktif.", group: "Sistem", icon: DatabaseBackup },
   { slug: "banner", name: "Manual Banner MOTM", description: "Kelola gambar banner untuk MOTM dan leaderboard.", group: "Konten", icon: Image },
   { slug: "announcement", name: "Announcement", description: "Kirim pengumuman terarah ke channel desa.", group: "Konten", icon: Megaphone },
+  { slug: "afk-voice", name: "AFK Voice 24/7", description: "Pak RW menjaga koneksi voice yang dipilih melalui dashboard.", group: "Sistem", icon: Headphones, configPath: "afkVoice.enabled", channelPath: "afkVoice.channelId" },
   { slug: "bot", name: "Bot Runtime", description: "Status proses Pak RW dan koneksi Discord.", group: "Sistem", icon: Bot }
 ];
 

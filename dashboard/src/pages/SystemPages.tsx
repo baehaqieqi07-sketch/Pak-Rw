@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Archive, CheckCircle2, CircleAlert, DatabaseBackup, FileImage, Hash, IdCard, RefreshCcw, Save, Search, Server, Settings, Shield, ShieldCheck, TerminalSquare, Users } from "lucide-react";
+import { Activity, Archive, CheckCircle2, CircleAlert, DatabaseBackup, FileImage, Hash, Headphones, IdCard, RefreshCcw, Save, Search, Server, Settings, Shield, ShieldCheck, TerminalSquare, Users } from "lucide-react";
 import { useDashboard } from "../app/DashboardContext";
 import { Card, CardHeader } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
@@ -17,7 +17,7 @@ export function ActivityPage() {
 }
 
 const channelBindings = [
-  ["welcome.channelId", "Welcome", "Channel sambutan warga baru"], ["rulesChannelId", "Aturan Desa", "Channel aturan"], ["chatWargaChannelId", "Chat Warga", "Channel percakapan utama"], ["ticketChannelId", "Ticket", "Channel bantuan"], ["aiChannelId", "AI Pak RW", "Channel tanya Pak RW"], ["curhatChannelId", "Curhat", "Channel curhat warga"], ["anonymousCurhatChannelId", "Curhat Anonim", "Channel curhat anonim"], ["suggestionChannelId", "Saran", "Channel kotak saran"], ["levelChannelId", "Level", "Channel level warga"], ["cekPoinChannelId", "Cek Poin", "Channel cek poin"], ["topActive.channelId", "Top Aktif", "Channel leaderboard bulanan"], ["leaderboardAktif.channelId", "Papan Aktif", "Channel leaderboard lifetime"], ["mabar.channelId", "Cari Mabar", "Channel panel mabar"], ["ktpSystem.channelId", "KTP Warga", "Channel privat pembuatan KTP"], ["boostPoin.channelId", "Boost Poin", "Channel event boost poin"]
+  ["welcome.channelId", "Welcome", "Channel sambutan warga baru"], ["rulesChannelId", "Aturan Desa", "Channel aturan"], ["chatWargaChannelId", "Chat Warga", "Channel percakapan utama"], ["ticketChannelId", "Ticket", "Channel bantuan"], ["aiChannelId", "AI Pak RW", "Channel tanya Pak RW"], ["curhatChannelId", "Curhat", "Channel curhat warga"], ["anonymousCurhatChannelId", "Curhat Anonim", "Channel curhat anonim"], ["suggestionChannelId", "Saran", "Channel kotak saran"], ["levelChannelId", "Level", "Channel level warga"], ["cekPoinChannelId", "Cek Poin", "Channel cek poin"], ["topActive.channelId", "Top Aktif", "Channel leaderboard bulanan"], ["leaderboardAktif.channelId", "Papan Aktif", "Channel leaderboard lifetime"], ["mabar.channelId", "Cari Mabar", "Channel panel mabar"], ["ktpSystem.channelId", "KTP Warga", "Channel privat pembuatan KTP"], ["afkVoice.channelId", "AFK Voice 24/7", "Voice channel tempat Pak RW berjaga"], ["boostPoin.channelId", "Boost Poin", "Channel event boost poin"]
 ] as const;
 
 const roleBindings = [
@@ -220,5 +220,61 @@ export function DataIdServerPage() {
     </Card>
     <Card><CardHeader title="Cara menggunakan" description="Alur singkat setelah channel dan permission siap." /><div className="info-panel"><TerminalSquare size={19} /><p>Buka channel Data ID Server lalu ketik <code>rwid</code>. Pak RW mengirim satu file TXT berisi format detail, key=value, dan JSON valid.</p></div></Card>
     {dirty ? <div className="page-save-bar page-save-bar-dirty"><div><strong>Perubahan Data ID Server belum disimpan</strong><span>Simpan untuk menerapkan pengaturan, atau Batal untuk kembali.</span></div><div><Button variant="secondary" icon={<RefreshCcw size={16} />} onClick={cancel} disabled={saving}>Batal</Button><Button icon={<Save size={16} />} onClick={save} disabled={saving}>{saving ? "Menyimpan" : "Simpan Pengaturan"}</Button></div></div> : null}
+  </div>;
+}
+
+export function AfkVoicePage() {
+  const { data, picker, pickerLoading, refresh, refreshPicker, notify } = useDashboard();
+  const defaults: any = { enabled: false, guildId: "1504495052217651343", channelId: "", selfMute: true, selfDeaf: true, autoReconnect: true, reconnectDelayMs: 5000, maxReconnectDelayMs: 60000 };
+  const [values, setValues] = useState<any>({ ...defaults, ...(data.config.afkVoice || {}) });
+  const [initial, setInitial] = useState<any>({ ...defaults, ...(data.config.afkVoice || {}) });
+  const [status, setStatus] = useState<any>(null);
+  const [busy, setBusy] = useState("");
+  useEffect(() => { const next = { ...defaults, ...(data.config.afkVoice || {}) }; setValues(next); setInitial(next); }, [data]);
+  const voiceChannels = (picker.channel || []).filter((item: any) => {
+    const text = `${item.typeLabel || ""} ${item.meta || ""}`.toLowerCase();
+    return (text.includes("guildvoice") || text.includes("voice")) && !text.includes("stage");
+  });
+  const selected: any = voiceChannels.find((item: any) => item.id === values.channelId);
+  const dirty = JSON.stringify(values) !== JSON.stringify(initial);
+  const set = (key: string, value: any) => setValues((current: any) => ({ ...current, [key]: value }));
+  const loadStatus = async (quiet = false) => {
+    try { const result = await api.afkVoiceStatus(); setStatus(result.data); if (!quiet) notify("Status AFK Voice diperbarui.", "info"); }
+    catch (error) { if (!quiet) notify(error instanceof Error ? error.message : String(error), "error"); }
+  };
+  useEffect(() => { loadStatus(true); const timer = window.setInterval(() => loadStatus(true), 10000); return () => window.clearInterval(timer); }, []);
+  const run = async (name: string, action: () => Promise<any>) => {
+    setBusy(name);
+    try { const result = await action(); setStatus(result.data); notify(result.message || "Aksi AFK Voice berhasil."); await refresh(); }
+    catch (error) { notify(error instanceof Error ? error.message : String(error), "error"); await loadStatus(true); }
+    finally { setBusy(""); }
+  };
+  const save = () => run("save", async () => {
+    if (values.enabled && !values.channelId) throw new Error("Pilih Channel Voice AFK terlebih dahulu.");
+    const result = await api.saveAfkVoice(values); setInitial(values); return result;
+  });
+  const tone = status?.state === "Terhubung" ? "is-online" : "";
+  return <div className="page-stack page-enter">
+    <PageHeader icon={Headphones} kicker="Pengaturan Bot" title="AFK Voice 24/7" description="Pak RW menjaga satu koneksi voice selama proses bot dan hosting aktif, tanpa memutar musik atau audio." />
+    <Card><CardHeader title="AFK Voice 24/7 Pak RW" description="Aktifkan koneksi permanen dan pilih satu voice channel DESA TULUS." />
+      <div className="setting-row setting-row-large"><div><strong>Aktifkan AFK Voice 24/7</strong><span>Jika dinonaktifkan, Pak RW keluar dan tidak mencoba bergabung kembali.</span></div><Toggle checked={Boolean(values.enabled)} onChange={(next) => set("enabled", next)} /></div>
+      <div className="connection-strip"><span className={tone} />{status?.state || (values.enabled ? "Terputus" : "Dinonaktifkan")}</div>
+    </Card>
+    <Card><CardHeader title="Channel Voice AFK" description="Hanya voice channel biasa yang ditampilkan. ID channel disimpan agar tetap bekerja saat nama berubah." action={<Button variant="secondary" icon={<RefreshCcw size={16} />} onClick={refreshPicker}>Muat ulang Discord</Button>} />
+      <DiscordPicker kind="channel" label="Pilih voice channel" helper="Nama kategori dan voice dibaca langsung dari server." items={voiceChannels} value={values.channelId} loading={pickerLoading} required={Boolean(values.enabled)} onChange={(id) => set("channelId", id)} />
+      <div className="info-panel"><Server size={19} /><p><strong>{selected?.rawName || selected?.name || "Belum dipilih"}</strong><br />ID: <code>{values.channelId || "-"}</code><br />Kategori: {selected?.category || selected?.meta || "-"}<br />Status: {values.channelId ? selected ? "Channel tersedia" : "Channel tidak ditemukan pada data Discord terbaru" : "Belum dipilih"}</p></div>
+    </Card>
+    <Card><CardHeader title="Koneksi otomatis" description="Reconnect bertahap untuk mencegah spam koneksi dan log." />
+      <div className="settings-list"><div className="setting-row"><div><strong>Auto reconnect</strong><span>Coba bergabung kembali setelah disconnect atau restart.</span></div><Toggle checked={Boolean(values.autoReconnect)} onChange={(next) => set("autoReconnect", next)} /></div><div className="setting-row"><div><strong>Self mute</strong><span>Pak RW masuk dalam keadaan mute.</span></div><Toggle checked={Boolean(values.selfMute)} onChange={(next) => set("selfMute", next)} /></div><div className="setting-row"><div><strong>Self deaf</strong><span>Pak RW tidak menerima audio voice.</span></div><Toggle checked={Boolean(values.selfDeaf)} onChange={(next) => set("selfDeaf", next)} /></div></div>
+      <div className="form-grid two-columns"><div className="form-field"><label>Jeda reconnect awal</label><input type="number" min={1000} max={60000} value={values.reconnectDelayMs} onChange={(e) => set("reconnectDelayMs", Number(e.target.value || 5000))} /><small className="field-helper">Milidetik. Default 5000.</small></div><div className="form-field"><label>Jeda reconnect maksimum</label><input type="number" min={5000} max={300000} value={values.maxReconnectDelayMs} onChange={(e) => set("maxReconnectDelayMs", Number(e.target.value || 60000))} /><small className="field-helper">Milidetik. Default 60000.</small></div></div>
+    </Card>
+    <Card><CardHeader title="Status koneksi langsung" description="Data dibaca dari proses bot, bukan hanya cache tampilan dashboard." />
+      <div className="form-grid two-columns"><div className="info-panel"><Activity size={19} /><p>Status: <strong>{status?.state || "Memuat"}</strong><br />Server: {data.guild?.name || "DESA TULUS"}<br />Voice aktif: {status?.channelName || "-"}<br />Terhubung sejak: {status?.connectedAt ? new Date(status.connectedAt).toLocaleString("id-ID") : "-"}</p></div><div className="info-panel"><RefreshCcw size={19} /><p>Percobaan reconnect: <strong>{status?.reconnectAttempts || 0}</strong><br />Percobaan terakhir: {status?.lastAttemptAt ? new Date(status.lastAttemptAt).toLocaleString("id-ID") : "-"}<br />Error terakhir: {status?.lastError || "Tidak ada"}</p></div></div>
+    </Card>
+    <Card><CardHeader title="Kontrol koneksi" description="Tombol dinonaktifkan sementara saat request berlangsung agar tidak membuat koneksi ganda." />
+      <div className="actions"><Button onClick={save} disabled={Boolean(busy) || !dirty}>{busy === "save" ? "Menerapkan" : "Simpan dan Terapkan"}</Button><Button variant="secondary" onClick={() => run("connect", api.connectAfkVoice)} disabled={Boolean(busy) || !values.enabled || !values.channelId}>Hubungkan Sekarang</Button><Button variant="secondary" onClick={() => run("reconnect", api.reconnectAfkVoice)} disabled={Boolean(busy) || !values.enabled || !values.channelId}>Hubungkan Ulang</Button><Button variant="danger" onClick={() => run("disconnect", api.disconnectAfkVoice)} disabled={Boolean(busy)}>Putuskan dan Nonaktifkan</Button><Button variant="secondary" icon={<RefreshCcw size={16} />} onClick={() => loadStatus()} disabled={Boolean(busy)}>Segarkan Status</Button></div>
+      <div className="info-panel"><CircleAlert size={19} /><p>Pak RW akan tetap berada di voice channel selama proses bot dan hosting aktif. Jika hosting berhenti, bot akan bergabung kembali setelah proses aktif kembali.</p></div>
+    </Card>
+    {dirty ? <div className="page-save-bar page-save-bar-dirty"><div><strong>Perubahan AFK Voice belum diterapkan</strong><span>Klik Simpan dan Terapkan agar konfigurasi tersimpan dan koneksi langsung diperbarui.</span></div><div><Button variant="secondary" onClick={() => setValues(initial)} disabled={Boolean(busy)}>Batal</Button><Button icon={<Save size={16} />} onClick={save} disabled={Boolean(busy)}>{busy === "save" ? "Menerapkan" : "Simpan dan Terapkan"}</Button></div></div> : null}
   </div>;
 }

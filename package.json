@@ -1,10 +1,10 @@
 {
   "name": "pak-rw-desa-tulus",
-  "version": "10.10.79",
+  "version": "10.10.80",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "check": "node --check index.js && node --check services/serverIdExporter.js && node --check services/ktpWarga.js && node --check ai/brain.js && node --check utils/cooldown.js && node --check db/mongoStore.js && node --check level/levelRoleTiers.js && node tests/levelRoleTiers.test.js && node tests/ktpWarga.test.js && node tests/dashboardAllowedPaths.test.js",
+    "check": "node --check index.js && node --check services/afkVoiceManager.js && node --check services/serverIdExporter.js && node --check services/ktpWarga.js && node --check ai/brain.js && node --check utils/cooldown.js && node --check db/mongoStore.js && node --check level/levelRoleTiers.js && node tests/levelRoleTiers.test.js && node tests/ktpWarga.test.js && node tests/dashboardAllowedPaths.test.js && node tests/afkVoice.test.js",
     "dashboard:build": "npm --prefix dashboard run build",
     "dashboard:dev": "npm --prefix dashboard run dev",
     "test:level-roles": "node tests/levelRoleTiers.test.js",
@@ -16,10 +16,11 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "mongoose": "^8.9.5",
-    "@napi-rs/canvas": "^0.1.68"
+    "@napi-rs/canvas": "^0.1.68",
+    "@discordjs/voice": "^0.18.0"
   },
   "engines": {
     "node": ">=18"
   },
-  "description": "Pak RW DESA TULUS v10.10.79 - perbaikan penyimpanan pengaturan KTP Warga dari dashboard"
+  "description": "Pak RW DESA TULUS v10.10.80 - AFK Voice 24/7 terintegrasi dashboard"
 }
