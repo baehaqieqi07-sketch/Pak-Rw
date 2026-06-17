@@ -240,3 +240,8 @@ Command tetap:
 rwktppanel  → owner/admin mengirim panel KTP
 rwktp       → warga melihat KTP miliknya
 ```
+
+## Railway npm Registry Lock Fix v10.10.82
+
+Lockfile project sudah dibersihkan dari URL registry internal dan sekarang memakai `https://registry.npmjs.org/`, sehingga `npm ci` di Railway tidak mencoba mengakses host internal yang tidak tersedia.
+

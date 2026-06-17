@@ -702,8 +702,8 @@
     "easyEditMode": true,
     "showFeatureFlow": true,
     "showAiStylePanel": true,
-    "releaseVersion": "10.10.81",
-    "releaseName": "KTP Warga Renderer Final",
+    "releaseVersion": "10.10.82",
+    "releaseName": "Railway npm Registry Lock Fix",
     "premiumMode": true,
     "comfortMode": true,
     "quickActionMode": "manage_edit_preview_save_test_backup",
@@ -728,7 +728,7 @@
     "placeholderSelectionMode": "channel_role_user_server_bot_live_from_discord",
     "discordPickerMode": "live_api",
     "discordPickerAutoRefresh": true,
-    "uiVersion": "10.10.81",
+    "uiVersion": "10.10.82",
     "architecture": "react_vite_static_dashboard_only",
     "backgroundStyle": "2d-village-premium",
     "embedColorLocked": "#7DBD77",
@@ -1170,7 +1170,7 @@
       "Discord Manager"
     ]
   },
-  "version": "10.10.81",
+  "version": "10.10.82",
   "bigBot": {
     "releaseName": "Pak RW KTP Warga DESA TULUS v10.10.78"
   },
