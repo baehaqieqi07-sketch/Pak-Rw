@@ -701,8 +701,8 @@
     "easyEditMode": true,
     "showFeatureFlow": true,
     "showAiStylePanel": true,
-    "releaseVersion": "10.10.76",
-    "releaseName": "Auto Level Role Terpusat",
+    "releaseVersion": "10.10.77",
+    "releaseName": "Data ID Server RWID",
     "premiumMode": true,
     "comfortMode": true,
     "quickActionMode": "manage_edit_preview_save_test_backup",
@@ -727,7 +727,7 @@
     "placeholderSelectionMode": "channel_role_user_server_bot_live_from_discord",
     "discordPickerMode": "live_api",
     "discordPickerAutoRefresh": true,
-    "uiVersion": "10.10.76",
+    "uiVersion": "10.10.77",
     "architecture": "react_vite_static_dashboard_only",
     "backgroundStyle": "2d-village-premium",
     "embedColorLocked": "#7DBD77",
@@ -1006,7 +1006,8 @@
     "commandCenter": true,
     "permissionCenter": true,
     "logsHealth": true,
-    "backupCenter": true
+    "backupCenter": true,
+    "serverIdExporter": true
   },
   "dashboardRoleDisplay": {
     "enabled": true,
@@ -1158,7 +1159,7 @@
       "Discord Manager"
     ]
   },
-  "version": "10.10.76",
+  "version": "10.10.77",
   "bigBot": {
     "releaseName": "Pak RW AI Natural + Welcome Mention v10.10.59"
   },
@@ -1364,5 +1365,32 @@
     "syncBatchSize": 5,
     "syncDelayMs": 900,
     "note": "Satu role level aktif. Nama tingkatan dihitung dari angka level melalui level/levelRoleTiers.js."
+  },
+  "serverIdExporter": {
+    "enabled": true,
+    "channelId": "1516741217118060544",
+    "channelName": "rw-id-server",
+    "cooldownSeconds": 15,
+    "allowOwner": true,
+    "allowAdministrator": true,
+    "allowManageGuild": true,
+    "includeServerId": true,
+    "includeCategories": true,
+    "includeTextChannels": true,
+    "includeVoiceChannels": true,
+    "includeAnnouncementChannels": true,
+    "includeForumChannels": true,
+    "includeMediaChannels": true,
+    "includeStageChannels": true,
+    "includeOtherChannels": true,
+    "includeRoles": true,
+    "includeManagedRoles": true,
+    "includeEveryoneRole": true,
+    "includeJsonFormat": true,
+    "includeKeyValueFormat": true,
+    "fileName": "",
+    "loadingMessage": "Pak RW sedang mendata seluruh channel, kategori, voice, dan role server...",
+    "successMessage": "Data ID server berhasil dibuat.",
+    "errorMessage": "Pak RW gagal membuat Data ID Server. Periksa izin bot, channel khusus, dan konfigurasi fitur."
   }
 }

@@ -3,6 +3,7 @@ import { Activity, Archive, CheckCircle2, CircleAlert, DatabaseBackup, FileImage
 import { useDashboard } from "../app/DashboardContext";
 import { Card, CardHeader } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
+import { Toggle } from "../components/ui/Toggle";
 import { DiscordPicker } from "../components/pickers/DiscordPicker";
 import { api } from "../lib/api";
 
@@ -56,7 +57,7 @@ export function RoleManagerPage() {
 
 export function CommandCenterPage() {
   const { data } = useDashboard();
-  const commands = ["rwhelp", "rwtanya", "rwcurhat", "rwcekpoin", "rwlevel", "rwrank", "rwtopaktif", "rwpapanaktif", "rwleaderboardaktif", "rwpostpapanaktif", "rwai", "rwfitur"];
+  const commands = ["rwhelp", "rwtanya", "rwcurhat", "rwcekpoin", "rwlevel", "rwrank", "rwtopaktif", "rwpapanaktif", "rwleaderboardaktif", "rwpostpapanaktif", "rwai", "rwfitur", "rwid"];
   return <div className="page-stack page-enter"><PageHeader icon={TerminalSquare} kicker="Administration" title="Command Center" description="Daftar command publik Pak RW dengan prefix aktif." /><Card><CardHeader title="Command publik" description={`Prefix aktif: ${data.status.prefix}`} /><div className="command-table">{commands.map((command) => <div key={command}><code>{command}</code><span>Aktif</span></div>)}</div></Card></div>;
 }
 
@@ -96,4 +97,64 @@ export function BannerManagerPage() {
   const cancel = () => { setValues(initial); notify("Perubahan gambar dibatalkan.", "info"); };
   const save = async () => { setSaving(true); try { await api.savePatches([{ path: "topActive.manualBannerUrl", value: values.motm }, { path: "leaderboardAktif.imageUrl", value: values.leaderboard }, { path: "embeds.dashboard.media.backgroundUrl", value: values.dashboard }]); await refresh(); notify("Banner berhasil disimpan."); } catch (error) { notify(error instanceof Error ? error.message : String(error), "error"); } finally { setSaving(false); } };
   return <div className="page-stack page-enter"><PageHeader icon={FileImage} kicker="Content" title="Banner Manager" description="Kelola gambar dashboard, MOTM, dan leaderboard dengan URL aman." /><Card><CardHeader title="Image sources" description="Gunakan URL HTTPS dari Discord CDN, GitHub raw, atau hosting gambar." /><div className="form-grid"><div className="form-field"><label>Banner MOTM</label><input value={values.motm} onChange={(event) => setValues({ ...values, motm: event.target.value })} placeholder="https://..." /></div><div className="form-field"><label>Image leaderboard lifetime</label><input value={values.leaderboard} onChange={(event) => setValues({ ...values, leaderboard: event.target.value })} placeholder="https://..." /></div><div className="form-field"><label>Background dashboard custom</label><input value={values.dashboard} onChange={(event) => setValues({ ...values, dashboard: event.target.value })} placeholder="https://..." /></div></div></Card>{dirty ? <div className="page-save-bar page-save-bar-dirty"><div><strong>Perubahan gambar belum disimpan</strong><span>Simpan untuk memakai URL baru, atau Batal untuk kembali ke gambar sebelumnya.</span></div><div><Button variant="secondary" icon={<RefreshCcw size={16} />} onClick={cancel} disabled={saving}>Batal</Button><Button icon={<Save size={16} />} onClick={save} disabled={saving}>{saving ? "Menyimpan" : "Simpan"}</Button></div></div> : null}</div>;
+}
+
+export function DataIdServerPage() {
+  const { data, picker, pickerLoading, refresh, refreshPicker, notify } = useDashboard();
+  const defaults: any = {
+    enabled: true, channelId: "", channelName: "rw-id-server", cooldownSeconds: 15,
+    allowOwner: true, allowAdministrator: true, allowManageGuild: true,
+    includeServerId: true, includeCategories: true, includeTextChannels: true, includeVoiceChannels: true,
+    includeAnnouncementChannels: true, includeForumChannels: true, includeMediaChannels: true, includeStageChannels: true,
+    includeOtherChannels: true, includeRoles: true, includeManagedRoles: true, includeEveryoneRole: true,
+    includeJsonFormat: true, includeKeyValueFormat: true, fileName: "",
+    loadingMessage: "Pak RW sedang mendata seluruh channel, kategori, voice, dan role server...",
+    successMessage: "Data ID server berhasil dibuat.",
+    errorMessage: "Pak RW gagal membuat Data ID Server. Periksa izin bot, channel khusus, dan konfigurasi fitur."
+  };
+  const [values, setValues] = useState<any>(defaults);
+  const [initial, setInitial] = useState<any>(defaults);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { const next = { ...defaults, ...(data.config.serverIdExporter || {}) }; setValues(next); setInitial(next); }, [data]);
+  const dirty = JSON.stringify(values) !== JSON.stringify(initial);
+  const textChannels = (picker.channel || []).filter((item: any) => /text|announcement/i.test(String(item.typeLabel || item.meta || "")) && !/voice|stage|category|forum|media/i.test(String(item.typeLabel || item.meta || "")));
+  const set = (key: string, value: any) => setValues((current: any) => ({ ...current, [key]: value }));
+  const save = async () => {
+    const selected = (picker.channel || []).find((item: any) => item.id === values.channelId) as any;
+    if (values.channelId && selected && !/text|announcement/i.test(String(selected.typeLabel || selected.meta || ""))) { notify("Channel Data ID Server harus berupa text channel.", "error"); return; }
+    setSaving(true);
+    try { await api.savePatches(Object.entries(values).map(([key, value]) => ({ path: `serverIdExporter.${key}`, value }))); await refresh(); setInitial(values); notify("Pengaturan Data ID Server berhasil disimpan."); }
+    catch (error) { notify(error instanceof Error ? error.message : String(error), "error"); }
+    finally { setSaving(false); }
+  };
+  const cancel = () => { setValues(initial); notify("Perubahan Data ID Server dibatalkan.", "info"); };
+  const flags = [
+    ["includeServerId", "Server ID"], ["includeCategories", "Category"], ["includeTextChannels", "Text Channel"],
+    ["includeVoiceChannels", "Voice Channel"], ["includeAnnouncementChannels", "Announcement"], ["includeForumChannels", "Forum"],
+    ["includeMediaChannels", "Media"], ["includeStageChannels", "Stage"], ["includeOtherChannels", "Other Channel"],
+    ["includeRoles", "Semua Role"], ["includeManagedRoles", "Role Bot / Managed"], ["includeEveryoneRole", "Role @everyone"],
+    ["includeJsonFormat", "Format JSON"], ["includeKeyValueFormat", "Format key=value"]
+  ];
+  return <div className="page-stack page-enter">
+    <PageHeader icon={Server} kicker="Sistem Server" title="Data ID Server" description="Ambil seluruh ID server, category, channel, voice, forum, media, stage, dan role melalui satu command rwid." />
+    <Card><CardHeader title="Status fitur" description="Command hanya bekerja di channel privat yang dipilih dan hanya untuk owner, Administrator, atau Kelola Server." />
+      <div className="setting-row setting-row-large"><div><strong>Aktifkan Data ID Server</strong><span>Fitur read-only. Tidak mengubah channel, role, permission, atau data warga.</span></div><Toggle checked={Boolean(values.enabled)} onChange={(next) => set("enabled", next)} /></div>
+      <div className="connection-strip"><span className={values.enabled && values.channelId ? "is-online" : ""} />{!values.enabled ? "Fitur Nonaktif" : values.channelId ? "Siap Digunakan" : "Channel Belum Dipilih"}</div>
+    </Card>
+    <Card><CardHeader title="Channel khusus" description="Pilih text channel privat rw-id-server langsung dari Discord. ID disimpan otomatis." action={<Button variant="secondary" icon={<RefreshCcw size={16} />} onClick={refreshPicker}>Muat ulang Discord</Button>} />
+      <div className="form-grid two-columns"><DiscordPicker kind="channel" label="Channel Data ID Server" helper="Disarankan: 📋・rw-id-server" items={textChannels} value={values.channelId} loading={pickerLoading} required onChange={(id) => set("channelId", id)} />
+      <div className="form-field"><label>Cooldown command (detik)</label><input type="number" min={1} max={3600} value={values.cooldownSeconds} onChange={(e) => set("cooldownSeconds", Math.max(1, Number(e.target.value || 15)))} /><small className="field-helper">Berlaku per pengguna. Default 15 detik.</small></div></div>
+    </Card>
+    <Card><CardHeader title="Izin pengguna" description="Pengecekan memakai permission Discord, bukan nama role." />
+      <div className="settings-list">{[["allowOwner","Pemilik Server"],["allowAdministrator","Administrator"],["allowManageGuild","Kelola Server / Manage Guild"]].map(([key,label]) => <div className="setting-row" key={key}><div><strong>{label}</strong><span>Diizinkan menjalankan rwid di channel khusus.</span></div><Toggle checked={Boolean(values[key])} onChange={(next) => set(key,next)} /></div>)}</div>
+    </Card>
+    <Card><CardHeader title="Data yang disertakan" description="Pilih isi file TXT. Semua data tetap bersifat read-only." />
+      <div className="form-grid two-columns">{flags.map(([key,label]) => <div className="setting-row compact-setting" key={key}><div><strong>{label}</strong></div><Toggle checked={Boolean(values[key])} onChange={(next) => set(key,next)} /></div>)}</div>
+    </Card>
+    <Card><CardHeader title="Teks dan nama file" description="Nama file kosong akan dibuat otomatis dari nama server dan tanggal WIB." />
+      <div className="form-grid two-columns"><div className="form-field"><label>Nama file opsional</label><input value={values.fileName} onChange={(e) => set("fileName",e.target.value)} placeholder="server-ids-desa-tulus-YYYY-MM-DD.txt" /></div><div className="form-field"><label>Pesan loading</label><input value={values.loadingMessage} onChange={(e) => set("loadingMessage",e.target.value)} /></div><div className="form-field"><label>Pesan berhasil</label><input value={values.successMessage} onChange={(e) => set("successMessage",e.target.value)} /></div><div className="form-field"><label>Pesan gagal</label><input value={values.errorMessage} onChange={(e) => set("errorMessage",e.target.value)} /></div></div>
+    </Card>
+    <Card><CardHeader title="Cara menggunakan" description="Alur singkat setelah channel dan permission siap." /><div className="info-panel"><TerminalSquare size={19} /><p>Buka channel Data ID Server lalu ketik <code>rwid</code>. Pak RW mengirim satu file TXT berisi format detail, key=value, dan JSON valid.</p></div></Card>
+    {dirty ? <div className="page-save-bar page-save-bar-dirty"><div><strong>Perubahan Data ID Server belum disimpan</strong><span>Simpan untuk menerapkan pengaturan, atau Batal untuk kembali.</span></div><div><Button variant="secondary" icon={<RefreshCcw size={16} />} onClick={cancel} disabled={saving}>Batal</Button><Button icon={<Save size={16} />} onClick={save} disabled={saving}>{saving ? "Menyimpan" : "Simpan Pengaturan"}</Button></div></div> : null}
+  </div>;
 }

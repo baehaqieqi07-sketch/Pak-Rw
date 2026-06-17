@@ -2,7 +2,7 @@ import {
   Bot, UserPlus, MessageCircleHeart, ShieldQuestion, MessagesSquare, Gamepad2,
   BrainCircuit, Gauge, BarChart3, WalletCards, Trophy, Medal, Crown, BadgeDollarSign,
   Gem, Image, FileText, Radio, Users, TerminalSquare, ShieldCheck, Activity,
-  DatabaseBackup, Settings, LayoutDashboard, ChartNoAxesCombined, Megaphone, Tags
+  DatabaseBackup, Settings, LayoutDashboard, ChartNoAxesCombined, Megaphone, Tags, IdCard
 } from "lucide-react";
 
 export type FeatureDefinition = {
@@ -72,6 +72,7 @@ export const featureGroups = [
     label: "Administrasi",
     items: [
       { slug: "channel-manager", name: "Kelola Channel", icon: Radio, path: "/channel-manager" },
+      { slug: "data-id-server", name: "Data ID Server", icon: IdCard, path: "/data-id-server" },
       { slug: "command-center", name: "Pusat Command", icon: TerminalSquare, path: "/command-center" },
       { slug: "permission-center", name: "Pusat Izin", icon: ShieldCheck, path: "/permission-center" }
     ]
@@ -103,6 +104,7 @@ export const features: FeatureDefinition[] = [
   { slug: "boost-poin", name: "Boost Poin", description: "Event multiplier poin untuk channel yang dipilih.", group: "Keterlibatan", icon: Gauge, configPath: "boostPoin.enabled", channelPath: "boostPoin.channelId", embedKey: "boostPoinActive" },
   { slug: "embed", name: "Embed Builder", description: "Editor universal untuk seluruh template Discord Pak RW.", group: "Konten", icon: FileText, embedKey: "welcome" },
   { slug: "channel-manager", name: "Kelola Channel", description: "Pilih channel Discord asli berdasarkan nama dan kategori.", group: "Administrasi", icon: Radio },
+  { slug: "data-id-server", name: "Data ID Server", description: "Ekspor seluruh ID channel, category, voice, forum, media, stage, dan role ke file TXT.", group: "Administrasi", icon: IdCard, configPath: "serverIdExporter.enabled", channelPath: "serverIdExporter.channelId" },
   { slug: "role-manager", name: "Kelola Role", description: "Pilih role Discord asli dengan nama, warna, dan posisi.", group: "Keanggotaan", icon: Users },
   { slug: "command-center", name: "Pusat Command", description: "Peta command publik Pak RW dan status aksesnya.", group: "Administrasi", icon: TerminalSquare },
   { slug: "permission-center", name: "Pusat Izin", description: "Tinjau akses command dan izin Discord bot.", group: "Administrasi", icon: ShieldCheck },

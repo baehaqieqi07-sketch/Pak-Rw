@@ -144,3 +144,23 @@ paksynclevelrole @member
 ```
 
 Sebelum sinkronisasi massal, Pak RW membuat backup data level. Proses berjalan bertahap dan tidak mengubah poin, EXP, level, leaderboard, atau data warga lama. Dokumentasi lengkap tersedia di `UPDATE_FINAL_v10.10.76.md`.
+
+
+## COMMAND RWID — DATA ID SERVER
+
+Command `rwid` membuat satu file TXT berisi Server ID, seluruh category, text channel, voice, announcement, forum, media, stage, other channel, dan seluruh role yang dapat dilihat Pak RW. Command hanya dapat dipakai oleh owner server, Administrator, atau pengguna dengan izin Manage Server di channel khusus `rw-id-server`.
+
+### Persiapan
+1. Buat Text Channel privat bernama `rw-id-server` atau `📋・rw-id-server`.
+2. Beri Pak RW izin View Channel, Send Messages, Attach Files, Embed Links, dan Read Message History.
+3. Beri role Pak RW View Channel pada category privat yang ingin ikut didata.
+4. Pilih channel melalui Dashboard → Sistem Server → Data ID Server.
+5. Aktifkan Message Content Intent di Discord Developer Portal → Applications → Pak RW → Bot → Privileged Gateway Intents.
+6. Ketik `rwid` di channel khusus.
+
+### Menyalin
+- PC: buka TXT, tekan Ctrl+A lalu Ctrl+C.
+- HP: buka TXT, tekan dan tahan, Pilih Semua, lalu Salin.
+
+### Rollback
+Nonaktifkan `serverIdExporter.enabled`, hapus pemanggilan `handleRwIdCommand` dan file `services/serverIdExporter.js`, lalu restart bot. Tidak ada data member yang perlu dihapus.

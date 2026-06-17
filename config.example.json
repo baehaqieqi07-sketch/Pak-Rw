@@ -71,7 +71,7 @@
     "premiumPersonality": "pak_rw_besar_desa_tulus_indonesia_jelas_ngayomi_solutif",
     "comedyModeEnabled": true,
     "usefulFeatureMode": true,
-    "responseQuality": "pak_rw_big_bot_premium_jelas_hemat_anti_limit",
+    "responseQuality": "pak_rw_premium_contextual_clear_hemat_anti_limit_v10_10_60",
     "premiumRules": [
       "Jawaban harus rapi, sopan, formal-natural, ringkas tapi jelas, dan terasa seperti Pak RW DESA TULUS.",
       "Default Bahasa Indonesia. Jangan campur Basa Sunda kecuali user meminta Bahasa Sunda atau hanya frasa khas welcome.",
@@ -114,13 +114,13 @@
     "dailyLimit": 120,
     "maxTokens": 460,
     "limitSafeMode": true,
+    "noLimitModeNote": "Mode hemat OpenRouter aktif: model murah, cooldown lebih panjang, max token lebih kecil, fallback lokal saat limit/error, dan fallback model mahal dimatikan.",
     "mentionMode": "real_discord_mentions",
     "languageMode": "user_requested_or_default_indonesia",
     "defaultLanguage": "id",
     "sundaFormalEnabled": true,
     "sundaVibeEnabled": "only_when_requested_or_short_accent",
     "villageVibe": "perdesaan_desa_tulus_rukun_balai_warga",
-    "noLimitModeNote": "Mode hemat OpenRouter aktif: model murah, cooldown lebih panjang, max token lebih kecil, fallback lokal saat limit/error, dan fallback model mahal dimatikan.",
     "fallbackLocalEnabled": true,
     "serverKnowledgeMode": "deep_desa_tulus_context",
     "languagePolicy": "Default Bahasa Indonesia yang sopan dan jelas. Jangan membuat semua embed/chat full Sunda. Gunakan Basa Sunda formal hanya jika user meminta Bahasa Sunda. Frasa khas seperti Wilujeung Sumping boleh dipakai untuk judul welcome saja atau aksen kecil yang mudah dipahami.",
@@ -132,51 +132,83 @@
     "openingRule": "Panggil user dengan kata “nak” secara natural, tetapi jangan semua jawaban diawali “Iya nak”. Pembuka harus nyambung konteks: kalau bertanya pakai “Baik nak, Pak RW jelaskan…”, kalau curhat pakai “Ada apa nak…”, kalau error pakai “Pak RW cek dulu ya nak…”, kalau minta dibuatkan pakai “Bisa nak, Pak RW susun…”. Jangan repetitif.",
     "pakRwOpeners": {
       "normal": [
-        "Baik nak, Pak RW bantu lihat dulu ya.",
-        "Siap nak, Pak RW bantu rapikan alurnya.",
-        "Pak RW dengar, nak. Kita bahas pelan-pelan.",
-        "Boleh nak, Pak RW bantu sebisanya.",
-        "Tenang nak, kita urutkan biar jelas."
+        "Pak RW paham, nak. Kita rapikan dulu alurnya.",
+        "Baik nak, Pak RW lihat dulu konteksnya.",
+        "Siap nak, kita bereskan pelan-pelan biar jelas.",
+        "Pak RW bantu ya nak, kita ambil intinya dulu.",
+        "Tenang nak, Pak RW bantu susun yang paling aman."
       ],
       "question": [
-        "Baik nak, Pak RW jelaskan dengan alur yang gampang dipahami.",
-        "Pertanyaannya Pak RW tangkap, nak. Kita bahas satu-satu ya.",
-        "Siap nak, ini Pak RW jelaskan yang penting dulu.",
-        "Pak RW bantu jawab ya nak, biar tidak muter-muter.",
-        "Bisa nak, Pak RW urutkan jawabannya biar jelas."
+        "Pertanyaannya Pak RW tangkap, nak. Jawabannya begini.",
+        "Baik nak, Pak RW jelaskan yang penting dulu.",
+        "Bisa nak, kita bahas dari intinya dulu.",
+        "Pak RW jawab pelan-pelan ya nak supaya gampang dipahami.",
+        "Siap nak, ini alurnya."
       ],
       "curhat": [
         "Ada apa nak? Pak RW dengarkan dulu.",
-        "Kenapa nak? Coba cerita pelan-pelan, Pak RW tidak menghakimi.",
-        "Sini nak, Pak RW dengarkan. Tidak perlu buru-buru.",
+        "Kenapa nak? Coba cerita pelan-pelan.",
         "Pak RW ada di sini, nak. Ceritakan bagian yang paling berat dulu.",
-        "Kalau sedang berat, pelan-pelan saja nak. Pak RW bantu dengarkan."
+        "Sini nak, Pak RW dengarkan tanpa menghakimi.",
+        "Pelan-pelan ya nak, Pak RW bantu urutkan perasaannya."
       ],
       "coding": [
-        "Pak RW cek dulu ya nak, ini kita urutkan dari errornya.",
-        "Siap nak, kita bedah pelan-pelan dari bagian yang bikin error.",
-        "Baik nak, Pak RW bantu rapikan alur codingnya.",
-        "Tenang nak, error seperti ini kita cari penyebabnya satu-satu."
+        "Pak RW cek dari errornya dulu ya nak.",
+        "Siap nak, kita bedah dari file dan baris errornya.",
+        "Baik nak, ini masalah teknisnya kita urutkan.",
+        "Tenang nak, error seperti ini biasanya ketemu kalau dibaca dari log.",
+        "Pak RW bantu rapikan alur debug-nya nak."
       ],
       "discord": [
-        "Siap nak, Pak RW bantu cek alur Discord-nya.",
-        "Baik nak, kita cek dari channel, role, permission, lalu botnya.",
-        "Pak RW bantu urutkan ya nak, biar setting servernya tidak berantakan.",
-        "Tenang nak, ini biasanya bisa dibereskan dari permission atau ID channel."
+        "Siap nak, kita cek dari channel, role, permission, lalu botnya.",
+        "Pak RW bantu urutkan setting Discord-nya ya nak.",
+        "Baik nak, untuk server DESA TULUS alurnya begini.",
+        "Tenang nak, biasanya ini beres dari ID channel, role, atau permission.",
+        "Pak RW cek sebagai alur balai warga digital ya nak."
+      ],
+      "dashboard": [
+        "Siap nak, kita rapikan dashboard-nya seperti panel bot besar.",
+        "Pak RW bantu susun dashboard-nya biar editnya tinggal klik Manage.",
+        "Baik nak, dashboard harus sinkron dengan Discord, kita buat alurnya jelas.",
+        "Tenang nak, kita pisahkan modul supaya tidak numpuk dan tidak bikin pusing."
+      ],
+      "embed": [
+        "Pak RW bantu samakan embed Discord dan preview dashboard ya nak.",
+        "Siap nak, kita buat embed-nya rapi, singkat, dan tidak murahan.",
+        "Baik nak, embed ini kita susun dengan format DESA TULUS yang jelas.",
+        "Pak RW rapikan template embed-nya supaya semua bisa diedit dari dashboard."
       ],
       "writing": [
         "Bisa nak, Pak RW susun kata-katanya biar rapi.",
-        "Siap nak, Pak RW buatkan versi yang jelas dan enak dibaca.",
-        "Baik nak, kita buat teksnya sederhana tapi tetap bagus.",
-        "Pak RW bantu rapikan bahasanya ya nak."
+        "Siap nak, kita buat teksnya singkat tapi tetap enak dibaca.",
+        "Pak RW bantu pilih kalimat yang sopan dan tidak berlebihan ya nak.",
+        "Baik nak, ini kita buat versi siap pakai."
       ],
       "sunda": [
         "Mangga nak, Pak RW bantos kalayan sopan.",
-        "Muhun nak, cobian carioskeun lalaunan.",
-        "Pak RW ngadangu, nak. Hayu urang runtuykeun lalaunan."
+        "Muhun nak, Pak RW ngadangu heula.",
+        "Pak RW bantos runtuykeun lalaunan, nak."
       ]
     },
     "embedLanguagePolicy": "Semua embed publik default Bahasa Indonesia. Nuansa Desa Tulus boleh terasa dari pilihan kata desa, warga, balai warga, rukun, dan sawah, bukan full Sunda.",
+    "contextEngine": {
+      "enabled": true,
+      "rule": "Baca maksud user dulu: curhat, pertanyaan, coding, Discord, dashboard, embed, level, GitHub, DisCloud, atau teks. Pembuka wajib nyambung konteks dan tetap memanggil user dengan nak secara natural. Jangan semua jawaban diawali Iya nak.",
+      "replyOrder": [
+        "pahami konteks",
+        "jawab inti",
+        "beri langkah jelas",
+        "beri contoh bila perlu",
+        "beri next step singkat"
+      ],
+      "forbiddenStyle": [
+        "jawaban template yang sama berulang",
+        "terlalu banyak basa-basi",
+        "campur Sunda tanpa diminta",
+        "embed publik full Sunda",
+        "jawaban panjang tapi tidak menjawab inti"
+      ]
+    },
     "localCacheEnabled": true,
     "cacheTtlMs": 120000,
     "cacheMaxEntries": 80,
@@ -238,8 +270,8 @@
           "inline": false
         }
       ],
-      "thumbnail": "",
       "image": "",
+      "thumbnail": "",
       "dashboardGroup": "Level & Poin",
       "dashboardEditable": true,
       "previewMustMatchDiscord": true
@@ -253,25 +285,41 @@
       "content": "{user}",
       "authorName": "",
       "fields": [],
-      "thumbnail": "",
       "image": "",
+      "thumbnail": "",
       "dashboardGroup": "Level & Poin",
       "dashboardEditable": true,
       "previewMustMatchDiscord": true
     },
     "donatur": {
       "color": "#7DBD77",
-      "title": "💎 Akses Donatur Desa",
-      "description": "Halo {user}, ini menu khusus untuk role **Donatur DESA TULUS** 🤍\n\nStatus role kamu: **Aktif**\n{expiredText}\n\nTerima kasih sudah membantu menjaga DESA TULUS tetap hidup, rapi, dan nyaman untuk warga.",
+      "title": "💎 Donatur Desa Aktif",
+      "description": "Halo {user}, akses **Donatur Desa** kamu sedang aktif.\n\nStatus: **Aktif**\n{expiredText}\n\nTerima kasih sudah ikut menjaga **DESA TULUS** tetap hidup, rapi, dan nyaman.",
       "footer": "DESA TULUS • Donatur Desa",
-      "footerIcon": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
+      "footerIcon": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless",
+      "content": "🤍 {user} mendapat akses **Donatur Desa**.",
+      "authorName": "DESA TULUS • Donatur Desa",
+      "fields": [],
+      "image": "",
+      "thumbnail": "",
+      "dashboardGroup": "Embed Pak RW",
+      "dashboardEditable": true,
+      "previewMustMatchDiscord": true
     },
     "anonimPanel": {
       "color": "#7DBD77",
       "title": "☁️ Curhat Anonim ke Pak RW",
-      "description": "Ada hal yang ingin kamu ceritakan tanpa menampilkan identitas?\n\nKlik tombol **☁️ Curhat ke Pak RW** di bawah. Curhatan kamu dikirim anonim, lalu Pak RW akan membantu mendengarkan dengan sopan, aman, dan tidak menghakimi 🤍",
-      "footer": "DESA TULUS • Curhat Anonim Pak RW",
-      "footerIcon": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
+      "description": "Punya cerita yang ingin disampaikan tanpa menampilkan identitas?\n\nKlik tombol **Curhat ke Pak RW**. Curhatan akan diterima dengan sopan, aman, dan tidak menghakimi.",
+      "footer": "DESA TULUS • Curhat Anonim",
+      "footerIcon": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless",
+      "content": "",
+      "authorName": "DESA TULUS • Ruang Curhat",
+      "fields": [],
+      "image": "",
+      "thumbnail": "",
+      "dashboardGroup": "Embed Pak RW",
+      "dashboardEditable": true,
+      "previewMustMatchDiscord": true
     },
     "dashboard": {
       "brandTitle": "Pak RW v10.10.63",
@@ -346,30 +394,48 @@
     },
     "memberOfTheMonth": {
       "color": "#7DBD77",
-      "title": "🏆 MEMBER OF THE MONTH DESA TULUS",
-      "description": "{user} resmi menjadi **Member Of The Month** bulan ini.\n\n⭐ Total Poin Bulan Ini: **{total}** poin\n💬 Top Chat: **{chat}** poin\n🎙️ Top Voice: **{voice}** poin\n\nTerima kasih sudah aktif dan ikut menghidupkan server **{server}** 🤍",
+      "title": "🏆 Member Of The Month",
+      "description": "{user} resmi menjadi **Member Of The Month**.\n\nTotal poin bulan ini: **{total}**\nChat: **{chat}** • Voice: **{voice}**\n\nTerima kasih sudah ikut menghidupkan **{server}**.",
       "footer": "DESA TULUS • Member Of The Month",
-      "footerIcon": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
+      "footerIcon": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless",
+      "content": "🏆 Sambut warga terbaik bulan ini: {user}",
+      "authorName": "DESA TULUS • Member Of The Month",
+      "fields": [],
+      "image": "",
+      "thumbnail": "",
+      "dashboardGroup": "Embed Pak RW",
+      "dashboardEditable": true,
+      "previewMustMatchDiscord": true
     },
     "suggestionResult": {
       "color": "#7DBD77",
-      "title": "💡 Saran Warga DESA TULUS",
+      "title": "💡 Saran Warga",
       "description": "{user} mengirim saran:\n\n{content}",
       "footer": "DESA TULUS • Kotak Saran Pak RW",
       "image": "",
       "thumbnail": "avatar",
       "content": "",
-      "footerIcon": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
+      "footerIcon": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless",
+      "authorName": "DESA TULUS • Kotak Saran",
+      "fields": [],
+      "dashboardGroup": "Embed Pak RW",
+      "dashboardEditable": true,
+      "previewMustMatchDiscord": true
     },
     "curhatReply": {
       "color": "#7DBD77",
       "title": "☁️ Pak RW Mendengarkan Warga",
       "description": "{reply}",
-      "footer": "DESA TULUS • Curhat Warga Pak RW",
+      "footer": "DESA TULUS • Curhat Warga",
       "image": "",
       "thumbnail": "avatar",
       "content": "",
-      "footerIcon": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
+      "footerIcon": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless",
+      "authorName": "DESA TULUS • Pak RW Mendengarkan",
+      "fields": [],
+      "dashboardGroup": "Embed Pak RW",
+      "dashboardEditable": true,
+      "previewMustMatchDiscord": true
     },
     "topActiveBoard": {
       "color": "#7DBD77",
@@ -381,6 +447,7 @@
       "content": "",
       "footerIcon": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless",
       "authorName": "DESA TULUS • Papan peringkat warga aktif",
+      "fields": [],
       "dashboardGroup": "Leaderboard",
       "dashboardEditable": true,
       "previewMustMatchDiscord": true
@@ -391,9 +458,9 @@
       "authorIcon": "",
       "authorName": "DESA TULUS • Cari Mabar Warga",
       "authorUrl": "",
-      "title": "🎮 CARI MABAR WARGA DESA",
+      "title": "🎮 Cari Mabar Warga Desa",
       "titleUrl": "",
-      "description": "Ayo warga, tuliskan info mabar dengan jelas supaya warga lain mudah ikut.\n\n<a:Animated_Arrow_Bluelite:1512751559140839576> **Game:** {game}\n<a:Animated_Arrow_Bluelite:1512751559140839576> **Mode:** {mode}\n<a:Animated_Arrow_Bluelite:1512751559140839576> **Jumlah Slot:** {slot}\n<a:Animated_Arrow_Bluelite:1512751559140839576> **Waktu:** {time}\n<a:Animated_Arrow_Bluelite:1512751559140839576> **Catatan:** {note}",
+      "description": "Ayo warga, ikut mabar kalau cocok.\n\nGame: **{game}**\nMode: **{mode}**\nSlot: **{slot}**\nCatatan: {note}",
       "fields": [
         {
           "name": "📌 Cara Ikut",
@@ -411,7 +478,10 @@
       "footer": "DESA TULUS • Mabar Warga",
       "footerIcon": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless",
       "timestamp": true,
-      "destinationChannelId": "1504495053400441081"
+      "destinationChannelId": "1504495053400441081",
+      "dashboardGroup": "Embed Pak RW",
+      "dashboardEditable": true,
+      "previewMustMatchDiscord": true
     },
     "welcome": {
       "color": "#7DBD77",
@@ -566,12 +636,14 @@
     "motmAwardMode": "auto_cycle_100k",
     "autoMotmRole": true,
     "manualMotmDashboardEnabled": true,
-    "leaderboardActiveChannelId": "ISI_ID_CHANNEL_LEADERBOARD_AKTIF",
+    "leaderboardActiveChannelId": "",
     "leaderboardActiveTopLimit": 10,
     "leaderboardActiveTitleTemplate": "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU",
     "leaderboardActiveSubtitle": "Papan ini mencatat total poin warga dari awal bergabung sampai seterusnya. Data ini tidak di-reset meskipun siklus level kembali dari awal setelah 100.000 poin.",
     "leaderboardActiveFooter": "DESA TULUS • Leaderboard Aktif Warga",
     "leaderboardActiveImageUrl": "",
+    "dashboardEditable": true,
+    "imageUploadNote": "Jika ingin tampilan seperti contoh TOP 1/2/3, isi Image Board URL dari dashboard. Jika kosong, Pak RW tetap mengirim embed teks yang rapi.",
     "leaderboardActiveSetupNote": "Buat channel text khusus bernama 🏆│leaderboard-aktif, copy Channel ID, lalu isi leaderboardActiveChannelId di dashboard/config. Jangan digabung dengan channel Top Aktif bulanan.",
     "dashboardHelp": "Top Aktif Bulanan dipisah dari Papan Aktif Lifetime. Judul bulan otomatis mengikuti {month}."
   },
@@ -629,8 +701,8 @@
     "easyEditMode": true,
     "showFeatureFlow": true,
     "showAiStylePanel": true,
-    "releaseVersion": "10.10.76",
-    "releaseName": "Auto Level Role Terpusat",
+    "releaseVersion": "10.10.77",
+    "releaseName": "Data ID Server RWID",
     "premiumMode": true,
     "comfortMode": true,
     "quickActionMode": "manage_edit_preview_save_test_backup",
@@ -655,7 +727,7 @@
     "placeholderSelectionMode": "channel_role_user_server_bot_live_from_discord",
     "discordPickerMode": "live_api",
     "discordPickerAutoRefresh": true,
-    "uiVersion": "10.10.76",
+    "uiVersion": "10.10.77",
     "architecture": "react_vite_static_dashboard_only",
     "backgroundStyle": "2d-village-premium",
     "embedColorLocked": "#7DBD77",
@@ -934,7 +1006,8 @@
     "commandCenter": true,
     "permissionCenter": true,
     "logsHealth": true,
-    "backupCenter": true
+    "backupCenter": true,
+    "serverIdExporter": true
   },
   "dashboardRoleDisplay": {
     "enabled": true,
@@ -960,13 +1033,13 @@
   "owoAutoRole": {
     "enabled": true,
     "prefix": "w",
-    "playerRoleId": "ISI_ID_ROLE_OWO_PLAYER",
-    "squadRoleId": "ISI_ID_ROLE_OWO_SQUAD",
+    "playerRoleId": "1513798854108123266",
+    "squadRoleId": "1513799328173395968",
     "playerChannelIds": [
-      "ISI_ID_CHANNEL_OWO"
+      "1504495053614092329"
     ],
     "squadChannelIds": [
-      "ISI_ID_CHANNEL_SQUAD_OWO"
+      "1513799822417596508"
     ],
     "logToConsole": true,
     "sendNotice": false
@@ -1086,7 +1159,7 @@
       "Discord Manager"
     ]
   },
-  "version": "10.10.76",
+  "version": "10.10.77",
   "bigBot": {
     "releaseName": "Pak RW AI Natural + Welcome Mention v10.10.59"
   },
@@ -1242,7 +1315,7 @@
   },
   "papanAktif": {
     "enabled": true,
-    "channelId": "ISI_ID_CHANNEL_LEADERBOARD_AKTIF",
+    "channelId": "",
     "title": "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU",
     "description": "Papan ini mencatat total poin warga dari awal bergabung sampai seterusnya. Data ini tidak di-reset meskipun siklus level kembali dari awal setelah 100.000 poin.",
     "topLimit": 10,
@@ -1254,7 +1327,7 @@
   },
   "leaderboardAktif": {
     "enabled": true,
-    "channelId": "ISI_ID_CHANNEL_LEADERBOARD_AKTIF",
+    "channelId": "",
     "title": "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU",
     "description": "Papan ini mencatat total poin warga dari awal bergabung sampai seterusnya. Data ini tidak di-reset meskipun siklus level kembali dari awal setelah 100.000 poin.",
     "topLimit": 10,
@@ -1270,27 +1343,54 @@
   "levelSystem": {
     "enabled": true,
     "maxLevel": 1000,
-    "levelChannelId": "ID_CHANNEL_LEVEL",
+    "levelChannelId": "1511737744978743367",
     "autoLevelRole": true,
     "roles": {
-      "1": "ID_ROLE_WARGA_ANYAR",
-      "5": "ID_ROLE_WARGA_TETAP",
-      "10": "ID_ROLE_WARGA_AKTIF",
-      "20": "ID_ROLE_WARGA_TELADAN",
-      "30": "ID_ROLE_TOKOH_WARGA",
-      "50": "ID_ROLE_SESEPUH_DESA",
-      "100": "ID_ROLE_PENGGERAK_DESA",
-      "150": "ID_ROLE_TOKOH_DESA",
-      "200": "ID_ROLE_PEMUKA_DESA",
-      "300": "ID_ROLE_PANUTAN_DESA",
-      "400": "ID_ROLE_KEHORMATAN_DESA",
-      "500": "ID_ROLE_LEGENDA_DESA",
-      "750": "ID_ROLE_KEBANGGAAN_DESA",
-      "1000": "ID_ROLE_KARUHUN_DESA"
+      "1": "1516672180581175356",
+      "5": "1516672385812664371",
+      "10": "1516676547648426094",
+      "20": "1516672708967010355",
+      "30": "1516672886801436703",
+      "50": "1516673222568050829",
+      "100": "1516674802662899802",
+      "150": "1516675017151217694",
+      "200": "1516675200744161321",
+      "300": "1516675382953119845",
+      "400": "1516674202223120475",
+      "500": "1516675542382809218",
+      "750": "1516675824839819306",
+      "1000": "1516677132074614885"
     },
     "roleMode": "single_highest_tier",
     "syncBatchSize": 5,
     "syncDelayMs": 900,
     "note": "Satu role level aktif. Nama tingkatan dihitung dari angka level melalui level/levelRoleTiers.js."
+  },
+  "serverIdExporter": {
+    "enabled": true,
+    "channelId": "",
+    "channelName": "rw-id-server",
+    "cooldownSeconds": 15,
+    "allowOwner": true,
+    "allowAdministrator": true,
+    "allowManageGuild": true,
+    "includeServerId": true,
+    "includeCategories": true,
+    "includeTextChannels": true,
+    "includeVoiceChannels": true,
+    "includeAnnouncementChannels": true,
+    "includeForumChannels": true,
+    "includeMediaChannels": true,
+    "includeStageChannels": true,
+    "includeOtherChannels": true,
+    "includeRoles": true,
+    "includeManagedRoles": true,
+    "includeEveryoneRole": true,
+    "includeJsonFormat": true,
+    "includeKeyValueFormat": true,
+    "fileName": "",
+    "loadingMessage": "Pak RW sedang mendata seluruh channel, kategori, voice, dan role server...",
+    "successMessage": "Data ID server berhasil dibuat.",
+    "errorMessage": "Pak RW gagal membuat Data ID Server. Periksa izin bot, channel khusus, dan konfigurasi fitur."
   }
 }

@@ -1,10 +1,10 @@
 {
   "name": "pak-rw-desa-tulus",
-  "version": "10.10.76",
+  "version": "10.10.77",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "check": "node --check index.js && node --check ai/brain.js && node --check utils/cooldown.js && node --check db/mongoStore.js && node --check level/levelRoleTiers.js && node tests/levelRoleTiers.test.js",
+    "check": "node --check index.js && node --check services/serverIdExporter.js && node --check ai/brain.js && node --check utils/cooldown.js && node --check db/mongoStore.js && node --check level/levelRoleTiers.js && node tests/levelRoleTiers.test.js",
     "dashboard:build": "npm --prefix dashboard run build",
     "dashboard:dev": "npm --prefix dashboard run dev",
     "test:level-roles": "node tests/levelRoleTiers.test.js"
@@ -20,5 +20,5 @@
   "engines": {
     "node": ">=18"
   },
-  "description": "Pak RW DESA TULUS v10.10.76 - Auto Level Role terpusat, satu role tier aktif, max level 1000, sinkronisasi aman"
+  "description": "Pak RW DESA TULUS v10.10.77 - Data ID Server read-only melalui command rwid"
 }
