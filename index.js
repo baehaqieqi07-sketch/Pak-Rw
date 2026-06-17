@@ -36,6 +36,85 @@ const config = require("./config.json");
 const DESA_TULUS_EMBED_COLOR_HEX = "#7DBD77";
 const DESA_TULUS_EMBED_COLOR_INT = 0x7DBD77;
 
+
+// Activity Discord Pak RW berganti otomatis setiap 15 detik.
+// Satu interval saja dipakai agar reconnect / pemanggilan ulang tidak membuat rotasi ganda.
+const PAK_RW_ACTIVITY_ROTATION_MS = 15_000;
+const PAK_RW_ACTIVITIES = Object.freeze([
+  {
+    name: "🗣️ Wilujeung Sumping",
+    type: ActivityType.Playing
+  },
+  {
+    name: "🫂 Warga Desa Tulus",
+    type: ActivityType.Watching
+  },
+  {
+    name: "😏 Mau Di Temenin?",
+    type: ActivityType.Listening
+  },
+  {
+    name: "😏 Jadi 08 Berapa?",
+    type: ActivityType.Playing
+  },
+  {
+    name: "👀 Sedang Memantau",
+    type: ActivityType.Watching
+  }
+]);
+
+let pakRwActivityInterval = null;
+let pakRwActivityIndex = 0;
+
+function startPakRwActivityRotation(discordClient) {
+  if (!discordClient?.user || PAK_RW_ACTIVITIES.length === 0) return;
+
+  if (pakRwActivityInterval) {
+    clearInterval(pakRwActivityInterval);
+    pakRwActivityInterval = null;
+  }
+
+  // Setiap pemanggilan yang sah dimulai lagi dari status pertama.
+  pakRwActivityIndex = 0;
+
+  const updateActivity = () => {
+    if (!discordClient?.user) return;
+
+    const activity = PAK_RW_ACTIVITIES[
+      pakRwActivityIndex % PAK_RW_ACTIVITIES.length
+    ];
+
+    try {
+      discordClient.user.setPresence({
+        status: "online",
+        activities: [
+          {
+            name: activity.name,
+            type: activity.type
+          }
+        ]
+      });
+
+      pakRwActivityIndex =
+        (pakRwActivityIndex + 1) % PAK_RW_ACTIVITIES.length;
+    } catch (err) {
+      console.log("⚠️ Activity Pak RW gagal diperbarui:", err.message);
+    }
+  };
+
+  // Status pertama langsung tampil saat bot ready, tanpa menunggu 15 detik.
+  updateActivity();
+
+  pakRwActivityInterval = setInterval(
+    updateActivity,
+    PAK_RW_ACTIVITY_ROTATION_MS
+  );
+
+  console.log(
+    `🔄 Rotasi activity Pak RW aktif: ${PAK_RW_ACTIVITIES.length} status • setiap ${PAK_RW_ACTIVITY_ROTATION_MS / 1000} detik.`
+  );
+}
+
 let CanvasKit = null;
 try {
   CanvasKit = require("@napi-rs/canvas");
@@ -193,8 +272,6 @@ function writeConfigFile(data) {
   console.log(`✅ Dashboard config saved + live reloaded: ${configPath}`);
 }
 
-syncLiveConfig(readConfigFile());
-
 function escapeHtml(input = "") {
   return String(input)
     .replaceAll("&", "&amp;")
@@ -232,6 +309,9 @@ function normalizePakRwEmojiCodes(text = "") {
   }
   return output;
 }
+
+// Muat config setelah tabel normalisasi emoji siap agar tidak terkena temporal dead zone.
+syncLiveConfig(readConfigFile());
 
 function makeOTFooter(text = "") {
   const raw = String(text || "").trim();
@@ -16901,13 +16981,7 @@ client.once(Events.ClientReady, async () => {
 
 
 
-  client.user.setPresence({
-    activities: [{
-      name: config.activityText || "DESA TULUS 🤍",
-      type: ActivityType.Watching
-    }],
-    status: "online"
-  });
+  startPakRwActivityRotation(client);
 
 
   for (const guild of client.guilds.cache.values()) {

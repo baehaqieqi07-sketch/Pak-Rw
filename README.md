@@ -115,3 +115,9 @@ Dashboard difinishing ulang untuk mengunci simetri layout, merapikan modal picke
 - Tulisan “Semua perubahan tersimpan” dihapus agar UI tidak ramai.
 - Tombol Batal dan Simpan muncul otomatis setelah user mengubah setting.
 - Channel Manager, Role Manager, Settings, Banner Manager, dan Manage Page memakai alur simpan yang sama.
+
+## v10.10.74 — Activity Discord Otomatis
+
+Pak RW sekarang memakai lima activity Discord yang berganti otomatis setiap 15 detik. Status pertama langsung tampil setelah bot ready, status utama selalu `online`, dan sistem mencegah interval ganda.
+
+Daftar activity dan petunjuk perubahan ada di `UPDATE_FINAL_v10.10.74.md`.
