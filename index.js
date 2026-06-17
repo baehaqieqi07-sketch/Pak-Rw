@@ -32,6 +32,14 @@ const {
 } = require("discord.js");
 
 const config = require("./config.json");
+const {
+  MAX_LEVEL: PAK_RW_MAX_LEVEL,
+  LEVEL_ROLE_TIER_DEFINITIONS,
+  getLevelSystemConfig,
+  getLevelRoleTiers,
+  getLevelTier,
+  getConfiguredLevelRoleIds
+} = require("./level/levelRoleTiers");
 
 const DESA_TULUS_EMBED_COLOR_HEX = "#7DBD77";
 const DESA_TULUS_EMBED_COLOR_INT = 0x7DBD77;
@@ -10066,8 +10074,8 @@ function renderCommands() {
 
 
 /* ===================== PAK RW FULL PREMIUM DASHBOARD REBUILD v10.10.63 ===================== */
-const PAKRW_DASHBOARD_RELEASE = "10.10.63";
-const PAKRW_DASHBOARD_RELEASE_NAME = "Live Discord Channel & Role Picker";
+const PAKRW_DASHBOARD_RELEASE = "10.10.76";
+const PAKRW_DASHBOARD_RELEASE_NAME = "Auto Level Role Terpusat";
 
 const PAKRW_PLACEHOLDER_GROUPS = [
   ["User", ["{user}", "{userId}", "{username}", "{displayName}", "{avatar}", "{joinedAt}"]],
@@ -11098,7 +11106,7 @@ const pakRwDashboardAllowedRoots = new Set([
   "anonymousCurhatChannelId", "suggestionChannelId", "chatWargaChannelId", "levelChannelId",
   "cekPoinChannelId", "ticketChannelId", "rulesChannelId", "eventChannelId", "infoChannelId",
   "logChannelId", "donaturRoleId", "level100RoleId", "welcome", "ai", "curhat", "anonymousCurhat",
-  "suggestion", "level", "topActive", "leaderboardAktif", "papanAktif", "boostPoin", "mabar",
+  "suggestion", "level", "levelSystem", "topActive", "leaderboardAktif", "papanAktif", "boostPoin", "mabar",
   "juragan", "donatur", "features", "commandPermissions", "embeds", "dashboard", "panels", "mentions",
   "mentionPlaceholders", "placeholderLibrary", "texts"
 ]);
@@ -11214,7 +11222,7 @@ app.get("/api/dashboard/bootstrap", requireDashboardAuth, (req, res) => {
       dashboardEnabled: isDashboardEnabled,
       activeFeatureCount: featureCount.active,
       totalFeatureCount: featureCount.total,
-      version: String(cfg.version || "10.10.67"),
+      version: String(cfg.version || "10.10.76"),
       prefix: String(cfg.prefix || "rw"),
       environment: String(process.env.NODE_ENV || "development")
     },
@@ -11222,6 +11230,7 @@ app.get("/api/dashboard/bootstrap", requireDashboardAuth, (req, res) => {
     config: cfg,
     embeds: cfg.embeds || {},
     features: cfg.features || {},
+    levelRoleTiers: getPakRwLevelRoleTiers(),
     activity: readDashboardActivity(40)
   });
 });
@@ -11231,14 +11240,19 @@ app.put("/api/dashboard/settings", requireDashboardAuth, (req, res) => {
     const patches = Array.isArray(req.body?.patches) ? req.body.patches.slice(0, 80) : [];
     if (!patches.length) return res.status(400).json({ ok: false, error: "Tidak ada perubahan yang dikirim." });
     const cfg = readConfigFile();
+    const levelRoleConfigChanged = patches.some((patch) => String(patch?.path || "").startsWith("levelSystem.roles.") || ["levelSystem.autoLevelRole", "levelSystem.enabled", "levelSystem.levelChannelId"].includes(String(patch?.path || "")));
     for (const patch of patches) {
       const pathText = String(patch?.path || "");
       if (!isSafeDashboardPath(pathText)) return res.status(400).json({ ok: false, error: `Path config tidak diizinkan: ${pathText}` });
       setDashboardPath(cfg, pathText, patch.value);
     }
-    cfg.version = "10.10.67";
+    cfg.version = "10.10.76";
     writeConfigFile(cfg);
     appendDashboardActivity("settings", "Setting dashboard disimpan", `${patches.length} field diperbarui melalui adapter aman.`);
+    if (levelRoleConfigChanged) {
+      const guild = getDashboardGuild ? getDashboardGuild() : client.guilds.cache.first();
+      if (guild) scheduleLevelRoleSyncAfterConfigChange(guild);
+    }
     return res.json({ ok: true, config: cfg });
   } catch (err) {
     return res.status(500).json({ ok: false, error: err.message || String(err) });
@@ -11252,7 +11266,7 @@ app.put("/api/dashboard/embed/:key", requireDashboardAuth, (req, res) => {
     const cfg = readConfigFile();
     cfg.embeds = cfg.embeds || {};
     cfg.embeds[key] = mergeDashboardEmbed(cfg.embeds[key] || {}, req.body?.embed || {});
-    cfg.version = "10.10.67";
+    cfg.version = "10.10.76";
     writeConfigFile(cfg);
     appendDashboardActivity("embed", "Template embed disimpan", `Template ${key} diperbarui dari Embed Builder.`);
     return res.json({ ok: true, embed: cfg.embeds[key] });
@@ -13499,22 +13513,13 @@ async function removeDonaturRole(targetMember, channel) {
 
 const levelFile = resolvePersistentDataFile("level.json");
 const levelCooldown = new Map();
+const levelMessageFingerprints = new Map();
 const voiceSessions = new Map();
 const topActiveDailyPostMemory = new Map();
 const topPoinPostStateFile = resolvePersistentDataFile("top-poin-post-state.json");
 const boostPoinStateFile = resolvePersistentDataFile("boost-poin-events.json");
 const TOP_POIN_AUTO_WINDOW_MINUTES = 10;
 
-const LEVEL_ROLES = [
-  { level: 1, name: "Warga Baru", minPoints: 0 },
-  { level: 5, name: "Warga Magang", minPoints: 2000 },
-  { level: 10, name: "Warga Aktif", minPoints: 4500 },
-  { level: 20, name: "Warga Loyal", minPoints: 9500 },
-  { level: 35, name: "Warga Senior", minPoints: 17000 },
-  { level: 50, name: "Warga Elite", minPoints: 24500 },
-  { level: 75, name: "Warga Tulus", minPoints: 37000 },
-  { level: 100, name: "Sesepuh Tulus", minPoints: 49500 }
-];
 
 function getLevelTuningConfig() {
   const levelCfg = config.level || {};
@@ -13526,7 +13531,7 @@ function getLevelTuningConfig() {
     pointsPerLevel: Math.max(1, Number(levelCfg.pointsPerLevel || 500)),
     chatPointsPerLevel: Math.max(1, Number(levelCfg.chatPointsPerLevel || levelCfg.pointsPerLevel || 500)),
     voicePointsPerLevel: Math.max(1, Number(levelCfg.voicePointsPerLevel || levelCfg.pointsPerLevel || 500)),
-    maxLevel: Math.max(1, Math.min(1000, Number(levelCfg.maxLevel || 100)))
+    maxLevel: PAK_RW_MAX_LEVEL
   };
 }
 
@@ -13542,11 +13547,7 @@ function getTotalPointsForLevel(userData = {}) {
 }
 
 function getLevelNameByLevel(level = 1) {
-  let current = LEVEL_ROLES[0];
-  for (const item of LEVEL_ROLES) {
-    if (Number(level || 1) >= item.level) current = item;
-  }
-  return current.name;
+  return getLevelTier(level, config).name;
 }
 
 function ensureLevelFile() {
@@ -13605,6 +13606,7 @@ function getLevelUser(data, guildId, userId) {
     u.lifetimeTotal = currentTotal;
   }
   u.activeCycleCount = Number(u.activeCycleCount || 0);
+  u.level = Math.max(1, Math.min(PAK_RW_MAX_LEVEL, Number(u.level || 1)));
   return u;
 }
 
@@ -13694,7 +13696,7 @@ function formatNumber(num) {
 async function getOrCreateLevelChannel(guild) {
   if (!guild) return null;
 
-  const levelChannel = getTextChannel(guild, config.levelChannelId);
+  const levelChannel = getTextChannel(guild, getPakRwLevelSystemConfig().levelChannelId);
 
   if (!levelChannel) {
     console.log("LEVEL CHANNEL ERROR: levelChannelId belum diisi, salah, atau bot tidak bisa akses channel.");
@@ -13786,7 +13788,8 @@ function removeOwnerLevelData(guild) {
     return false;
   }
 }
-function syncAllLevelsWithPoints(guild) {
+async function syncAllLevelsWithPoints(guild) {
+  if (guild?.id) createLevelRoleBackup(guild.id);
   const data = readLevelData();
   let changed = 0;
   for (const userData of Object.values(data.users || {})) {
@@ -13799,9 +13802,310 @@ function syncAllLevelsWithPoints(guild) {
     }
   }
   if (changed > 0) writeLevelData(data);
-  return { changed, total: Object.values(data.users || {}).filter((u) => !guild?.id || u.guildId === guild.id).length };
+  const roleSync = guild ? await syncAllMemberLevelRoles(guild, { batchSize: 5, delayMs: 900 }) : null;
+  return {
+    changed,
+    total: Object.values(data.users || {}).filter((u) => !guild?.id || u.guildId === guild.id).length,
+    roleSync
+  };
 }
 
+
+function getPakRwLevelRoleTier(level = 1) {
+  return getLevelTier(level, config);
+}
+
+function getPakRwLevelRoleTiers() {
+  return getLevelRoleTiers(config);
+}
+
+function getPakRwLevelSystemConfig() {
+  return getLevelSystemConfig(config);
+}
+
+function getLevelRoleMention(level = 1) {
+  const tier = getPakRwLevelRoleTier(level);
+  return tier?.roleId ? `<@&${tier.roleId}>` : "Belum dikonfigurasi";
+}
+
+function getMemberConfiguredLevelRoleIds(member) {
+  if (!member?.roles?.cache) return [];
+  const configured = new Set(getConfiguredLevelRoleIds(config));
+  return [...member.roles.cache.keys()].filter((roleId) => configured.has(roleId));
+}
+
+function getLevelRoleSyncStatus(member, level) {
+  const tier = getPakRwLevelRoleTier(level);
+  const currentRoleIds = getMemberConfiguredLevelRoleIds(member);
+  const correct = Boolean(tier?.roleId)
+    && currentRoleIds.length === 1
+    && currentRoleIds[0] === tier.roleId;
+  return { tier, currentRoleIds, correct };
+}
+
+async function syncMemberLevelRole(member, level, options = {}) {
+  const system = getPakRwLevelSystemConfig();
+  const safeLevel = Math.max(1, Math.min(PAK_RW_MAX_LEVEL, Number(level) || 1));
+  const tier = getPakRwLevelRoleTier(safeLevel);
+
+  if (!system.enabled) {
+    return { success: false, skipped: true, reason: "LEVEL_SYSTEM_DISABLED", tier };
+  }
+  if (!system.autoLevelRole) {
+    return { success: false, skipped: true, reason: "AUTO_LEVEL_ROLE_DISABLED", tier };
+  }
+  if (!member?.guild || !member?.roles?.cache || member.user?.bot) {
+    return { success: false, skipped: true, reason: "INVALID_MEMBER", tier };
+  }
+  if (!tier?.roleId) {
+    if (!options.silent) console.log(`[LEVEL ROLE] ${tier?.name || "Tier"} belum memiliki Role ID.`);
+    return { success: false, reason: "ROLE_TIER_NOT_CONFIGURED", tier };
+  }
+
+  const guild = member.guild;
+  const botMember = guild.members.me || await guild.members.fetchMe().catch(() => null);
+  const targetRole = guild.roles.cache.get(tier.roleId) || await guild.roles.fetch(tier.roleId).catch(() => null);
+  if (!targetRole) {
+    console.log(`[LEVEL ROLE] ERROR: Role ${tier.name} (${tier.roleId}) tidak ditemukan.`);
+    return { success: false, reason: "ROLE_NOT_FOUND", tier };
+  }
+  if (targetRole.managed) {
+    console.log(`[LEVEL ROLE] ERROR: Role ${tier.name} dikelola integrasi dan tidak dapat diberikan manual.`);
+    return { success: false, reason: "ROLE_MANAGED", tier };
+  }
+  if (!botMember?.permissions?.has(PermissionsBitField.Flags.ManageRoles)) {
+    console.log("[LEVEL ROLE] ERROR: Pak RW tidak memiliki permission Manage Roles.");
+    return { success: false, reason: "MISSING_MANAGE_ROLES", tier };
+  }
+  if (botMember.roles.highest.comparePositionTo(targetRole) <= 0) {
+    console.log(`[LEVEL ROLE] ERROR: Role ${tier.name} berada setara/di atas role Pak RW.`);
+    return { success: false, reason: "ROLE_HIERARCHY", tier };
+  }
+  if (member.id === guild.ownerId || botMember.roles.highest.comparePositionTo(member.roles.highest) <= 0) {
+    console.log(`[LEVEL ROLE] ERROR: Pak RW tidak dapat mengelola role member ${member.user.tag} karena hierarchy member.`);
+    return { success: false, reason: "MEMBER_HIERARCHY", tier };
+  }
+
+  const configuredRoleIds = getConfiguredLevelRoleIds(config);
+  const oldRoleIds = configuredRoleIds.filter((roleId) => roleId !== tier.roleId && member.roles.cache.has(roleId));
+  const reason = `Sinkronisasi role level Pak RW: Level ${safeLevel} • ${tier.name}`;
+
+  try {
+    if (oldRoleIds.length) await member.roles.remove(oldRoleIds, reason);
+    if (!member.roles.cache.has(tier.roleId)) await member.roles.add(tier.roleId, reason);
+    if (!options.silent) {
+      console.log(`[LEVEL ROLE] ${member.user.tag} → ${tier.name} (Level ${safeLevel}).`);
+    }
+    return { success: true, tier, removedRoleIds: oldRoleIds };
+  } catch (error) {
+    console.error("[LEVEL ROLE] Gagal sinkronisasi role:", {
+      guildId: guild.id,
+      userId: member.id,
+      level: safeLevel,
+      tier: tier.name,
+      error: error?.message || error
+    });
+    return { success: false, reason: "ROLE_UPDATE_FAILED", error, tier };
+  }
+}
+
+function createLevelRoleBackup(guildId = "all") {
+  const data = readLevelData();
+  const backupDir = path.join(__dirname, "backups");
+  fs.mkdirSync(backupDir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const filename = path.join(backupDir, `level-role-before-sync-${guildId}-${stamp}.json`);
+  fs.writeFileSync(filename, JSON.stringify({ createdAt: new Date().toISOString(), guildId, data }, null, 2));
+  return filename;
+}
+
+function waitLevelRoleBatch(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function syncAllMemberLevelRoles(guild, options = {}) {
+  const batchSize = Math.max(1, Math.min(10, Number(options.batchSize || 5)));
+  const delayMs = Math.max(250, Math.min(5000, Number(options.delayMs || 900)));
+  const data = readLevelData();
+  const users = Object.values(data.users || {}).filter((item) => item.guildId === guild.id);
+  const result = { total: users.length, synced: 0, skipped: 0, failed: 0, missingMembers: 0 };
+
+  for (let index = 0; index < users.length; index += batchSize) {
+    const batch = users.slice(index, index + batchSize);
+    for (const userData of batch) {
+      if (shouldExcludeOwnerFromLevel(guild, userData.userId)) {
+        result.skipped += 1;
+        continue;
+      }
+      const member = guild.members.cache.get(userData.userId)
+        || await guild.members.fetch(userData.userId).catch(() => null);
+      if (!member) {
+        result.missingMembers += 1;
+        continue;
+      }
+      const level = getLevelInfo(userData).current.level;
+      const sync = await syncMemberLevelRole(member, level, { silent: true });
+      if (sync.success) result.synced += 1;
+      else if (sync.skipped) result.skipped += 1;
+      else result.failed += 1;
+    }
+    if (index + batchSize < users.length) await waitLevelRoleBatch(delayMs);
+  }
+
+  return result;
+}
+
+let levelRoleConfigSyncTimer = null;
+
+function scheduleLevelRoleSyncAfterConfigChange(guild) {
+  if (!guild || !getPakRwLevelSystemConfig().enabled || !getPakRwLevelSystemConfig().autoLevelRole) return;
+  if (levelRoleConfigSyncTimer) clearTimeout(levelRoleConfigSyncTimer);
+  levelRoleConfigSyncTimer = setTimeout(async () => {
+    levelRoleConfigSyncTimer = null;
+    const configuredCount = getConfiguredLevelRoleIds(config).length;
+    if (configuredCount !== LEVEL_ROLE_TIER_DEFINITIONS.length) {
+      console.log(`[LEVEL ROLE] Sinkronisasi otomatis ditunda: baru ${configuredCount}/${LEVEL_ROLE_TIER_DEFINITIONS.length} role tier terisi.`);
+      return;
+    }
+    try {
+      createLevelRoleBackup(guild.id);
+      const result = await syncAllMemberLevelRoles(guild, { batchSize: 5, delayMs: 900 });
+      console.log(`[LEVEL ROLE] Sinkronisasi setelah perubahan config selesai: ${result.synced} berhasil, ${result.failed} gagal.`);
+      appendDashboardActivity("level-role", "Role level disinkronkan", `${result.synced} warga berhasil, ${result.failed} gagal.`);
+    } catch (error) {
+      console.log("[LEVEL ROLE] Sinkronisasi setelah config gagal:", error?.message || error);
+    }
+  }, 2000);
+  if (typeof levelRoleConfigSyncTimer.unref === "function") levelRoleConfigSyncTimer.unref();
+}
+
+async function validateLevelRoleSetup(guild) {
+  const system = getPakRwLevelSystemConfig();
+  if (!guild || !system.enabled) return;
+  const botMember = guild.members.me || await guild.members.fetchMe().catch(() => null);
+  const canManageRoles = Boolean(botMember?.permissions?.has(PermissionsBitField.Flags.ManageRoles));
+  console.log(`[LEVEL ROLE] Auto role: ${system.autoLevelRole ? "aktif" : "nonaktif"} • Max Level ${PAK_RW_MAX_LEVEL}.`);
+  console.log(`[LEVEL ROLE] Permission Manage Roles: ${canManageRoles ? "OK" : "TIDAK ADA"}.`);
+
+  for (const tier of getPakRwLevelRoleTiers()) {
+    if (!tier.roleId) {
+      console.log(`[LEVEL ROLE] BELUM DIATUR: ${tier.name} (Level ${tier.level}).`);
+      continue;
+    }
+    const role = guild.roles.cache.get(tier.roleId) || await guild.roles.fetch(tier.roleId).catch(() => null);
+    if (!role) {
+      console.log(`[LEVEL ROLE] ERROR: Role ${tier.name} (${tier.roleId}) tidak ditemukan.`);
+      continue;
+    }
+    if (botMember && botMember.roles.highest.comparePositionTo(role) <= 0) {
+      console.log(`[LEVEL ROLE] ERROR: Role ${tier.name} berada di atas role Pak RW.`);
+    } else {
+      console.log(`[LEVEL ROLE] Role ${tier.name} ditemukan.`);
+    }
+  }
+
+  const levelChannel = getTextChannel(guild, system.levelChannelId);
+  if (!levelChannel) {
+    console.log("[LEVEL CHANNEL] Channel level belum ditemukan atau belum dikonfigurasi.");
+  } else {
+    const permissions = levelChannel.permissionsFor(botMember);
+    const canSend = Boolean(permissions?.has([
+      PermissionsBitField.Flags.ViewChannel,
+      PermissionsBitField.Flags.SendMessages,
+      PermissionsBitField.Flags.EmbedLinks,
+      PermissionsBitField.Flags.ReadMessageHistory
+    ]));
+    console.log(`[LEVEL CHANNEL] Channel level ditemukan: #${levelChannel.name} • izin ${canSend ? "OK" : "BELUM LENGKAP"}.`);
+  }
+}
+
+function getServerLevelRank(guildId, userId) {
+  const data = readLevelData();
+  const rows = Object.values(data.users || {})
+    .filter((entry) => entry.guildId === guildId)
+    .map((entry) => ({ entry, info: getLevelInfo(entry), total: getTotalPointsForLevel(entry) }))
+    .sort((a, b) => b.info.current.level - a.info.current.level || b.total - a.total);
+  const index = rows.findIndex((row) => row.entry.userId === userId);
+  return index >= 0 ? index + 1 : null;
+}
+
+async function handlePakRwLevelRoleCommand(message) {
+  if (!message?.guild || !message?.author || message.author.bot) return false;
+  const content = String(message.content || "").trim();
+  const prefix = String(config.prefix || "rw");
+  const lower = content.toLowerCase();
+  const aliases = {
+    mass: ["paksynclevelroles", `${prefix}synclevelroles`, `${prefix}paksynclevelroles`],
+    check: ["pakceklevelrole", `${prefix}ceklevelrole`, `${prefix}pakceklevelrole`],
+    one: ["paksynclevelrole", `${prefix}synclevelrole`, `${prefix}paksynclevelrole`]
+  };
+  const commandType = Object.entries(aliases).find(([, names]) => names.some((name) => lower === name || lower.startsWith(`${name} `)))?.[0];
+  if (!commandType) return false;
+  if (!isPakRwOwner(message) && !isPakRwStaff(message)) {
+    await safeReply(message, "❌ Command sinkronisasi role level hanya untuk owner/staff yang diizinkan.");
+    return true;
+  }
+  if (commandType === "mass" && !isPakRwOwner(message)) {
+    await safeReply(message, "❌ Sinkronisasi seluruh server hanya dapat dijalankan owner.");
+    return true;
+  }
+
+  if (commandType === "mass") {
+    const backupFile = createLevelRoleBackup(message.guild.id);
+    await safeReply(message, "⏳ Backup selesai. Sinkronisasi role level seluruh warga dimulai bertahap agar aman dari rate limit.");
+    const result = await syncAllMemberLevelRoles(message.guild, { batchSize: 5, delayMs: 900 });
+    await safeSend(message.channel, {
+      embeds: [new EmbedBuilder()
+        .setColor(DESA_TULUS_EMBED_COLOR_INT)
+        .setTitle("Sinkronisasi Role Level Selesai")
+        .setDescription([
+          `Data diperiksa: **${formatNumber(result.total)} warga**`,
+          `Berhasil disinkronkan: **${formatNumber(result.synced)}**`,
+          `Dilewati: **${formatNumber(result.skipped)}**`,
+          `Member tidak ada di server: **${formatNumber(result.missingMembers)}**`,
+          `Gagal: **${formatNumber(result.failed)}**`,
+          "",
+          `Backup lokal: \`${path.basename(backupFile)}\``
+        ].join("\n"))
+        .setFooter({ text: makeOTFooter("DESA TULUS • Auto Level Role") })
+        .setTimestamp()]
+    });
+    return true;
+  }
+
+  const target = message.mentions.members.first() || message.member;
+  const data = readLevelData();
+  const userData = getLevelUser(data, message.guild.id, target.id);
+  const info = getLevelInfo(userData);
+  const status = getLevelRoleSyncStatus(target, info.current.level);
+  const expectedRole = status.tier.roleId ? `<@&${status.tier.roleId}>` : "Belum dikonfigurasi";
+  const currentRoles = status.currentRoleIds.length ? status.currentRoleIds.map((id) => `<@&${id}>`).join(", ") : "Tidak ada";
+
+  if (commandType === "one") {
+    const sync = await syncMemberLevelRole(target, info.current.level);
+    await safeReply(message, sync.success
+      ? `✅ Role level ${target} sudah disinkronkan menjadi **${status.tier.name}** tanpa mengubah EXP atau level.`
+      : `❌ Sinkronisasi gagal: **${sync.reason || "UNKNOWN"}**. Cek log Pak RW dan posisi role.`);
+    return true;
+  }
+
+  await safeReply(message, {
+    embeds: [new EmbedBuilder()
+      .setColor(DESA_TULUS_EMBED_COLOR_INT)
+      .setTitle("Pemeriksaan Role Level Warga")
+      .setDescription(`${target}`)
+      .addFields(
+        { name: "Level tersimpan", value: String(info.current.level), inline: true },
+        { name: "Tingkatan seharusnya", value: status.tier.name, inline: true },
+        { name: "Status", value: status.correct ? "Sesuai" : "Belum sesuai", inline: true },
+        { name: "Role seharusnya", value: expectedRole, inline: false },
+        { name: "Role level saat ini", value: currentRoles, inline: false }
+      )
+      .setFooter({ text: makeOTFooter("DESA TULUS • Pemeriksaan Auto Level Role") })
+      .setTimestamp()]
+  });
+  return true;
+}
 
 function memberHasRole(member, roleId) {
   return Boolean(member && isFilledId(roleId) && member.roles?.cache?.has(roleId));
@@ -14398,6 +14702,10 @@ async function getCekPoinChannel(guild) {
 }
 
 async function sendLevelProfileMessage(message, target, userData) {
+  if (!getPakRwLevelSystemConfig().enabled) {
+    await safeReply(message, "ℹ️ Sistem level Pak RW sedang dinonaktifkan oleh owner.");
+    return false;
+  }
   const channel = await getCekPoinChannel(message.guild);
   const payload = {
     content: `${target}`,
@@ -14415,6 +14723,10 @@ async function sendLevelProfileMessage(message, target, userData) {
 }
 
 async function sendLevelProfileInteraction(interaction, target, userData) {
+  if (!getPakRwLevelSystemConfig().enabled) {
+    await interaction.reply({ content: "ℹ️ Sistem level Pak RW sedang dinonaktifkan oleh owner.", flags: 64 });
+    return false;
+  }
   const channel = await getCekPoinChannel(interaction.guild);
   const payload = {
     content: `${target}`,
@@ -14432,13 +14744,18 @@ async function sendLevelProfileInteraction(interaction, target, userData) {
 }
 
 function getLevelBadge(level) {
-  if (level >= 100) return "👑";
-  if (level >= 75) return "💎";
-  if (level >= 50) return "🔥";
-  if (level >= 35) return "⚡";
-  if (level >= 20) return "🌟";
-  if (level >= 10) return "🚀";
-  if (level >= 5) return "✨";
+  const safeLevel = Math.max(1, Math.min(PAK_RW_MAX_LEVEL, Number(level) || 1));
+  if (safeLevel >= 1000) return "👑";
+  if (safeLevel >= 750) return "🏆";
+  if (safeLevel >= 500) return "💎";
+  if (safeLevel >= 300) return "⭐";
+  if (safeLevel >= 150) return "⚜️";
+  if (safeLevel >= 100) return "🛡️";
+  if (safeLevel >= 50) return "🔥";
+  if (safeLevel >= 30) return "⚡";
+  if (safeLevel >= 20) return "🌟";
+  if (safeLevel >= 10) return "🚀";
+  if (safeLevel >= 5) return "✨";
   return "🌱";
 }
 
@@ -14463,7 +14780,9 @@ function buildLevelUpEmbed(member, userData) {
     voice: formatNumber(voiceInfo.points),
     nextLevel: next?.level || info.current.level,
     nextRank: next?.name || info.current.name,
-    remainingPoints: formatNumber(remaining)
+    remainingPoints: formatNumber(remaining),
+    role: getLevelRoleMention(info.current.level),
+    levelRole: getLevelRoleMention(info.current.level)
   };
 
   const fieldName = next
@@ -14477,7 +14796,11 @@ function buildLevelUpEmbed(member, userData) {
     .setColor(DESA_TULUS_EMBED_COLOR_INT)
     .setTitle(normalizePakRwEmojiCodes(applyTemplate(e.title || "<a:rocket_animated:1512884173453529288> Warga Naik Level", data)))
     .setDescription(applyTemplate(e.description || "{user} naik menjadi **{rank} — Level {level}**.\n\nTotal poin aktif: **{total} poin**. Tetap rukun dan aktif di desa.", data))
-    .addFields({ name: normalizePakRwEmojiCodes(fieldName), value: normalizePakRwEmojiCodes(fieldValue), inline: false })
+    .addFields(
+      { name: "Tingkatan", value: info.current.name, inline: true },
+      { name: "Role Level", value: getLevelRoleMention(info.current.level), inline: true },
+      { name: normalizePakRwEmojiCodes(fieldName), value: normalizePakRwEmojiCodes(fieldValue), inline: false }
+    )
     .setFooter({ text: makeOTFooter(applyTemplate(e.footer || "DESA TULUS • Level Warga", data)), iconURL: e.footerIcon || OT_FOOTER_ICON_URL })
     .setTimestamp();
 
@@ -14490,6 +14813,7 @@ function buildLevelProfileEmbed(member, userData) {
   const chatInfo = getCategoryLevelInfo(userData, "chat");
   const voiceInfo = getCategoryLevelInfo(userData, "voice");
   const e = embedCfg("levelProfile");
+  const serverRank = getServerLevelRank(member.guild.id, member.id);
   const data = {
     user: `${member}`,
     username: member.user.username,
@@ -14513,6 +14837,8 @@ function buildLevelProfileEmbed(member, userData) {
       buildCekPoinSection("Voice", "🎙️", voiceInfo),
       "",
       `⭐ **Total Level:** ${info.current.name} (Lvl. ${info.current.level})`,
+      `🏷️ **Role Level:** ${getLevelRoleMention(info.current.level)}`,
+      `🏆 **Peringkat Server:** ${serverRank ? `#${serverRank}` : "Belum ada"}`,
       `Total Poin: **${formatNumber(total)}**`
     ].join("\n"))
     .setFooter({ text: makeOTFooter(applyTemplate(e.footer || "DESA TULUS • Cek Poin", data)), iconURL: e.footerIcon || OT_FOOTER_ICON_URL })
@@ -16152,6 +16478,7 @@ function renderMotmSvg(query = {}) {
 
 
 async function grantLevel100Role(member, userData) {
+  if (getPakRwLevelSystemConfig().autoLevelRole) return false;
   if (!member || !member.guild || !isFilledId(config.level100RoleId)) return false;
 
   const role = member.guild.roles.cache.get(config.level100RoleId);
@@ -16179,6 +16506,7 @@ async function grantLevel100Role(member, userData) {
 
 async function removeExpiredLevel100Roles(guild) {
   try {
+    if (getPakRwLevelSystemConfig().autoLevelRole) return;
     if (!guild || !isFilledId(config.level100RoleId)) return;
 
     const role = guild.roles.cache.get(config.level100RoleId);
@@ -16232,6 +16560,7 @@ async function sendLevelUp(member, userData, fallbackChannel) {
 async function addLevelPoints(member, type, amount, fallbackChannel, sourceChannelId = "") {
   if (!member || member.user.bot || !member.guild) return;
   if (shouldExcludeOwnerFromLevel(member.guild, member.id)) return;
+  if (!getPakRwLevelSystemConfig().enabled) return;
 
   const data = readLevelData();
   const userData = getLevelUser(data, member.guild.id, member.id);
@@ -16276,13 +16605,17 @@ async function addLevelPoints(member, type, amount, fallbackChannel, sourceChann
   const afterInfo = getLevelInfo(userData);
   userData.level = afterInfo.current.level;
 
-  if (!cycleReset && afterInfo.current.level >= 100 && before < 100) {
+  if (!getPakRwLevelSystemConfig().autoLevelRole && !cycleReset && afterInfo.current.level >= 100 && before < 100) {
     await grantLevel100Role(member, userData);
   }
 
   if (!cycleReset) await checkMemberOfTheMonthReward(member, userData);
 
   writeLevelData(data);
+
+  if (afterInfo.current.level !== before || cycleReset) {
+    await syncMemberLevelRole(member, afterInfo.current.level, { silent: Boolean(cycleReset) });
+  }
 
   if (!cycleReset && afterInfo.current.level > before) {
     await sendLevelUp(member, userData, fallbackChannel);
@@ -16315,22 +16648,34 @@ function normalizeLevelPointAmount(amount) {
 }
 
 async function handleChatLevel(message) {
-  if (!message.guild || message.author.bot) return;
+  if (!message.guild || message.author.bot || message.webhookId) return;
   if (!message.member) return;
+  if (!getPakRwLevelSystemConfig().enabled) return;
   if (shouldExcludeOwnerFromLevel(message.guild, message.author.id)) return;
+
+  const levelCfg = config.level || {};
+  const blockedUsers = new Set((levelCfg.blockedUserIds || []).map(String));
+  const excludedChannels = new Set((levelCfg.excludedChannelIds || []).map(String));
+  if (blockedUsers.has(message.author.id) || excludedChannels.has(message.channel.id)) return;
 
   const prefix = config.prefix || "!";
   const content = String(message.content || "");
-  if (!content.trim()) return;
+  const normalizedContent = content.trim().replace(/\s+/g, " ").toLowerCase();
+  if (!normalizedContent) return;
   if (content.startsWith(prefix)) return;
 
-  const key = `${message.guild.id}:${message.author.id}:chat`;
+  const fingerprintKey = `${message.guild.id}:${message.author.id}`;
+  const previousFingerprint = levelMessageFingerprints.get(fingerprintKey);
   const now = Date.now();
+  if (previousFingerprint?.content === normalizedContent && now - previousFingerprint.at < 5 * 60 * 1000) return;
+
+  const key = `${message.guild.id}:${message.author.id}:chat`;
   const last = levelCooldown.get(key) || 0;
   const cooldownMs = getLevelChatCooldownMs();
 
   if (now - last < cooldownMs) return;
   levelCooldown.set(key, now);
+  levelMessageFingerprints.set(fingerprintKey, { content: normalizedContent, at: now });
 
   const chatPoint = getLevelChatPointPerMessage();
   await addLevelPoints(message.member, "chat", chatPoint, message.channel, message.channel.id);
@@ -16987,6 +17332,7 @@ client.once(Events.ClientReady, async () => {
     await setupJuraganChannels(guild);
     await registerPakRwSlashCommands(guild);
     await snapshotGuildMembers(guild);
+    await validateLevelRoleSetup(guild);
   }
 
 
@@ -17047,6 +17393,14 @@ client.once(Events.ClientReady, async () => {
 client.on(Events.GuildMemberAdd, async (member) => {
   try {
     await saveMemberSnapshot(member, { leftAt: null });
+
+    if (!member.user.bot && !shouldExcludeOwnerFromLevel(member.guild, member.id)) {
+      const levelData = readLevelData();
+      const levelUser = getLevelUser(levelData, member.guild.id, member.id);
+      levelUser.level = getLevelInfo(levelUser).current.level;
+      writeLevelData(levelData);
+      await syncMemberLevelRole(member, levelUser.level, { silent: true });
+    }
 
     if (!config.welcome?.enabled) return;
 
@@ -19046,7 +19400,10 @@ function ownerHelpEmbed(message) {
       `\`${p}setmotmtarget 10000\` • ganti target poin MOTM`,
       `\`${p}setbonus 15\` • ganti bonus Booster/Juragan/Donatur`,
       `\`${p}hideownerlevel on\` • owner tidak masuk level/leaderboard`,
-      `\`${p}fixlevel\` • sinkronkan level agar sesuai total poin`,
+      `\`${p}fixlevel\` • sinkronkan level dan role berdasarkan data poin`,
+      `\`paksynclevelroles\` • sinkronkan role level seluruh warga secara bertahap`,
+      `\`pakceklevelrole @user\` • cek role level yang seharusnya`,
+      `\`paksynclevelrole @user\` • perbaiki role level satu warga`,
       `\`${p}levelrule\` • lihat rumus level yang aktif`,
       `\`${p}givepoin @user 500 chat\` • tambah poin chat/voice`,
       `\`${p}kurangpoin @user 100 chat\` • kurangi poin member`,
@@ -19103,6 +19460,11 @@ async function handleOwnerPrefixCommand(message) {
   const cmd = (parts.shift() || "").toLowerCase();
   const args = parts;
   const rest = raw.slice(cmd.length).trim();
+  const levelMutationCommands = new Set(["fixlevel", "synclevel", "relevel", "givepoin", "addpoin", "tambahpoin", "kurangpoin", "kurangpoint", "minuspoin", "minuspoint", "takepoin", "removepoin", "hapuspoint", "potongpoin", "setpoin", "setpoint", "aturpoin", "setpoints", "resetpoin"]);
+  if (levelMutationCommands.has(cmd) && !getPakRwLevelSystemConfig().enabled) {
+    await safeReply(message, "ℹ️ Sistem level sedang dinonaktifkan. Aktifkan kembali dari dashboard Level & Poin sebelum mengubah data level.");
+    return true;
+  }
 
   if (["help", "ownerhelp", "commands", "menu"].includes(cmd)) {
     await safeReply(message, { embeds: [ownerHelpEmbed(message)] });
@@ -19275,12 +19637,13 @@ async function handleOwnerPrefixCommand(message) {
   }
 
   if (["fixlevel", "synclevel", "relevel"].includes(cmd)) {
-    const result = syncAllLevelsWithPoints(message.guild);
+    const result = await syncAllLevelsWithPoints(message.guild);
     await safeReply(message, [
-      "✅ Level sudah disinkronkan ulang berdasarkan total poin.",
+      "✅ Level dan role level sudah disinkronkan dari data Pak RW.",
       `Data dicek: **${formatNumber(result.total)}** user`,
       `Level yang diperbaiki: **${formatNumber(result.changed)}** user`,
-      "Rumus aktif: **Total Poin / Poin per Level**."
+      `Role berhasil: **${formatNumber(result.roleSync?.synced || 0)}** • gagal: **${formatNumber(result.roleSync?.failed || 0)}**`,
+      `Rumus aktif: **${getLevelTuningConfig().totalLevelFormula === "chatVoiceSum" ? "Level Chat + Level Voice" : "Total Poin / Poin per Level"}**.`
     ].join("\n"));
     return true;
   }
@@ -19290,10 +19653,12 @@ async function handleOwnerPrefixCommand(message) {
     await safeReply(message, [
       "📌 **Rumus Level Pak RW**",
       `Mode: **${tuning.mode}**`,
+      tuning.totalLevelFormula === "chatVoiceSum"
+        ? `Total Level = **Level Chat + Level Voice**. Masing-masing naik setiap **${formatNumber(tuning.pointsPerLevel)} poin**.`
+        : `Total Level dihitung dari **Total Poin / ${formatNumber(tuning.pointsPerLevel)}**.`,
       `Total Poin = **Poin Chat + Poin Voice**`,
-      `Setiap **${formatNumber(tuning.pointsPerLevel)} poin total** naik **1 level**.`,
       `Level maksimal: **${formatNumber(tuning.maxLevel)}**`,
-      "Contoh: 0-499 poin = Level 1, 500 poin = Level 2, 10.000 poin = Level 21."
+      `Tingkatan saat Level 1000: **${getLevelNameByLevel(1000)}**.`
     ].join("\n"));
     return true;
   }
@@ -19361,6 +19726,9 @@ async function handleOwnerPrefixCommand(message) {
     userData.lastActivityAt = Date.now();
     const afterLevel = userData.level;
     writeLevelData(data);
+    if (afterLevel !== beforeLevel) {
+      await syncMemberLevelRole(target, afterLevel, { silent: afterLevel < beforeLevel });
+    }
     if (afterLevel > beforeLevel) {
       await sendLevelUp(target, userData, message.channel);
     }
@@ -19389,8 +19757,11 @@ async function handleOwnerPrefixCommand(message) {
 
     const data = readLevelData();
     const userData = getLevelUser(data, message.guild.id, target.id);
+    const beforeLevel = getLevelInfo(userData).current.level;
     const result = subtractOwnerPoints(userData, amount, type);
+    const afterLevel = Number(result?.after?.level || getLevelInfo(userData).current.level);
     writeLevelData(data);
+    if (afterLevel !== beforeLevel) await syncMemberLevelRole(target, afterLevel, { silent: true });
 
     await safeReply(message, {
       content: `✅ Poin ${target} berhasil dikurangi **${formatNumber(amount)} poin ${type}**.`,
@@ -19420,6 +19791,9 @@ async function handleOwnerPrefixCommand(message) {
     const result = setOwnerPoints(userData, amount, type);
     const afterLevel = Number(result.level || getLevelInfo(userData).current.level);
     writeLevelData(data);
+    if (afterLevel !== beforeLevel) {
+      await syncMemberLevelRole(target, afterLevel, { silent: afterLevel < beforeLevel });
+    }
     if (afterLevel > beforeLevel) {
       await sendLevelUp(target, userData, message.channel);
     }
@@ -19446,6 +19820,7 @@ async function handleOwnerPrefixCommand(message) {
     userData.level = 1;
     userData.lastActivityAt = Date.now();
     writeLevelData(data);
+    await syncMemberLevelRole(target, 1, { silent: true });
     await safeReply(message, `✅ Poin ${target} sudah direset.`);
     return true;
   }
@@ -19625,6 +20000,7 @@ client.on(Events.MessageCreate, async (message) => {
 
     await handleOwoAutoRole(message);
 
+    if (await handlePakRwLevelRoleCommand(message)) return;
     if (await handleOwnerPrefixCommand(message)) return;
 
     const prefix = config.prefix || "!";
@@ -19945,7 +20321,7 @@ client.on(Events.MessageCreate, async (message) => {
 
       if (cmd === "premium" || cmd === "mahal" || cmd === "suitepremium") {
         return safeReply(message, [
-          "💎 **Pak RW v10.10.63 — Big Bot DESA TULUS**",
+          "💎 **Pak RW v10.10.76 — Auto Level Role DESA TULUS**",
           "",
           "Pak RW sekarang jadi bot besar DESA TULUS: satu balai warga digital yang rapi untuk AI, curhat, saran, welcome, level, top aktif, voice, donatur, juragan, boost poin, dashboard, dan pengumuman desa.",
           "",
@@ -19955,7 +20331,7 @@ client.on(Events.MessageCreate, async (message) => {
           "**Fitur berguna:**",
           "• 🤖 AI Pro: ikut gaya bahasa member, bisa lu/gua, aku/kamu, sopan, atau pedas aman",
           "• 🧩 Embed Builder: pilih channel tujuan dan kirim embed dari dashboard",
-          "• 🔝 Level: level-up rapi, cek poin 1 channel, test tidak nambah data",
+          "• 🔝 Level: satu sumber tingkatan, satu role otomatis, max Level 1000, dan cek poin tanpa mengubah data",
           "• 🏆 Top Aktif: Top Voice + Top Chat, auto post 00.00 WIB",
           "• 💡 Saran: nama pengirim opsional, kosong = anonim",
           "• ☁️ Curhat Anonim: panel + thread balasan",
@@ -19969,7 +20345,7 @@ client.on(Events.MessageCreate, async (message) => {
       if (cmd === "fitur" || cmd === "alur" || cmd === "features" || cmd === "suite") {
         const p = config.prefix || "rw";
         return safeReply(message, [
-          "🧭 **Pak RW Big Bot Balai Warga v10.10.63**",
+          "🧭 **Pak RW Balai Warga Digital v10.10.76**",
           "",
           "Alurnya sekarang dibuat seperti bot besar balai warga digital:",
           "**warga butuh bantuan → Pak RW baca konteks → pilih fitur → eksekusi/preview → data tetap aman**.",
@@ -20019,7 +20395,10 @@ client.on(Events.MessageCreate, async (message) => {
           "`rwcekpoin` - cek poin level",
           "`rwtoplevel` - leaderboard level",
           `\`${p}testlevel\` - test embed level-up`,
-          `\`${p}testlevel100\` - test role Level 100 1 bulan`,
+          `\`${p}testlevel100\` - test preview embed Level 100 tanpa mengubah data`,
+          "`paksynclevelroles` - sinkronkan role level seluruh warga (owner)",
+          "`pakceklevelrole @user` - cek role level seorang warga",
+          "`paksynclevelrole @user` - perbaiki role level seorang warga",
           "",
           "**Utility Baru**",
           `\`${p}serverinfo\` - info server`,
@@ -20144,6 +20523,7 @@ function buildOwnerStatusEmbedForGuild(guild) {
       `**MOTM Target:** ${formatNumber(cfg.pointsThreshold || 10000)} poin`,
       `**Bonus:** ${cfg.bonusEnabled ? `+${cfg.bonusPercent || 15}% aktif` : "Nonaktif"}`,
       `**Channel Level:** ${isFilledId(config.levelChannelId) ? `<#${config.levelChannelId}>` : "belum diset"}`,
+      `**Auto Level Role:** ${getPakRwLevelSystemConfig().autoLevelRole ? "Aktif" : "Nonaktif"} • ${getConfiguredLevelRoleIds(config).length}/${LEVEL_ROLE_TIER_DEFINITIONS.length} role tier terisi`,
       `**Owner di leaderboard:** ${cfg.excludeOwnerFromLeaderboard !== false ? "Tidak muncul ✅" : "Masih muncul ⚠️"}`,
       `**Uptime:** ${Math.floor(process.uptime() / 60)} menit`
     ].join("\n"))
@@ -20175,7 +20555,12 @@ function slashOwnerHelpEmbed(guild) {
       "`/kurangpoin` • kurangi poin",
       "`/setpoin` • set poin",
       "`/resetpoin` • reset poin member",
-      "`/ownerstatus` • status bot"
+      "`/ownerstatus` • status bot",
+      "",
+      "**Auto Level Role (text):**",
+      "`paksynclevelroles` • sinkronkan seluruh warga",
+      "`pakceklevelrole @user` • cek kecocokan role",
+      "`paksynclevelrole @user` • perbaiki satu warga"
     ].join("\n"))
     .setFooter({ text: makeOTFooter(`${config.serverName || guild?.name || "DESA TULUS"} • Slash Commands`) })
     .setTimestamp();
@@ -20202,6 +20587,10 @@ async function handlePakRwVisibleSlashCommand(interaction) {
     await interaction.reply({ content: "❌ Slash command ini khusus Owner server.", flags: 64 });
     return true;
   }
+  if (["fixlevel", "givepoin", "kurangpoin", "setpoin", "resetpoin"].includes(cmd) && !getPakRwLevelSystemConfig().enabled) {
+    await interaction.reply({ content: "ℹ️ Sistem level sedang dinonaktifkan oleh owner.", flags: 64 });
+    return true;
+  }
 
   if (cmd === "ownerhelp") {
     await interaction.reply({ embeds: [slashOwnerHelpEmbed(interaction.guild)], flags: 64 });
@@ -20217,7 +20606,7 @@ async function handlePakRwVisibleSlashCommand(interaction) {
   if (cmd === "fitur") {
     await interaction.reply({
       content: [
-        "🧭 **Pak RW Big Bot Balai Warga v10.10.63**",
+        "🧭 **Pak RW Balai Warga Digital v10.10.76**",
         "",
         "**Alur bot besar:** pilih fitur → edit setting → preview → test → backup.",
         "",
@@ -20228,7 +20617,7 @@ async function handlePakRwVisibleSlashCommand(interaction) {
         "• 👋 Welcome — sambut warga baru",
         "• 💎 Juragan — boost role, embed, bonus poin",
         "• 💸 Donatur — role durasi otomatis dari nominal",
-        "• 🔝 Level — chat/voice poin, rank, level 100 role",
+        "• 🔝 Level — chat/voice poin, rank, dan satu role tingkatan otomatis sampai Level 1000",
         "• 🏆 Top Aktif/MOTM — top chat, top voice, banner manual",
         "",
         "Dashboard: buka `/feature-flow` di web panel untuk edit semua modul."
@@ -20242,14 +20631,14 @@ async function handlePakRwVisibleSlashCommand(interaction) {
   if (cmd === "premium") {
     await interaction.reply({
       content: [
-        "💎 **Pak RW v10.10.63 — Big Bot DESA TULUS**",
+        "💎 **Pak RW v10.10.76 — Auto Level Role DESA TULUS**",
         "",
         "**Alur utama:** edit → preview → test aman → backup.",
         "",
         "**Yang premium:**",
         "• 🤖 Tanya Pak RW Pro: lucu, rapi, pedas aman, ikut gaya bahasa member",
         "• 🧩 Embed Builder: mirip Carl-bot, pilih channel, preview, raw JSON, kirim langsung",
-        "• 🔝 Level & Cek Poin: 1 channel, style rapi, test tidak ubah data",
+        "• 🔝 Level & Cek Poin: role tingkatan otomatis, max Level 1000, dan test tidak mengubah data",
         "• 🏆 Top Aktif/MOTM: Top Voice + Top Chat, auto 00.00 WIB, banner manual",
         "• ☁️ Curhat, 💡 Saran, 👋 Welcome, 💎 Juragan, 💸 Donatur tetap aman",
         "• 🛠️ Tools: MongoDB, backup, dashboard, status, dan command test",
@@ -20349,13 +20738,14 @@ async function handlePakRwVisibleSlashCommand(interaction) {
   }
 
   if (cmd === "fixlevel") {
-    const result = syncAllLevelsWithPoints(interaction.guild);
+    const result = await syncAllLevelsWithPoints(interaction.guild);
     await interaction.reply({
       content: [
-        "✅ Level sudah disinkronkan ulang berdasarkan total poin.",
+        "✅ Level dan role level sudah disinkronkan dari data Pak RW.",
         `Data dicek: **${formatNumber(result.total)}** user`,
         `Level yang diperbaiki: **${formatNumber(result.changed)}** user`,
-        "Rumus aktif: **Total Poin / Poin per Level**."
+        `Role berhasil: **${formatNumber(result.roleSync?.synced || 0)}** • gagal: **${formatNumber(result.roleSync?.failed || 0)}**`,
+        `Rumus aktif: **${getLevelTuningConfig().totalLevelFormula === "chatVoiceSum" ? "Level Chat + Level Voice" : "Total Poin / Poin per Level"}**.`
       ].join("\n"),
       flags: 64
     });
@@ -20398,6 +20788,9 @@ async function handlePakRwVisibleSlashCommand(interaction) {
       const afterLevel = userData.level;
       result = { chat: userData.chat, voice: userData.voice, monthlyTotal: monthly.total, level: userData.level };
       writeLevelData(data);
+      if (afterLevel !== beforeLevel) {
+        await syncMemberLevelRole(target, afterLevel, { silent: afterLevel < beforeLevel });
+      }
       if (afterLevel > beforeLevel) {
         await sendLevelUp(target, userData, interaction.channel);
       }
@@ -20407,7 +20800,9 @@ async function handlePakRwVisibleSlashCommand(interaction) {
 
     if (cmd === "kurangpoin") {
       result = subtractOwnerPoints(userData, amount, type);
+      const afterLevel = Number(result?.after?.level || getLevelInfo(userData).current.level);
       writeLevelData(data);
+      if (afterLevel !== beforeLevel) await syncMemberLevelRole(target, afterLevel, { silent: true });
       await interaction.reply({ content: `✅ Poin ${target} dikurangi **${formatNumber(amount)} poin ${type}**.`, embeds: [buildOwnerPointEditEmbed(target, "minus", amount, type, result)], flags: 64 });
       return true;
     }
@@ -20416,6 +20811,9 @@ async function handlePakRwVisibleSlashCommand(interaction) {
       result = setOwnerPoints(userData, amount, type);
       const afterLevel = Number(result.level || getLevelInfo(userData).current.level);
       writeLevelData(data);
+      if (afterLevel !== beforeLevel) {
+        await syncMemberLevelRole(target, afterLevel, { silent: afterLevel < beforeLevel });
+      }
       if (afterLevel > beforeLevel) {
         await sendLevelUp(target, userData, interaction.channel);
       }
@@ -20442,6 +20840,7 @@ async function handlePakRwVisibleSlashCommand(interaction) {
     monthly.voice = 0;
     monthly.total = 0;
     writeLevelData(data);
+    await syncMemberLevelRole(target, 1, { silent: true });
     await interaction.reply({ content: `✅ Poin ${target} sudah direset.`, flags: 64 });
     return true;
   }

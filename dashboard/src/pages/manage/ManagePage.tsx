@@ -49,8 +49,7 @@ const TARGETS: Record<string, Binding[]> = {
   "curhat-anonim": [{ key: "anonymousCurhat", path: "anonymousCurhatChannelId", kind: "channel", label: "Channel Curhat Anonim", helper: "Identitas warga tidak ditampilkan pada pesan publik.", required: true }],
   saran: [{ key: "suggestionChannel", path: "suggestionChannelId", kind: "channel", label: "Channel Saran & Voting", helper: "Tempat saran warga diposting dan divoting.", required: true }],
   level: [
-    { key: "levelChannel", path: "levelChannelId", kind: "channel", label: "Channel Level", helper: "Notifikasi level-up dikirim ke channel ini.", required: true },
-    { key: "levelRole", path: "level100RoleId", kind: "role", label: "Role Reward Level", helper: "Role reward yang dikelola oleh sistem level." }
+    { key: "levelChannel", path: "levelSystem.levelChannelId", kind: "channel", label: "Channel Level", helper: "Semua notifikasi kenaikan level dikirim ke channel ini.", required: true }
   ],
   "cek-poin": [{ key: "cekPoinChannel", path: "cekPoinChannelId", kind: "channel", label: "Channel Cek Poin", helper: "Command cek poin hanya digunakan di channel ini.", required: true }],
   "top-aktif": [
@@ -114,6 +113,7 @@ export function ManagePage() {
   const [postHour, setPostHour] = useState(0);
   const [aiModel, setAiModel] = useState("openai/gpt-4o-mini");
   const [aiMaxTokens, setAiMaxTokens] = useState(460);
+  const [autoLevelRole, setAutoLevelRole] = useState(true);
   const [motmThreshold, setMotmThreshold] = useState(100000);
   const [boostMultiplier, setBoostMultiplier] = useState(10);
   const [boostDuration, setBoostDuration] = useState(60);
@@ -126,7 +126,19 @@ export function ManagePage() {
   const [boostAnnounceEnd, setBoostAnnounceEnd] = useState(true);
   const [boostActionLoading, setBoostActionLoading] = useState<"start" | "stop" | "">("");
 
-  const bindings = TARGETS[slug] || [];
+  const bindings = useMemo(() => {
+    const base = TARGETS[slug] || [];
+    if (slug !== "level") return base;
+    const tierBindings: Binding[] = (data.levelRoleTiers || []).map((tier) => ({
+      key: `levelRole${tier.level}`,
+      path: `levelSystem.roles.${tier.level}`,
+      kind: "role",
+      label: `${tier.name} · Level ${tier.level}`,
+      helper: `Satu-satunya role level aktif untuk warga Level ${tier.level} ke atas.`,
+      required: true
+    }));
+    return [...base, ...tierBindings];
+  }, [slug, data.levelRoleTiers]);
   const availableEmbedKeys = useMemo(() => Object.keys(data.embeds || {}).filter((key) => key !== "dashboard"), [data.embeds]);
   const primaryChannelId = bindings.find((binding) => binding.kind === "channel") ? targets[bindings.find((binding) => binding.kind === "channel")!.key] || "" : "";
   const requiredBindings = bindings.filter((binding) => binding.required);
@@ -151,7 +163,7 @@ export function ManagePage() {
     const cfg = data.config || {};
     const nextEmbedKey = slug === "embed" ? (embedKey && data.embeds[embedKey] ? embedKey : availableEmbedKeys[0] || "welcome") : feature.embedKey || "welcome";
     const nextTargets: Record<string, string> = {};
-    (TARGETS[slug] || []).forEach((binding) => {
+    bindings.forEach((binding) => {
       if (binding.path) nextTargets[binding.key] = String(readPath(cfg, binding.path) || "");
       else nextTargets[binding.key] = "";
     });
@@ -163,6 +175,7 @@ export function ManagePage() {
     setPostHour(Number(readPath(cfg, slug === "papan-aktif" ? "leaderboardAktif.autoPostHourWIB" : "topActive.dailyPostHourWIB") ?? 0));
     setAiModel(String(readPath(cfg, "ai.openRouterModel") || "openai/gpt-4o-mini"));
     setAiMaxTokens(Number(readPath(cfg, "ai.maxTokens") || 460));
+    setAutoLevelRole(readPath(cfg, "levelSystem.autoLevelRole") !== false);
     setMotmThreshold(Number(readPath(cfg, "level.cycleResetAtPoints") || readPath(cfg, "topActive.pointsThreshold") || 100000));
     setBoostMultiplier(Number(readPath(cfg, "boostPoin.multiplier") || 10));
     setBoostDuration(Number(readPath(cfg, "boostPoin.durationMinutes") || 60));
@@ -174,7 +187,7 @@ export function ManagePage() {
     setBoostAnnounceStart(readPath(cfg, "boostPoin.announceOnStart") !== false);
     setBoostAnnounceEnd(readPath(cfg, "boostPoin.announceOnEnd") !== false);
     setDirty(false);
-  }, [data, slug, feature, availableEmbedKeys]);
+  }, [data, slug, feature, availableEmbedKeys, bindings]);
 
   useEffect(() => {
     if (slug !== "embed") return;
@@ -195,6 +208,12 @@ export function ManagePage() {
       bindings.forEach((binding) => {
         if (binding.path && binding.persist !== false) patches.push({ path: binding.path, value: targets[binding.key] || "" });
       });
+      if (slug === "level") {
+        patches.push({ path: "levelSystem.enabled", value: enabled });
+        patches.push({ path: "levelSystem.maxLevel", value: 1000 });
+        patches.push({ path: "levelSystem.autoLevelRole", value: autoLevelRole });
+        patches.push({ path: "levelSystem.levelChannelId", value: targets.levelChannel || "" });
+      }
       if (slug === "top-aktif") {
         patches.push({ path: "topActive.topLimit", value: topLimit });
         patches.push({ path: "topActive.dailyPostHourWIB", value: postHour });
@@ -362,6 +381,7 @@ export function ManagePage() {
               <div><span className="summary-dot is-ok" /><div><strong>Template embed</strong><small>{embedKey || "Tidak menggunakan template"}</small></div></div>
             </div>
           </Card>
+          {slug === "level" ? <Card className="full-span-card"><CardHeader title="Auto Level Role" description="Satu sistem level, satu nama tingkatan, dan hanya satu role level aktif per warga." action={<StatusBadge label={autoLevelRole ? "Aktif" : "Nonaktif"} tone={autoLevelRole ? "success" : "neutral"} />} /><div className="boost-option-list"><div className="boost-option-row"><div><strong>Role level otomatis</strong><small>Ketika level berubah, Pak RW mencabut role tier lama dan memberikan satu role tier yang sesuai.</small></div><Toggle checked={autoLevelRole} onChange={(value) => { setAutoLevelRole(value); setDirty(true); }} label="Auto Level Role" /></div></div><div className="info-panel"><ShieldCheck size={19} /><p>Level maksimal dikunci di <strong>1000</strong>. Nama tingkatan dan role dibaca dari satu konfigurasi pusat agar embed, profil, leaderboard, dan role selalu sama.</p></div></Card> : null}
           {slug === "ai" ? <Card><CardHeader title="AI hemat OpenRouter" description="Pengaturan aman yang sudah didukung core bot." /><div className="form-grid two-columns"><div className="form-field"><label>Model utama</label><input value={aiModel} onChange={(event) => { setAiModel(event.target.value); setDirty(true); }} /><small className="field-helper">Gunakan openai/gpt-4o-mini untuk mode hemat.</small></div><div className="form-field"><label>Max token</label><input type="number" min={100} max={1000} value={aiMaxTokens} onChange={(event) => { setAiMaxTokens(Number(event.target.value)); setDirty(true); }} /><small className="field-helper">Batas aman rekomendasi: 300–600.</small></div></div></Card> : null}
           {slug === "top-aktif" || slug === "papan-aktif" ? <Card><CardHeader title="Jadwal leaderboard" description="Scheduler core bot tidak diubah; dashboard hanya menyimpan setting yang didukung." /><div className="form-grid two-columns"><div className="form-field"><label>Jumlah peringkat</label><input type="number" min={3} max={25} value={topLimit} onChange={(event) => { setTopLimit(Number(event.target.value)); setDirty(true); }} /></div><div className="form-field"><label>Jam post WIB</label><input type="number" min={0} max={23} value={postHour} onChange={(event) => { setPostHour(Number(event.target.value)); setDirty(true); }} /><small className="field-helper">Gunakan 0 untuk pukul 00.00 WIB.</small></div></div></Card> : null}
           {slug === "motm" ? <Card><CardHeader title="Threshold MOTM" description="Lifetime point tetap lanjut dan tidak ikut reset." /><div className="form-field"><label>Target poin siklus</label><input type="number" min={1000} value={motmThreshold} onChange={(event) => { setMotmThreshold(Number(event.target.value)); setDirty(true); }} /><small className="field-helper">Default DESA TULUS: 100.000 poin.</small></div></Card> : null}

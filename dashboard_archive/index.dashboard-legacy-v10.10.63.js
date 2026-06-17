@@ -13051,16 +13051,16 @@ const topPoinPostStateFile = resolvePersistentDataFile("top-poin-post-state.json
 const boostPoinStateFile = resolvePersistentDataFile("boost-poin-events.json");
 const TOP_POIN_AUTO_WINDOW_MINUTES = 10;
 
-const LEVEL_ROLES = [
-  { level: 1, name: "Warga Baru", minPoints: 0 },
-  { level: 5, name: "Warga Magang", minPoints: 2000 },
-  { level: 10, name: "Warga Aktif", minPoints: 4500 },
-  { level: 20, name: "Warga Loyal", minPoints: 9500 },
-  { level: 35, name: "Warga Senior", minPoints: 17000 },
-  { level: 50, name: "Warga Elite", minPoints: 24500 },
-  { level: 75, name: "Warga Tulus", minPoints: 37000 },
-  { level: 100, name: "Sesepuh Tulus", minPoints: 49500 }
-];
+const {
+  LEVEL_ROLE_TIER_DEFINITIONS: PAK_RW_LEVEL_ROLE_TIER_DEFINITIONS
+} = require("../level/levelRoleTiers");
+
+// Arsip dashboard tetap membaca sumber tingkatan pusat agar nama level tidak bercabang.
+const LEVEL_ROLES = PAK_RW_LEVEL_ROLE_TIER_DEFINITIONS.map(({ level, name }) => ({
+  level,
+  name,
+  minPoints: Math.max(0, (level - 1) * 500)
+}));
 
 function getLevelTuningConfig() {
   const levelCfg = config.level || {};

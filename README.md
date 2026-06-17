@@ -1,6 +1,6 @@
-# Pak RW / DESA TULUS v10.10.68
+# Pak RW / DESA TULUS v10.10.76
 
-Versi ini adalah **final dashboard finishing pass** untuk Pak RW Control Center. Fokus update hanya pada dashboard web: layout dirapikan, alur Manage dipertegas, picker Discord dibuat lebih aman, Embed Builder diberi batas dan counter, serta halaman Boost Poin dipecah menjadi bagian yang lebih mudah dipahami.
+Versi ini menambahkan **Auto Level Role terpusat** yang langsung memakai data level Pak RW yang sudah ada. Dashboard, Custom Status, Boost Poin, Top Aktif, Papan Aktif, MOTM, MongoDB, dan fitur lama tetap dipertahankan tanpa reset data.
 
 ## Perubahan utama
 
@@ -124,3 +124,23 @@ Versi ini sebelumnya memakai variasi Playing/Watching/Listening. Sistem tersebut
 ## v10.10.75 — Custom Status Discord Otomatis
 
 Sistem activity Playing/Watching/Listening lama diganti menjadi `ActivityType.Custom` dengan properti `state`. Lima Custom Status Pak RW tampil bergantian setiap 15 detik, status pertama langsung tampil saat `ClientReady`, dan hanya satu interval presence yang aktif. Lihat `UPDATE_FINAL_v10.10.75.md`.
+
+## v10.10.76 — Auto Level Role Terpusat
+
+Auto Level Role sekarang terhubung langsung ke sistem level Pak RW yang sudah ada. Seluruh nama tingkatan berasal dari `level/levelRoleTiers.js`, level maksimal dikunci di 1000, dan setiap warga hanya memiliki satu role tier aktif.
+
+Konfigurasi role tersedia di:
+
+```text
+/dashboard/manage/level
+```
+
+Command owner/staff:
+
+```text
+paksynclevelroles
+pakceklevelrole @member
+paksynclevelrole @member
+```
+
+Sebelum sinkronisasi massal, Pak RW membuat backup data level. Proses berjalan bertahap dan tidak mengubah poin, EXP, level, leaderboard, atau data warga lama. Dokumentasi lengkap tersedia di `UPDATE_FINAL_v10.10.76.md`.

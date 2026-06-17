@@ -604,7 +604,7 @@
     "excludeOwnerFromLevel": true,
     "mode": "chatVoiceSum",
     "pointsPerLevel": 500,
-    "maxLevel": 100,
+    "maxLevel": 1000,
     "sendLevelUpToLevelChannelOnly": true,
     "levelUpDestinationText": "Notifikasi level-up masuk ke channel level khusus, bukan channel Top Aktif.",
     "chatPointsPerLevel": 500,
@@ -620,7 +620,8 @@
     "cycleResetEnabled": true,
     "cycleResetAtPoints": 100000,
     "cycleResetNote": "Saat warga mencapai 100.000 poin aktif, Pak RW memberi role Member Of The Month otomatis lalu poin/level siklus kembali dari awal. Papan Aktif lifetime tetap lanjut dan tidak di-reset.",
-    "lifetimeNeverReset": true
+    "lifetimeNeverReset": true,
+    "enabled": true
   },
   "dashboard": {
     "homeMode": "full_premium_dashboard_rebuild",
@@ -628,8 +629,8 @@
     "easyEditMode": true,
     "showFeatureFlow": true,
     "showAiStylePanel": true,
-    "releaseVersion": "10.10.63",
-    "releaseName": "Final Boost Event & Embed Sync",
+    "releaseVersion": "10.10.76",
+    "releaseName": "Auto Level Role Terpusat",
     "premiumMode": true,
     "comfortMode": true,
     "quickActionMode": "manage_edit_preview_save_test_backup",
@@ -654,7 +655,7 @@
     "placeholderSelectionMode": "channel_role_user_server_bot_live_from_discord",
     "discordPickerMode": "live_api",
     "discordPickerAutoRefresh": true,
-    "uiVersion": "10.10.73",
+    "uiVersion": "10.10.76",
     "architecture": "react_vite_static_dashboard_only",
     "backgroundStyle": "2d-village-premium",
     "embedColorLocked": "#7DBD77",
@@ -1085,7 +1086,7 @@
       "Discord Manager"
     ]
   },
-  "version": "10.10.75",
+  "version": "10.10.76",
   "bigBot": {
     "releaseName": "Pak RW AI Natural + Welcome Mention v10.10.59"
   },
@@ -1265,5 +1266,31 @@
   },
   "mentionPlaceholders": {
     "note": "Pak RW memakai picker live API agar channel dan role bisa dipilih langsung dari nama Discord. @everyone/@here tetap diblokir."
+  },
+  "levelSystem": {
+    "enabled": true,
+    "maxLevel": 1000,
+    "levelChannelId": "ID_CHANNEL_LEVEL",
+    "autoLevelRole": true,
+    "roles": {
+      "1": "ID_ROLE_WARGA_ANYAR",
+      "5": "ID_ROLE_WARGA_TETAP",
+      "10": "ID_ROLE_WARGA_AKTIF",
+      "20": "ID_ROLE_WARGA_TELADAN",
+      "30": "ID_ROLE_TOKOH_WARGA",
+      "50": "ID_ROLE_SESEPUH_DESA",
+      "100": "ID_ROLE_PENGGERAK_DESA",
+      "150": "ID_ROLE_TOKOH_DESA",
+      "200": "ID_ROLE_PEMUKA_DESA",
+      "300": "ID_ROLE_PANUTAN_DESA",
+      "400": "ID_ROLE_KEHORMATAN_DESA",
+      "500": "ID_ROLE_LEGENDA_DESA",
+      "750": "ID_ROLE_KEBANGGAAN_DESA",
+      "1000": "ID_ROLE_KARUHUN_DESA"
+    },
+    "roleMode": "single_highest_tier",
+    "syncBatchSize": 5,
+    "syncDelayMs": 900,
+    "note": "Satu role level aktif. Nama tingkatan dihitung dari angka level melalui level/levelRoleTiers.js."
   }
 }

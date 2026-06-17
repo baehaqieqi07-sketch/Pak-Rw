@@ -61,6 +61,7 @@ export type BootstrapData = {
   config: Record<string, any>;
   embeds: Record<string, any>;
   features: Record<string, boolean>;
+  levelRoleTiers: Array<{ level: number; name: string; roleId: string }>;
   activity: Array<{ at: string; title: string; detail?: string; type?: string }>;
 };
 
