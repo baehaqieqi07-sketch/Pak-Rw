@@ -31,6 +31,34 @@ const KTP_MODAL_FIELDS = Object.freeze({
 
 const ktpCooldowns = new Map();
 
+
+function defaultKtpDesign() {
+  return {
+    title: { x: 506, y: 66, fontSize: 30, color: "#1f3016", align: "center", visible: true },
+    subtitle: { x: 506, y: 94, fontSize: 20, color: "#1f3016", align: "center", visible: true },
+    fields: { labelX: 58, colonX: 232, valueX: 264, startY: 190, gap: 57, labelSize: 21, valueSize: 21, labelColor: "#31441f", valueColor: "#1d2915", maxWidth: 430, visible: true },
+    photo: { x: 748, y: 154, width: 220, height: 270, radius: 7, borderWidth: 2, borderColor: "#2b401c", frameColor: "#ebe9c7", visible: true },
+    date: { x: 858, y: 458, fontSize: 15, valueY: 483, valueSize: 18, color: "#31441f", visible: true },
+    status: { x: 858, y: 516, fontSize: 14, color: "#233316", visible: true },
+    footerLeft: { x: 24, y: 621, fontSize: 12, color: "#233316", align: "left", visible: true },
+    footerRight: { x: 987, y: 621, fontSize: 12, color: "#233316", align: "right", visible: true },
+    decorations: []
+  };
+}
+
+function mergeKtpDesign(raw = {}) {
+  const base = defaultKtpDesign();
+  const sections = ["title", "subtitle", "fields", "photo", "date", "status", "footerLeft", "footerRight"];
+  for (const section of sections) base[section] = { ...base[section], ...(raw?.[section] || {}) };
+  base.decorations = Array.isArray(raw?.decorations) ? raw.decorations.slice(0, 20) : [];
+  return base;
+}
+
+function finiteNumber(value, fallback, min = -10000, max = 10000) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
+}
+
 function defaultKtpConfig() {
   return {
     enabled: true,
@@ -44,17 +72,21 @@ function defaultKtpConfig() {
     resultContent: "🪪 Kartu Tanda Penduduk milik {user}",
     footerText: "DESA TULUS • Ketik perintah rwktp untuk melihat KTP",
     backgroundPath: "assets/ktp-desa-tulus-background.png",
+    backgroundFit: "exact",
+    design: defaultKtpDesign(),
     cardTitle: "KARTU TANDA PENDUDUK",
     cardSubtitle: "DESA TULUS",
     privacyNote: "KARTU KOMUNITAS DIGITAL • BUKAN DOKUMEN RESMI",
     numberMode: "random_unique_18_digits_v2",
-    rendererVersion: "10.10.92",
+    rendererVersion: "10.10.94",
     logToConsole: true
   };
 }
 
 function getKtpConfig(config = {}) {
-  return { ...defaultKtpConfig(), ...(config.ktpSystem || {}) };
+  const merged = { ...defaultKtpConfig(), ...(config.ktpSystem || {}) };
+  merged.design = mergeKtpDesign(config.ktpSystem?.design || merged.design);
+  return merged;
 }
 
 function clone(value) {
@@ -472,12 +504,30 @@ async function loadAvatarImage(avatarUrl) {
   }
 }
 
+function materializeKtpDesignAsset(relativePath = "") {
+  const safeRelative = String(relativePath || "").replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!safeRelative.startsWith("assets/")) return "";
+  const resolved = path.resolve(__dirname, "..", safeRelative);
+  const assetsRoot = path.resolve(__dirname, "..", "assets") + path.sep;
+  if (!resolved.startsWith(assetsRoot)) return "";
+  if (fs.existsSync(resolved)) return resolved;
+  const stored = readStore("ktpDesignAssets", { files: {} })?.files?.[safeRelative];
+  if (!stored?.data) return resolved;
+  try {
+    fs.mkdirSync(path.dirname(resolved), { recursive: true });
+    fs.writeFileSync(resolved, Buffer.from(stored.data, "base64"));
+  } catch (error) {
+    console.log("[KTP WARGA] Asset dashboard gagal dipulihkan:", error.message);
+  }
+  return resolved;
+}
+
 function resolveBackgroundPath(config = {}) {
   const cfg = getKtpConfig(config);
   const configured = String(cfg.backgroundPath || "").trim();
   if (!configured) return DEFAULT_BACKGROUND_PATH;
   if (path.isAbsolute(configured)) return configured;
-  return path.join(__dirname, "..", configured);
+  return materializeKtpDesignAsset(configured);
 }
 
 function drawKtpField(ctx, label, value, y, options = {}) {
@@ -486,20 +536,21 @@ function drawKtpField(ctx, label, value, y, options = {}) {
   const colonX = Number(options.colonX || 272);
   const valueX = Number(options.valueX || 304);
   const maxWidth = Number(options.maxWidth || 470);
-  const valueSize = Number(options.valueSize || 25);
+  const valueSize = finiteNumber(options.valueSize, 25, 8, 80);
+  const labelSize = finiteNumber(options.labelSize, 21, 8, 80);
 
   ctx.textAlign = "left";
-  ctx.fillStyle = "#31441f";
-  setCanvasFont(ctx, 21, 700);
+  ctx.fillStyle = String(options.labelColor || "#31441f");
+  setCanvasFont(ctx, labelSize, 700);
   ctx.fillText(String(label || "-"), labelX, y);
 
   ctx.textAlign = "center";
-  ctx.fillStyle = "#31441f";
-  setCanvasFont(ctx, 21, 800);
+  ctx.fillStyle = String(options.labelColor || "#31441f");
+  setCanvasFont(ctx, labelSize, 800);
   ctx.fillText(":", colonX, y);
 
   ctx.textAlign = "left";
-  ctx.fillStyle = "#1d2915";
+  ctx.fillStyle = String(options.valueColor || "#1d2915");
   setCanvasFont(ctx, valueSize, 800);
   ctx.fillText(truncateCanvasText(ctx, value || "-", maxWidth), valueX, y);
 }
@@ -537,14 +588,9 @@ async function renderKtpCard({ record, member, config = {}, avatarUrl = "" }) {
   const background = await loadImage(backgroundPath);
   if (!background?.width || !background?.height) throw new Error("Ukuran background KTP tidak valid.");
 
-  // Background milik owner wajib dipakai 1:1 tanpa crop, resize, tint, bingkai,
-  // overlay, atau watermark tambahan. Canvas mengikuti ukuran PNG asli.
-  const width = Number(background.width);
-  const height = Number(background.height);
-  if (width !== 1011 || height !== 639) {
-    throw new Error(`Ukuran background KTP harus 1011x639, diterima ${width}x${height}.`);
-  }
-
+  // Canvas KTP selalu 1011x639. Background dapat exact, cover, atau contain dari dashboard.
+  const width = 1011;
+  const height = 639;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext("2d");
   if (cfg.logToConsole !== false) {
@@ -553,26 +599,64 @@ async function renderKtpCard({ record, member, config = {}, avatarUrl = "" }) {
 
   const card = { x: 0, y: 0, w: width, h: height, radius: 0 };
 
-  // Salin background asli tepat pada koordinat native. Tidak ada perubahan pixel
-  // pada area yang tidak ditempeli teks atau foto.
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = "source-over";
-  ctx.drawImage(background, 0, 0);
+  const backgroundFit = ["exact", "cover", "contain"].includes(String(cfg.backgroundFit)) ? String(cfg.backgroundFit) : "exact";
+  if (backgroundFit === "cover") drawCoverImage(ctx, background, 0, 0, width, height);
+  else if (backgroundFit === "contain") {
+    const ratio = Math.min(width / background.width, height / background.height);
+    const drawWidth = background.width * ratio;
+    const drawHeight = background.height * ratio;
+    ctx.fillStyle = "#81934b";
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(background, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
+  } else ctx.drawImage(background, 0, 0, width, height);
+
+  const design = mergeKtpDesign(cfg.design);
+
+  // Image tambahan dari dashboard digambar di atas background dan di bawah foto/teks.
+  for (const decoration of design.decorations) {
+    if (decoration?.visible === false || !decoration?.path) continue;
+    try {
+      const configuredPath = String(decoration.path).trim();
+      const decorationPath = path.isAbsolute(configuredPath) ? configuredPath : materializeKtpDesignAsset(configuredPath);
+      if (!fs.existsSync(decorationPath)) continue;
+      const image = await loadImage(decorationPath);
+      const x = finiteNumber(decoration.x, 0, -width, width * 2);
+      const y = finiteNumber(decoration.y, 0, -height, height * 2);
+      const drawWidth = finiteNumber(decoration.width, 100, 1, width * 2);
+      const drawHeight = finiteNumber(decoration.height, 100, 1, height * 2);
+      const opacity = finiteNumber(decoration.opacity, 1, 0, 1);
+      const rotation = finiteNumber(decoration.rotation, 0, -360, 360) * Math.PI / 180;
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      ctx.translate(x + drawWidth / 2, y + drawHeight / 2);
+      ctx.rotate(rotation);
+      ctx.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+      ctx.restore();
+    } catch (error) {
+      console.log(`[KTP WARGA] Image dekorasi dilewati: ${error.message}`);
+    }
+  }
 
   // Foto dan teks dirender pada layer terpisah agar state clip/font tidak saling menutupi.
-  // Foto warga dibuat lebih proporsional dengan frame yang lembut, tidak terlalu putih atau tebal.
-  const photoFrame = { x: 748, y: 154, w: 220, h: 270 };
+  const photoDesign = design.photo;
+  const photoFrame = {
+    x: finiteNumber(photoDesign.x, 748, -width, width * 2), y: finiteNumber(photoDesign.y, 154, -height, height * 2),
+    w: finiteNumber(photoDesign.width, 220, 20, width * 2), h: finiteNumber(photoDesign.height, 270, 20, height * 2)
+  };
+  if (photoDesign.visible !== false) {
   ctx.save();
   ctx.shadowColor = "rgba(30, 45, 19, 0.24)";
   ctx.shadowBlur = 12;
   ctx.shadowOffsetY = 5;
-  roundedRect(ctx, photoFrame.x, photoFrame.y, photoFrame.w, photoFrame.h, 7);
-  ctx.fillStyle = "rgba(235, 233, 199, 0.91)";
+  roundedRect(ctx, photoFrame.x, photoFrame.y, photoFrame.w, photoFrame.h, finiteNumber(photoDesign.radius, 7, 0, 100));
+  ctx.fillStyle = String(photoDesign.frameColor || "rgba(235, 233, 199, 0.91)");
   ctx.fill();
   ctx.restore();
-  roundedRect(ctx, photoFrame.x, photoFrame.y, photoFrame.w, photoFrame.h, 7);
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = "rgba(43, 64, 28, 0.70)";
+  roundedRect(ctx, photoFrame.x, photoFrame.y, photoFrame.w, photoFrame.h, finiteNumber(photoDesign.radius, 7, 0, 100));
+  ctx.lineWidth = finiteNumber(photoDesign.borderWidth, 2, 0, 20);
+  ctx.strokeStyle = String(photoDesign.borderColor || "rgba(43, 64, 28, 0.70)");
   ctx.stroke();
 
   const inset = 10;
@@ -604,13 +688,14 @@ async function renderKtpCard({ record, member, config = {}, avatarUrl = "" }) {
     ctx.fillText(initials || "W", photoFrame.x + photoFrame.w / 2, photoFrame.y + photoFrame.h / 2 + 26);
   }
   ctx.restore();
+  }
 
   // Garis aksen judul bukan bagian dari validasi teks. Dengan begitu, garis dekorasi
   // tidak dapat membuat test salah mengira tulisan sudah berhasil dirender.
   ctx.save();
   ctx.beginPath();
-  ctx.moveTo(width / 2 - 42, 112);
-  ctx.lineTo(width / 2 + 42, 112);
+  ctx.moveTo(finiteNumber(design.title.x, width / 2) - 42, finiteNumber(design.subtitle.y, 94) + 18);
+  ctx.lineTo(finiteNumber(design.title.x, width / 2) + 42, finiteNumber(design.subtitle.y, 94) + 18);
   ctx.lineWidth = 2;
   ctx.strokeStyle = "rgba(42, 63, 27, 0.42)";
   ctx.stroke();
@@ -624,12 +709,18 @@ async function renderKtpCard({ record, member, config = {}, avatarUrl = "" }) {
   textCtx.clearRect(0, 0, width, height);
 
   // Judul kartu.
-  textCtx.textAlign = "center";
-  textCtx.fillStyle = "#1f3016";
-  setCanvasFont(textCtx, 30, 900);
-  textCtx.fillText(String(cfg.cardTitle || "KARTU TANDA PENDUDUK").toUpperCase(), width / 2, 66);
-  setCanvasFont(textCtx, 20, 900);
-  textCtx.fillText(String(cfg.cardSubtitle || "DESA TULUS").toUpperCase(), width / 2, 94);
+  if (design.title.visible !== false) {
+    textCtx.textAlign = String(design.title.align || "center");
+    textCtx.fillStyle = String(design.title.color || "#1f3016");
+    setCanvasFont(textCtx, finiteNumber(design.title.fontSize, 30, 8, 80), 900);
+    textCtx.fillText(String(cfg.cardTitle || "KARTU TANDA PENDUDUK").toUpperCase(), finiteNumber(design.title.x, width / 2), finiteNumber(design.title.y, 66));
+  }
+  if (design.subtitle.visible !== false) {
+    textCtx.textAlign = String(design.subtitle.align || "center");
+    textCtx.fillStyle = String(design.subtitle.color || "#1f3016");
+    setCanvasFont(textCtx, finiteNumber(design.subtitle.fontSize, 20, 8, 80), 900);
+    textCtx.fillText(String(cfg.cardSubtitle || "DESA TULUS").toUpperCase(), finiteNumber(design.subtitle.x, width / 2), finiteNumber(design.subtitle.y, 94));
+  }
 
   // Data warga: enam baris wajib selalu tertulis pada gambar final.
   const rows = [
@@ -640,40 +731,47 @@ async function renderKtpCard({ record, member, config = {}, avatarUrl = "" }) {
     ["Agama", safeRecord.religion, 21],
     ["Hobi", safeRecord.hobby, 21]
   ];
-  const firstY = 190;
-  const rowGap = 57;
-  rows.forEach(([label, value, valueSize], index) => {
-    drawKtpField(textCtx, label, value, firstY + index * rowGap, {
-      labelX: 58,
-      colonX: 232,
-      valueX: 264,
-      maxWidth: 430,
-      valueSize
+  if (design.fields.visible !== false) {
+    const firstY = finiteNumber(design.fields.startY, 190, -height, height * 2);
+    const rowGap = finiteNumber(design.fields.gap, 57, 10, 200);
+    rows.forEach(([label, value, valueSize], index) => {
+      drawKtpField(textCtx, label, value, firstY + index * rowGap, {
+        labelX: finiteNumber(design.fields.labelX, 58), colonX: finiteNumber(design.fields.colonX, 232), valueX: finiteNumber(design.fields.valueX, 264),
+        maxWidth: finiteNumber(design.fields.maxWidth, 430, 40, width),
+        labelSize: finiteNumber(design.fields.labelSize, 21, 8, 80), valueSize: finiteNumber(design.fields.valueSize, Number(valueSize), 8, 80),
+        labelColor: design.fields.labelColor, valueColor: design.fields.valueColor
+      });
     });
-  });
+  }
 
-  // Tanggal dan status ditempatkan tepat di bawah foto dengan hirarki jelas.
+  // Tanggal, status, dan footer mengikuti posisi dashboard.
   resetCanvasTextState(textCtx);
-  textCtx.textAlign = "center";
-  textCtx.fillStyle = "#31441f";
-  setCanvasFont(textCtx, 15, 800);
-  textCtx.fillText("Tanggal Pembuatan:", photoFrame.x + photoFrame.w / 2, 458);
-  textCtx.fillStyle = "#1d2915";
-  setCanvasFont(textCtx, 18, 900);
-  textCtx.fillText(formatDateWib(safeRecord.createdAt), photoFrame.x + photoFrame.w / 2, 483);
-
-  textCtx.fillStyle = "rgba(35, 51, 22, 0.92)";
-  setCanvasFont(textCtx, 14, 800);
-  textCtx.fillText("WARGA DESA TULUS", photoFrame.x + photoFrame.w / 2, 516);
-
-  // Footer selalu berada di dalam garis kartu.
-  textCtx.textAlign = "left";
-  textCtx.fillStyle = "rgba(35, 51, 22, 0.84)";
-  setCanvasFont(textCtx, 12, 800);
-  textCtx.fillText(String(cfg.privacyNote || "KARTU KOMUNITAS DIGITAL • BUKAN DOKUMEN RESMI").toUpperCase(), 24, height - 18);
-
-  textCtx.textAlign = "right";
-  textCtx.fillText("PAK RW • DESA TULUS", width - 24, height - 18);
+  if (design.date.visible !== false) {
+    textCtx.textAlign = "center";
+    textCtx.fillStyle = String(design.date.color || "#31441f");
+    setCanvasFont(textCtx, finiteNumber(design.date.fontSize, 15, 8, 80), 800);
+    textCtx.fillText("Tanggal Pembuatan:", finiteNumber(design.date.x, photoFrame.x + photoFrame.w / 2), finiteNumber(design.date.y, 458));
+    setCanvasFont(textCtx, finiteNumber(design.date.valueSize, 18, 8, 80), 900);
+    textCtx.fillText(formatDateWib(safeRecord.createdAt), finiteNumber(design.date.x, photoFrame.x + photoFrame.w / 2), finiteNumber(design.date.valueY, 483));
+  }
+  if (design.status.visible !== false) {
+    textCtx.textAlign = "center";
+    textCtx.fillStyle = String(design.status.color || "#233316");
+    setCanvasFont(textCtx, finiteNumber(design.status.fontSize, 14, 8, 80), 800);
+    textCtx.fillText("WARGA DESA TULUS", finiteNumber(design.status.x, photoFrame.x + photoFrame.w / 2), finiteNumber(design.status.y, 516));
+  }
+  if (design.footerLeft.visible !== false) {
+    textCtx.textAlign = String(design.footerLeft.align || "left");
+    textCtx.fillStyle = String(design.footerLeft.color || "#233316");
+    setCanvasFont(textCtx, finiteNumber(design.footerLeft.fontSize, 12, 8, 80), 800);
+    textCtx.fillText(String(cfg.privacyNote || "KARTU KOMUNITAS DIGITAL • BUKAN DOKUMEN RESMI").toUpperCase(), finiteNumber(design.footerLeft.x, 24), finiteNumber(design.footerLeft.y, height - 18));
+  }
+  if (design.footerRight.visible !== false) {
+    textCtx.textAlign = String(design.footerRight.align || "right");
+    textCtx.fillStyle = String(design.footerRight.color || "#233316");
+    setCanvasFont(textCtx, finiteNumber(design.footerRight.fontSize, 12, 8, 80), 800);
+    textCtx.fillText("PAK RW • DESA TULUS", finiteNumber(design.footerRight.x, width - 24), finiteNumber(design.footerRight.y, height - 18));
+  }
 
   const visibleTextPixels = countVisibleAlphaPixels(textCtx, width, height, 2);
   if (visibleTextPixels < 1200) {
@@ -821,25 +919,15 @@ async function publishKtpCard({ targetChannel, member, record, config = {}, buff
     username: user?.username || record.fullName || "Warga",
     displayName: member?.displayName || user?.globalName || record.fullName || "Warga"
   });
-  const payload = {
+
+  // Setiap pembuatan/pembaruan KTP selalu mengirim kartu baru.
+  // Pesan KTP lama tidak diedit atau dihapus agar permintaan user dapat dikirim ulang dengan aman.
+  return targetChannel.send({
     content,
     embeds: [buildKtpCardEmbed(config, attachmentName)],
     components: [buildKtpButton(config)],
     files: [attachment]
-  };
-
-  let sent = null;
-  if (record.messageId && record.messageChannelId === targetChannel.id) {
-    const oldMessage = await targetChannel.messages.fetch(record.messageId).catch(() => null);
-    if (oldMessage?.author?.id === targetChannel.client.user.id) {
-      sent = await oldMessage.edit({ ...payload, attachments: [] }).catch((error) => {
-        console.log("[KTP WARGA] Gagal memperbarui kartu lama, mengirim kartu baru:", error.message);
-        return null;
-      });
-    }
-  }
-  if (!sent) sent = await targetChannel.send(payload);
-  return sent;
+  });
 }
 
 async function sendKtpPanel(channel, config = {}) {
@@ -862,44 +950,53 @@ async function handleKtpMessageCommand(message, config = {}) {
   }
 
   const targetChannel = resolveKtpChannel(message.guild, config);
-  if (!targetChannel) {
-    await sendTemporaryMessage(message.channel, channelSetupMessage(), 12000);
-    return true;
-  }
-  if (message.channel.id !== targetChannel.id) {
-    await sendTemporaryMessage(message.channel, wrongChannelMessage(targetChannel));
-    return true;
-  }
 
-  const missing = missingBotPermissions(targetChannel, message.guild);
-  if (missing.length) {
-    await sendTemporaryMessage(message.channel, `Pak RW belum memiliki izin berikut di channel KTP: **${missing.join(", ")}**.`, 12000);
-    return true;
-  }
-
+  // Panel tetap wajib berada di channel khusus KTP.
   if (isPanel) {
+    if (!targetChannel) {
+      await sendTemporaryMessage(message.channel, channelSetupMessage(), 12000);
+      return true;
+    }
+    if (message.channel.id !== targetChannel.id) {
+      await sendTemporaryMessage(message.channel, wrongChannelMessage(targetChannel));
+      return true;
+    }
     if (!isAllowedPanelManager(message)) {
       await sendTemporaryMessage(message.channel, "Perintah ini hanya dapat digunakan oleh owner, Administrator, atau pengurus dengan izin Kelola Server.");
       return true;
     }
+
+    const missingPanelPermissions = missingBotPermissions(targetChannel, message.guild);
+    if (missingPanelPermissions.length) {
+      await sendTemporaryMessage(message.channel, `Pak RW belum memiliki izin berikut di channel KTP: **${missingPanelPermissions.join(", ")}**.`, 12000);
+      return true;
+    }
+
     await sendKtpPanel(targetChannel, config);
     await sendTemporaryMessage(message.channel, "Panel KTP Warga berhasil dikirim.", 5000);
     return true;
   }
 
+  // rwktp dapat digunakan di semua text channel yang dapat dipakai Pak RW.
+  const missingViewPermissions = missingBotPermissions(message.channel, message.guild);
+  if (missingViewPermissions.length) {
+    await sendTemporaryMessage(message.channel, `Pak RW belum memiliki izin berikut di channel ini: **${missingViewPermissions.join(", ")}**.`, 12000);
+    return true;
+  }
+
   const record = getKtpRecord(message.guild.id, message.author.id);
   if (!record) {
+    const destination = targetChannel ? ` Silakan buat melalui panel di ${targetChannel}.` : ` ${channelSetupMessage()}`;
     await message.channel.send({
-      content: `${message.author}, kamu belum memiliki KTP DESA TULUS. Klik tombol di bawah untuk membuatnya.`,
-      components: [buildKtpButton(config)]
+      content: `${message.author}, kamu belum memiliki KTP DESA TULUS.${destination}`
     });
     return true;
   }
 
   try {
-    const member = message.member;
+    const member = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
     const buffer = await renderKtpCard({ record, member, config });
-    const attachmentName = makeKtpAttachmentName(record);
+    const attachmentName = makeKtpAttachmentName({ ...record, updatedAt: Date.now() });
     await message.channel.send({
       content: formatTemplate(cfg.resultContent, {
         user: `<@${message.author.id}>`,
@@ -910,9 +1007,12 @@ async function handleKtpMessageCommand(message, config = {}) {
       components: [buildKtpButton(config)],
       files: [new AttachmentBuilder(buffer, { name: attachmentName })]
     });
+    if (cfg.logToConsole !== false) {
+      console.log(`[KTP WARGA] ${message.author.tag} melihat ulang KTP melalui #${message.channel?.name || message.channelId}.`);
+    }
   } catch (error) {
-    console.log("[KTP WARGA] Gagal menampilkan KTP:", { guildId: message.guild.id, userId: message.author.id, error: error.message });
-    await sendTemporaryMessage(message.channel, "Pak RW gagal menampilkan KTP. Periksa file background dan permission Lampirkan File.", 12000);
+    console.log("[KTP WARGA] Gagal menampilkan KTP:", { guildId: message.guild.id, userId: message.author.id, channelId: message.channelId, error: error.message });
+    await sendTemporaryMessage(message.channel, "Pak RW gagal menampilkan KTP. Periksa file background dan permission Lampirkan File di channel ini.", 12000);
   }
   return true;
 }
@@ -944,10 +1044,8 @@ async function handleKtpInteraction(interaction, config = {}) {
 
   if (isKtpButton) {
     const record = getKtpRecord(interaction.guild.id, interaction.user.id);
-    if (record && cfg.allowUpdate === false) {
-      await interaction.reply({ content: "KTP kamu sudah dibuat dan pembaruan sedang dinonaktifkan oleh pengurus.", flags: 64 });
-      return true;
-    }
+    // Warga yang sudah memiliki KTP tetap boleh membuka formulir lagi.
+    // Hasil berikutnya akan dikirim sebagai kartu baru, bukan mengedit pesan lama.
     await interaction.showModal(buildKtpModal(record));
     return true;
   }
@@ -1021,6 +1119,8 @@ module.exports = {
   KTP_BUTTON_ID,
   KTP_MODAL_ID,
   defaultKtpConfig,
+  defaultKtpDesign,
+  mergeKtpDesign,
   getKtpConfig,
   getKtpRecord,
   saveKtpRecord,

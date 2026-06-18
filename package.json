@@ -1,10 +1,10 @@
 {
   "name": "pak-rw-desa-tulus",
-  "version": "10.10.92",
+  "version": "10.10.94",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "check": "node --check index.js && node --check services/afkVoiceManager.js && node --check services/serverIdExporter.js && node --check services/ktpWarga.js && node --check ai/brain.js && node --check utils/cooldown.js && node --check db/mongoStore.js && node --check level/levelRoleTiers.js && node tests/levelRoleTiers.test.js && node tests/ktpWarga.test.js && node tests/dashboardAllowedPaths.test.js && node tests/afkVoice.test.js && node tests/aiBrain.test.js",
+    "check": "node --check index.js && node --check services/afkVoiceManager.js && node --check services/serverIdExporter.js && node --check services/ktpWarga.js && node --check ai/brain.js && node --check utils/cooldown.js && node --check db/mongoStore.js && node --check level/levelRoleTiers.js && node tests/levelRoleTiers.test.js && node tests/ktpWarga.test.js && node tests/dashboardAllowedPaths.test.js && node tests/afkVoice.test.js && node tests/aiBrain.test.js && node tests/ktpCommandScope.test.js && node tests/ktpDesigner.test.js",
     "dashboard:build": "npm --prefix dashboard run build",
     "dashboard:dev": "npm --prefix dashboard run dev",
     "test:level-roles": "node tests/levelRoleTiers.test.js",
@@ -24,5 +24,5 @@
   "engines": {
     "node": ">=22.12.0 <23"
   },
-  "description": "Pak RW DESA TULUS v10.10.92 - background KTP owner dipakai persis 1:1 tanpa crop, tint, bingkai, atau watermark tambahan; AI GPT-5.4 memory per warga dan AFK Voice stabil"
+  "description": "Pak RW DESA TULUS v10.10.93 - command rwktp dapat digunakan di semua channel, panel tetap khusus channel KTP, dan pembuatan ulang selalu mengirim kartu baru"
 }

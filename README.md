@@ -326,7 +326,7 @@ Renderer KTP mendaftarkan DejaVu Sans dari dependency `dejavu-fonts-ttf` melalui
 - KTP v10.10.89, AFK Voice v10.10.87, MongoDB, level, poin, role, dashboard, serta data lama tetap dipertahankan.
 
 
-## Pak RW v10.10.92 — Background KTP Owner 1:1 Tanpa Perubahan
+## Pak RW v10.10.94 — Background KTP Owner 1:1 Tanpa Perubahan
 
 - Asset `assets/ktp-desa-tulus-background.png` diganti persis dengan PNG terbaru dari owner.
 - Background dirender pada ukuran native **1011 × 639** tanpa crop, resize, tint, gradient, frame, overlay, atau watermark tambahan.

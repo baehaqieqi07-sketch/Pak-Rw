@@ -11326,6 +11326,61 @@ app.get("/api/dashboard/bootstrap", requireDashboardAuth, (req, res) => {
   });
 });
 
+
+const KTP_UPLOAD_DIR = path.join(__dirname, "assets", "ktp-uploads");
+function safeKtpAssetPath(input = "") {
+  const relative = String(input || "").replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!relative.startsWith("assets/")) return "";
+  const resolved = path.resolve(__dirname, relative);
+  const assetsRoot = path.resolve(__dirname, "assets") + path.sep;
+  return resolved.startsWith(assetsRoot) ? resolved : "";
+}
+
+app.get("/api/dashboard/ktp/asset", requireDashboardAuth, (req, res) => {
+  const relativePath = String(req.query.path || "").replace(/\\/g, "/").replace(/^\/+/, "");
+  const filePath = safeKtpAssetPath(relativePath);
+  if (!filePath) return res.status(404).send("Asset KTP tidak ditemukan.");
+  if (!fs.existsSync(filePath)) {
+    const stored = readStore("ktpDesignAssets", { files: {} })?.files?.[relativePath];
+    if (stored?.data) {
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, Buffer.from(stored.data, "base64"));
+    }
+  }
+  if (!fs.existsSync(filePath)) return res.status(404).send("Asset KTP tidak ditemukan.");
+  res.setHeader("Cache-Control", "no-store");
+  return res.sendFile(filePath);
+});
+
+app.post("/api/dashboard/ktp/upload", requireDashboardAuth, async (req, res) => {
+  try {
+    const kind = req.body?.kind === "background" ? "background" : "decoration";
+    const fileName = String(req.body?.fileName || "image.png").replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 80);
+    const dataUrl = String(req.body?.dataUrl || "");
+    const match = dataUrl.match(/^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/i);
+    if (!match) return res.status(400).json({ ok: false, error: "Format gambar tidak valid. Gunakan PNG, JPG, atau WebP." });
+    const bytes = Buffer.from(match[2], "base64");
+    if (!bytes.length || bytes.length > 6 * 1024 * 1024) return res.status(400).json({ ok: false, error: "Ukuran gambar harus antara 1 byte dan 6 MB." });
+    const image = await CanvasKit.loadImage(bytes).catch(() => null);
+    if (!image?.width || !image?.height) return res.status(400).json({ ok: false, error: "File tidak dapat dibaca sebagai gambar." });
+    fs.mkdirSync(KTP_UPLOAD_DIR, { recursive: true });
+    const extension = match[1].toLowerCase() === "jpeg" ? "jpg" : match[1].toLowerCase();
+    const base = path.basename(fileName, path.extname(fileName)).replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 48) || kind;
+    const savedName = `${kind}-${Date.now()}-${base}.${extension}`;
+    const savedPath = path.join(KTP_UPLOAD_DIR, savedName);
+    fs.writeFileSync(savedPath, bytes);
+    const relativePath = `assets/ktp-uploads/${savedName}`;
+    const assetStore = readStore("ktpDesignAssets", { files: {} }) || { files: {} };
+    assetStore.files = assetStore.files && typeof assetStore.files === "object" ? assetStore.files : {};
+    assetStore.files[relativePath] = { data: bytes.toString("base64"), mime: `image/${extension === "jpg" ? "jpeg" : extension}`, width: image.width, height: image.height, updatedAt: Date.now() };
+    writeStore("ktpDesignAssets", assetStore);
+    appendDashboardActivity("ktp", "Asset KTP diunggah", `${kind}: ${savedName} (${image.width}x${image.height})`);
+    return res.json({ ok: true, path: relativePath, width: image.width, height: image.height });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message || String(err) });
+  }
+});
+
 app.put("/api/dashboard/settings", requireDashboardAuth, (req, res) => {
   try {
     const patches = Array.isArray(req.body?.patches) ? req.body.patches.slice(0, 80) : [];
@@ -11337,7 +11392,7 @@ app.put("/api/dashboard/settings", requireDashboardAuth, (req, res) => {
       if (!isSafeDashboardPath(pathText)) return res.status(400).json({ ok: false, error: `Path config tidak diizinkan: ${pathText}` });
       setDashboardPath(cfg, pathText, patch.value);
     }
-    cfg.version = "10.10.92";
+    cfg.version = "10.10.94";
     writeConfigFile(cfg);
     appendDashboardActivity("settings", "Setting dashboard disimpan", `${patches.length} field diperbarui melalui adapter aman.`);
     if (levelRoleConfigChanged) {
@@ -11357,7 +11412,7 @@ app.put("/api/dashboard/embed/:key", requireDashboardAuth, (req, res) => {
     const cfg = readConfigFile();
     cfg.embeds = cfg.embeds || {};
     cfg.embeds[key] = mergeDashboardEmbed(cfg.embeds[key] || {}, req.body?.embed || {});
-    cfg.version = "10.10.92";
+    cfg.version = "10.10.94";
     writeConfigFile(cfg);
     appendDashboardActivity("embed", "Template embed disimpan", `Template ${key} diperbarui dari Embed Builder.`);
     return res.json({ ok: true, embed: cfg.embeds[key] });
@@ -11444,7 +11499,7 @@ app.put("/api/afk-voice/config", requireDashboardAuth, async (req, res) => {
       if (!valid.ok) return res.status(400).json({ success: false, message: valid.message, errorCode: valid.errorCode });
     }
     cfg.afkVoice = next;
-    cfg.version = "10.10.92";
+    cfg.version = "10.10.94";
     writeConfigFile(cfg);
     appendDashboardActivity("afk-voice", "AFK Voice diperbarui", next.enabled ? `Channel voice ${next.channelId} diterapkan.` : "Fitur dinonaktifkan.");
 
@@ -11486,7 +11541,7 @@ app.post("/api/afk-voice/disconnect", requireDashboardAuth, async (req, res) => 
   if (!checkActionRateLimit()) return res.status(429).json({ success: false, message: "Tunggu sebentar sebelum memutus koneksi.", errorCode: "RATE_LIMITED" });
   const cfg = readConfigFile();
   cfg.afkVoice = { ...(cfg.afkVoice || {}), enabled: false, updatedAt: new Date().toISOString(), updatedBy: "dashboard" };
-  cfg.version = "10.10.92";
+  cfg.version = "10.10.94";
   writeConfigFile(cfg);
   const result = await disconnectAfkVoice({ disable: true });
   return res.json(result);

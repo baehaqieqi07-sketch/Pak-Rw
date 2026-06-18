@@ -101,65 +101,116 @@ export function BannerManagerPage() {
 
 export function KtpWargaPage() {
   const { data, picker, pickerLoading, refresh, refreshPicker, notify } = useDashboard();
+  const defaultDesign: any = {
+    title: { x: 506, y: 66, fontSize: 30, color: "#1f3016", align: "center", visible: true },
+    subtitle: { x: 506, y: 94, fontSize: 20, color: "#1f3016", align: "center", visible: true },
+    fields: { labelX: 58, colonX: 232, valueX: 264, startY: 190, gap: 57, labelSize: 21, valueSize: 21, labelColor: "#31441f", valueColor: "#1d2915", maxWidth: 430, visible: true },
+    photo: { x: 748, y: 154, width: 220, height: 270, radius: 7, borderWidth: 2, borderColor: "#2b401c", frameColor: "#ebe9c7", visible: true },
+    date: { x: 858, y: 458, fontSize: 15, valueY: 483, valueSize: 18, color: "#31441f", visible: true },
+    status: { x: 858, y: 516, fontSize: 14, color: "#233316", visible: true },
+    footerLeft: { x: 24, y: 621, fontSize: 12, color: "#233316", align: "left", visible: true },
+    footerRight: { x: 987, y: 621, fontSize: 12, color: "#233316", align: "right", visible: true },
+    decorations: []
+  };
   const defaults: any = {
-    enabled: true,
-    channelId: "",
-    channelName: "ktp-warga",
-    cooldownSeconds: 15,
-    allowUpdate: true,
+    enabled: true, channelId: "", channelName: "ktp-warga", cooldownSeconds: 15, allowUpdate: true,
     panelTitle: "KARTU TANDA PENDUDUK DESA TULUS",
     panelDescription: "Klik tombol **Buat KTP** untuk mengisi data warga. Gunakan nama panggilan dan domisili umum saja—jangan tulis alamat rumah, nomor telepon, kata sandi, atau data pribadi sensitif.",
-    buttonLabel: "Buat KTP",
-    resultContent: "🪪 Kartu Tanda Penduduk milik {user}",
-    footerText: "DESA TULUS • Ketik rwktp untuk melihat KTP",
-    backgroundPath: "assets/ktp-desa-tulus-background.png",
-    cardTitle: "KARTU TANDA PENDUDUK",
-    cardSubtitle: "DESA TULUS",
-    privacyNote: "KARTU KOMUNITAS DIGITAL • BUKAN DOKUMEN RESMI",
-    logToConsole: true
+    buttonLabel: "Buat KTP", resultContent: "🪪 Kartu Tanda Penduduk milik {user}",
+    footerText: "DESA TULUS • Ketik rwktp untuk melihat KTP", backgroundPath: "assets/ktp-desa-tulus-background.png",
+    backgroundFit: "exact", cardTitle: "KARTU TANDA PENDUDUK", cardSubtitle: "DESA TULUS",
+    privacyNote: "KARTU KOMUNITAS DIGITAL • BUKAN DOKUMEN RESMI", logToConsole: true, design: defaultDesign
   };
+  const mergeDesign = (raw: any = {}) => ({ ...defaultDesign, ...raw, fields: { ...defaultDesign.fields, ...(raw.fields || {}) }, photo: { ...defaultDesign.photo, ...(raw.photo || {}) }, title: { ...defaultDesign.title, ...(raw.title || {}) }, subtitle: { ...defaultDesign.subtitle, ...(raw.subtitle || {}) }, date: { ...defaultDesign.date, ...(raw.date || {}) }, status: { ...defaultDesign.status, ...(raw.status || {}) }, footerLeft: { ...defaultDesign.footerLeft, ...(raw.footerLeft || {}) }, footerRight: { ...defaultDesign.footerRight, ...(raw.footerRight || {}) }, decorations: Array.isArray(raw.decorations) ? raw.decorations : [] });
   const [values, setValues] = useState<any>(defaults);
   const [initial, setInitial] = useState<any>(defaults);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState("");
+  const [selected, setSelected] = useState("title");
   useEffect(() => {
-    const next = { ...defaults, ...(data.config.ktpSystem || {}) };
-    setValues(next);
-    setInitial(next);
+    const source = data.config.ktpSystem || {};
+    const next = { ...defaults, ...source, design: mergeDesign(source.design) };
+    setValues(next); setInitial(next);
   }, [data]);
   const dirty = JSON.stringify(values) !== JSON.stringify(initial);
   const textChannels = (picker.channel || []).filter((item: any) => /text|announcement/i.test(String(item.typeLabel || item.meta || "")) && !/voice|stage|category|forum|media/i.test(String(item.typeLabel || item.meta || "")));
   const set = (key: string, value: any) => setValues((current: any) => ({ ...current, [key]: value }));
+  const setDesign = (section: string, key: string, value: any) => setValues((current: any) => ({ ...current, design: { ...current.design, [section]: { ...current.design[section], [key]: value } } }));
+  const setDecoration = (id: string, patch: any) => setValues((current: any) => ({ ...current, design: { ...current.design, decorations: current.design.decorations.map((item: any) => item.id === id ? { ...item, ...patch } : item) } }));
+  const removeDecoration = (id: string) => setValues((current: any) => ({ ...current, design: { ...current.design, decorations: current.design.decorations.filter((item: any) => item.id !== id) } }));
+  const upload = async (file: File, kind: "background" | "decoration") => {
+    if (!file.type.startsWith("image/")) { notify("File harus berupa PNG, JPG, atau WebP.", "error"); return; }
+    if (file.size > 6 * 1024 * 1024) { notify("Ukuran gambar maksimal 6 MB.", "error"); return; }
+    setUploading(kind);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(file); });
+      const result = await api.uploadKtpAsset(kind, file.name, dataUrl);
+      if (kind === "background") set("backgroundPath", result.path);
+      else {
+        const item = { id: `img-${Date.now()}`, name: file.name, path: result.path, x: 390, y: 220, width: 220, height: 140, opacity: 0.45, rotation: 0, visible: true };
+        setValues((current: any) => ({ ...current, design: { ...current.design, decorations: [...current.design.decorations, item] } }));
+        setSelected(item.id);
+      }
+      notify(kind === "background" ? "Background KTP berhasil diunggah." : "Image dekorasi berhasil ditambahkan.");
+    } catch (error) { notify(error instanceof Error ? error.message : String(error), "error"); }
+    finally { setUploading(""); }
+  };
   const save = async () => {
-    const selected = (picker.channel || []).find((item: any) => item.id === values.channelId) as any;
-    if (!values.channelId) { notify("Pilih channel privat KTP Warga terlebih dahulu.", "error"); return; }
-    if (selected && !/text|announcement/i.test(String(selected.typeLabel || selected.meta || ""))) { notify("Channel KTP Warga harus berupa text channel.", "error"); return; }
+    const selectedChannel = (picker.channel || []).find((item: any) => item.id === values.channelId) as any;
+    if (!values.channelId) { notify("Pilih channel khusus panel KTP terlebih dahulu.", "error"); return; }
+    if (selectedChannel && !/text|announcement/i.test(String(selectedChannel.typeLabel || selectedChannel.meta || ""))) { notify("Channel KTP harus berupa text channel.", "error"); return; }
     setSaving(true);
     try {
       await api.savePatches(Object.entries(values).map(([key, value]) => ({ path: `ktpSystem.${key}`, value })));
-      await refresh();
-      setInitial(values);
-      notify("Pengaturan KTP Warga berhasil disimpan.");
+      await refresh(); setInitial(values); notify("Desain dan pengaturan KTP berhasil disimpan.");
     } catch (error) { notify(error instanceof Error ? error.message : String(error), "error"); }
     finally { setSaving(false); }
   };
-  const cancel = () => { setValues(initial); notify("Perubahan KTP Warga dibatalkan.", "info"); };
+  const cancel = () => { setValues(initial); notify("Perubahan KTP dibatalkan.", "info"); };
+  const resetDesign = () => { if (!window.confirm("Kembalikan posisi desain KTP ke tata letak aman bawaan?")) return; setValues((current: any) => ({ ...current, design: defaultDesign })); };
+  const previewStyle = (item: any) => ({ left: `${(Number(item.x || 0) / 1011) * 100}%`, top: `${(Number(item.y || 0) / 639) * 100}%`, fontSize: `${Math.max(8, Number(item.fontSize || item.valueSize || 18)) * .42}px`, color: item.color || "#1d2915", transform: `translate(${item.align === "center" ? "-50%" : item.align === "right" ? "-100%" : "0"}, -100%)`, textAlign: item.align || "left" } as any);
+  const control = selected.startsWith("img-") ? values.design.decorations.find((d: any) => d.id === selected) : values.design[selected];
   return <div className="page-stack page-enter">
-    <PageHeader icon={IdCard} kicker="Komunitas" title="KTP Warga" description="Atur channel khusus, panel tombol, modal lima kolom, dan kartu warga DESA TULUS." />
-    <Card><CardHeader title="Status fitur" description="Pak RW tidak membuat channel otomatis. Buat channel privat terlebih dahulu, lalu pilih dari dropdown." />
-      <div className="setting-row setting-row-large"><div><strong>Aktifkan KTP Warga</strong><span>Warga dapat membuat dan memperbarui kartu lewat tombol Discord.</span></div><Toggle checked={Boolean(values.enabled)} onChange={(next) => set("enabled", next)} /></div>
-      <div className="connection-strip"><span className={values.enabled && values.channelId ? "is-online" : ""} />{!values.enabled ? "Fitur Nonaktif" : values.channelId ? "Siap Digunakan" : "Channel Belum Dipilih"}</div>
-    </Card>
-    <Card><CardHeader title="Channel khusus KTP" description="Disarankan membuat channel privat bernama 🪪・ktp-warga. Jangan gunakan channel umum." action={<Button variant="secondary" icon={<RefreshCcw size={16} />} onClick={refreshPicker}>Muat ulang Discord</Button>} />
-      <div className="form-grid two-columns"><DiscordPicker kind="channel" label="Channel KTP Warga" helper="Channel tempat panel dan hasil KTP dikirim" items={textChannels} value={values.channelId} loading={pickerLoading} required onChange={(id) => set("channelId", id)} />
-      <div className="form-field"><label>Cooldown pembuatan (detik)</label><input type="number" min={1} max={3600} value={values.cooldownSeconds} onChange={(e) => set("cooldownSeconds", Math.max(1, Number(e.target.value || 15)))} /><small className="field-helper">Mencegah tombol dan modal digunakan berulang terlalu cepat.</small></div></div>
-    </Card>
-    <Card><CardHeader title="Alur kartu warga" description="Klik tombol membuka modal berisi Nama Lengkap, Jenis Kelamin, Domisili, Agama, dan Hobi." />
-      <div className="settings-list"><div className="setting-row"><div><strong>Izinkan pembaruan KTP</strong><span>Kartu lama diedit menjadi versi terbaru agar tidak menumpuk.</span></div><Toggle checked={Boolean(values.allowUpdate)} onChange={(next) => set("allowUpdate", next)} /></div></div>
-      <div className="form-grid two-columns"><div className="form-field"><label>Judul panel</label><input value={values.panelTitle} onChange={(e) => set("panelTitle", e.target.value)} /></div><div className="form-field"><label>Teks tombol</label><input value={values.buttonLabel} onChange={(e) => set("buttonLabel", e.target.value)} maxLength={80} /></div><div className="form-field form-field-full"><label>Deskripsi panel</label><textarea rows={5} value={values.panelDescription} onChange={(e) => set("panelDescription", e.target.value)} /></div><div className="form-field"><label>Judul pada kartu</label><input value={values.cardTitle} onChange={(e) => set("cardTitle", e.target.value)} /></div><div className="form-field"><label>Subjudul pada kartu</label><input value={values.cardSubtitle} onChange={(e) => set("cardSubtitle", e.target.value)} /></div><div className="form-field"><label>Pesan hasil</label><input value={values.resultContent} onChange={(e) => set("resultContent", e.target.value)} /><small className="field-helper">Placeholder: {'{user}'}, {'{username}'}, {'{displayName}'}</small></div><div className="form-field"><label>Footer Discord</label><input value={values.footerText} onChange={(e) => set("footerText", e.target.value)} /></div><div className="form-field form-field-full"><label>Catatan pada kartu</label><input value={values.privacyNote} onChange={(e) => set("privacyNote", e.target.value)} /></div></div>
-    </Card>
-    <Card><CardHeader title="Background KTP" description="Background yang kamu kirim sudah dimasukkan langsung ke project dan dipakai otomatis saat kartu dibuat." /><div className="info-panel"><FileImage size={19} /><p><code>{values.backgroundPath}</code><br />Foto pada kartu memakai avatar Discord warga. Pak RW tidak meminta upload foto pribadi.</p></div></Card>
-    <Card><CardHeader title="Cara menjalankan" description="Setelah channel disimpan dan bot direstart." /><div className="info-panel"><TerminalSquare size={19} /><p>Ketik <code>rwktppanel</code> sebagai owner/admin di channel KTP untuk mengirim panel. Warga klik <strong>Buat KTP</strong>, mengisi modal, lalu memakai <code>rwktp</code> untuk melihat kartu lagi.</p></div></Card>
-    {dirty ? <div className="page-save-bar page-save-bar-dirty"><div><strong>Perubahan KTP Warga belum disimpan</strong><span>Simpan untuk menerapkan pengaturan, atau Batal untuk kembali.</span></div><div><Button variant="secondary" icon={<RefreshCcw size={16} />} onClick={cancel} disabled={saving}>Batal</Button><Button icon={<Save size={16} />} onClick={save} disabled={saving}>{saving ? "Menyimpan" : "Simpan Pengaturan"}</Button></div></div> : null}
+    <PageHeader icon={IdCard} kicker="KTP Design Studio" title="Editor KTP Warga" description="Atur panel, background, posisi teks, foto, footer, dan image dekorasi dari satu halaman dengan preview langsung." />
+    <Card><CardHeader title="Alur yang jelas" description="1. Pilih channel panel • 2. Upload background/image • 3. Rapikan posisi • 4. Preview • 5. Simpan • 6. Test dengan rwktp." /><div className="ktp-workflow"><span>01 Channel Panel</span><span>02 Media</span><span>03 Tata Letak</span><span>04 Preview</span><span>05 Simpan</span><span>06 Test Discord</span></div></Card>
+    <div className="ktp-studio-grid">
+      <div className="ktp-editor-column">
+        <Card><CardHeader title="Status & channel panel" description="Command rwktp tetap dapat dipakai di semua channel. Hanya panel rwktppanel yang dibatasi ke channel ini." action={<Button variant="secondary" icon={<RefreshCcw size={16}/>} onClick={refreshPicker}>Muat Discord</Button>} />
+          <div className="setting-row setting-row-large"><div><strong>Aktifkan KTP Warga</strong><span>Renderer dan editor desain aktif.</span></div><Toggle checked={Boolean(values.enabled)} onChange={(next)=>set("enabled", next)} /></div>
+          <div className="form-grid two-columns"><DiscordPicker kind="channel" label="Channel khusus panel KTP" helper="rwktppanel hanya boleh dikirim di channel ini" items={textChannels} value={values.channelId} loading={pickerLoading} required onChange={(id)=>set("channelId",id)} /><div className="form-field"><label>Cooldown (detik)</label><input type="number" min={1} max={3600} value={values.cooldownSeconds} onChange={(e)=>set("cooldownSeconds",Math.max(1,Number(e.target.value||15)))} /></div></div>
+        </Card>
+        <Card><CardHeader title="Media KTP" description="Ganti background atau tambahkan image dekorasi. File disimpan aman di project runtime dashboard." />
+          <div className="ktp-upload-grid"><label className="ktp-upload-box"><FileImage size={20}/><strong>Upload Background</strong><span>PNG/JPG/WebP maksimal 6 MB</span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={(e)=>e.target.files?.[0]&&upload(e.target.files[0],"background")} />{uploading==="background"?<em>Mengunggah...</em>:null}</label><label className="ktp-upload-box"><FileImage size={20}/><strong>Tambah Image</strong><span>Logo, stempel, ikon, ornamen</span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={(e)=>e.target.files?.[0]&&upload(e.target.files[0],"decoration")} />{uploading==="decoration"?<em>Mengunggah...</em>:null}</label></div>
+          <div className="form-grid two-columns"><div className="form-field"><label>Path background aktif</label><input value={values.backgroundPath} onChange={(e)=>set("backgroundPath",e.target.value)} /></div><div className="form-field"><label>Mode background</label><select value={values.backgroundFit} onChange={(e)=>set("backgroundFit",e.target.value)}><option value="exact">Exact 1:1</option><option value="cover">Cover</option><option value="contain">Contain</option></select></div></div>
+        </Card>
+        <Card><CardHeader title="Pilih elemen desain" description="Pilih elemen lalu ubah koordinat, ukuran, warna, dan visibilitas secara manual." />
+          <div className="ktp-element-tabs">{[["title","Judul"],["subtitle","Subjudul"],["fields","Data Warga"],["photo","Foto"],["date","Tanggal"],["status","Status"],["footerLeft","Footer Kiri"],["footerRight","Footer Kanan"]].map(([id,label])=><button key={id} className={selected===id?"active":""} onClick={()=>setSelected(id)}>{label}</button>)}{values.design.decorations.map((item:any)=><button key={item.id} className={selected===item.id?"active":""} onClick={()=>setSelected(item.id)}>🖼 {item.name.slice(0,14)}</button>)}</div>
+          {control ? <div className="ktp-control-panel">
+            {!selected.startsWith("img-") && selected!=="fields" ? <><div className="form-grid three-columns"><div className="form-field"><label>X</label><input type="number" value={control.x} onChange={(e)=>setDesign(selected,"x",Number(e.target.value))}/></div><div className="form-field"><label>Y</label><input type="number" value={control.y} onChange={(e)=>setDesign(selected,"y",Number(e.target.value))}/></div>{control.fontSize!==undefined?<div className="form-field"><label>Ukuran font</label><input type="number" min={8} max={80} value={control.fontSize} onChange={(e)=>setDesign(selected,"fontSize",Number(e.target.value))}/></div>:null}</div><div className="form-grid two-columns">{control.color!==undefined?<div className="form-field"><label>Warna</label><input type="color" value={control.color} onChange={(e)=>setDesign(selected,"color",e.target.value)}/></div>:null}<div className="setting-row compact-setting"><div><strong>Tampilkan elemen</strong></div><Toggle checked={control.visible!==false} onChange={(next)=>setDesign(selected,"visible",next)}/></div></div></> : null}
+            {selected==="fields"?<div className="form-grid three-columns">{[["labelX","X Label"],["colonX","X Titik Dua"],["valueX","X Isi"],["startY","Y Awal"],["gap","Jarak Baris"],["labelSize","Ukuran Label"],["valueSize","Ukuran Isi"],["maxWidth","Lebar Maks"]].map(([key,label])=><div className="form-field" key={key}><label>{label}</label><input type="number" value={control[key]} onChange={(e)=>setDesign("fields",key,Number(e.target.value))}/></div>)}</div>:null}
+            {selected==="photo"?<div className="form-grid three-columns">{[["width","Lebar"],["height","Tinggi"],["radius","Radius"],["borderWidth","Tebal Garis"]].map(([key,label])=><div className="form-field" key={key}><label>{label}</label><input type="number" value={control[key]} onChange={(e)=>setDesign("photo",key,Number(e.target.value))}/></div>)}</div>:null}
+            {selected.startsWith("img-")?<><div className="form-grid three-columns">{[["x","X"],["y","Y"],["width","Lebar"],["height","Tinggi"],["opacity","Opacity"],["rotation","Rotasi"]].map(([key,label])=><div className="form-field" key={key}><label>{label}</label><input type="number" step={key==="opacity"?0.05:1} value={control[key]} onChange={(e)=>setDecoration(control.id,{[key]:Number(e.target.value)})}/></div>)}</div><div className="settings-list"><div className="setting-row"><div><strong>Tampilkan image</strong></div><Toggle checked={control.visible!==false} onChange={(next)=>setDecoration(control.id,{visible:next})}/></div></div><Button variant="danger" onClick={()=>removeDecoration(control.id)}>Hapus Image</Button></>:null}
+          </div>:null}
+          <div className="actions-row"><Button variant="secondary" onClick={resetDesign}>Reset Tata Letak</Button></div>
+        </Card>
+        <Card><CardHeader title="Teks panel & kartu" description="Semua teks penting KTP dapat diedit tanpa mengubah command atau data warga." /><div className="form-grid two-columns"><div className="form-field"><label>Judul panel</label><input value={values.panelTitle} onChange={(e)=>set("panelTitle",e.target.value)}/></div><div className="form-field"><label>Teks tombol</label><input value={values.buttonLabel} onChange={(e)=>set("buttonLabel",e.target.value)}/></div><div className="form-field form-field-full"><label>Deskripsi panel</label><textarea rows={4} value={values.panelDescription} onChange={(e)=>set("panelDescription",e.target.value)}/></div><div className="form-field"><label>Judul kartu</label><input value={values.cardTitle} onChange={(e)=>set("cardTitle",e.target.value)}/></div><div className="form-field"><label>Subjudul kartu</label><input value={values.cardSubtitle} onChange={(e)=>set("cardSubtitle",e.target.value)}/></div><div className="form-field"><label>Footer Discord</label><input value={values.footerText} onChange={(e)=>set("footerText",e.target.value)}/></div><div className="form-field"><label>Catatan kartu</label><input value={values.privacyNote} onChange={(e)=>set("privacyNote",e.target.value)}/></div></div></Card>
+      </div>
+      <div className="ktp-preview-column"><Card><CardHeader title="Preview langsung" description="Preview berskala dari layout renderer 1011 × 639. Simpan untuk menerapkan ke hasil Discord." />
+        <div className="ktp-live-preview" style={{backgroundImage:`url('/api/dashboard/ktp/asset?path=${encodeURIComponent(values.backgroundPath)}')`}}>
+          {values.design.decorations.filter((d:any)=>d.visible!==false).map((d:any)=><img key={d.id} src={`/api/dashboard/ktp/asset?path=${encodeURIComponent(d.path)}`} style={{left:`${d.x/10.11}%`,top:`${d.y/6.39}%`,width:`${d.width/10.11}%`,height:`${d.height/6.39}%`,opacity:d.opacity,transform:`rotate(${d.rotation||0}deg)`}}/>)}
+          {values.design.title.visible!==false?<strong className="ktp-preview-text" style={previewStyle(values.design.title)}>{values.cardTitle}</strong>:null}
+          {values.design.subtitle.visible!==false?<strong className="ktp-preview-text" style={previewStyle(values.design.subtitle)}>{values.cardSubtitle}</strong>:null}
+          {values.design.fields.visible!==false?<div className="ktp-preview-fields" style={{left:`${values.design.fields.labelX/10.11}%`,top:`${(values.design.fields.startY-24)/6.39}%`,color:values.design.fields.valueColor,fontSize:`${values.design.fields.valueSize*.42}px`,lineHeight:`${values.design.fields.gap*.42}px`}}>{[["No KTP","321234567890123456"],["Nama","Bekiw"],["Jenis Kelamin","Laki-laki"],["Domisili","Bogor, Jawa Barat"],["Agama","Islam"],["Hobi","Mengurus DESA TULUS"]].map(([l,v])=><div key={l}><b>{l}</b><span>:</span><strong>{v}</strong></div>)}</div>:null}
+          {values.design.photo.visible!==false?<div className="ktp-preview-photo" style={{left:`${values.design.photo.x/10.11}%`,top:`${values.design.photo.y/6.39}%`,width:`${values.design.photo.width/10.11}%`,height:`${values.design.photo.height/6.39}%`,borderRadius:values.design.photo.radius*.42,borderWidth:Math.max(1,values.design.photo.borderWidth*.42),borderColor:values.design.photo.borderColor,background:values.design.photo.frameColor}}>BEKIW</div>:null}
+          {values.design.date.visible!==false?<div className="ktp-preview-date" style={previewStyle(values.design.date)}>Tanggal Pembuatan:<b>18-06-2026</b></div>:null}
+          {values.design.status.visible!==false?<strong className="ktp-preview-text" style={previewStyle(values.design.status)}>WARGA DESA TULUS</strong>:null}
+          {values.design.footerLeft.visible!==false?<strong className="ktp-preview-text" style={previewStyle(values.design.footerLeft)}>{values.privacyNote}</strong>:null}
+          {values.design.footerRight.visible!==false?<strong className="ktp-preview-text" style={previewStyle(values.design.footerRight)}>PAK RW • DESA TULUS</strong>:null}
+        </div>
+        <div className="ktp-preview-note"><ShieldCheck size={18}/><span>Preview tidak mengubah data warga. Nomor KTP, MongoDB, level, AI, AFK Voice, dan command lain tetap aman.</span></div>
+      </Card></div>
+    </div>
+    {dirty?<div className="page-save-bar page-save-bar-dirty"><div><strong>Desain KTP belum disimpan</strong><span>Cek preview, lalu simpan agar renderer Discord memakai layout ini.</span></div><div><Button variant="secondary" icon={<RefreshCcw size={16}/>} onClick={cancel} disabled={saving}>Batal</Button><Button icon={<Save size={16}/>} onClick={save} disabled={saving}>{saving?"Menyimpan...":"Simpan Desain KTP"}</Button></div></div>:null}
   </div>;
 }
 

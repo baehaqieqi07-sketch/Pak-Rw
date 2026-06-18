@@ -39,5 +39,6 @@ export const api = {
   connectAfkVoice: async () => parseJson<any>(await fetch("/api/afk-voice/connect", { method: "POST", credentials: "same-origin" })),
   reconnectAfkVoice: async () => parseJson<any>(await fetch("/api/afk-voice/reconnect", { method: "POST", credentials: "same-origin" })),
   disconnectAfkVoice: async () => parseJson<any>(await fetch("/api/afk-voice/disconnect", { method: "POST", credentials: "same-origin" })),
-  stopBoost: async () => parseJson<{ ok: boolean; message: string; config?: Record<string, any> }>(await fetch("/api/dashboard/boost-poin/stop", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: "{}" }))
+  stopBoost: async () => parseJson<{ ok: boolean; message: string; config?: Record<string, any> }>(await fetch("/api/dashboard/boost-poin/stop", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: "{}" })),
+  uploadKtpAsset: async (kind: "background" | "decoration", fileName: string, dataUrl: string) => parseJson<{ ok: boolean; path: string; width?: number; height?: number }>(await fetch("/api/dashboard/ktp/upload", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, fileName, dataUrl }) }))
 };
