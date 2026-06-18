@@ -51,6 +51,33 @@ const {
   assert.ok(buffer.length > 100000, "PNG hasil render terlalu kecil atau terlihat kosong");
   assert.strictEqual(buffer.subarray(1, 4).toString("ascii"), "PNG", "Output bukan PNG");
 
+  // Nama sangat panjang wajib tetap menghasilkan kartu dan dipotong aman, bukan menghilang.
+  const longNameBuffer = await renderKtpCard({
+    record: {
+      ...record,
+      fullName: "Nama Warga Desa Tulus Yang Sangat Panjang Sekali Sampai Melebihi Area Kartu",
+      domicile: "Kabupaten Bogor, Jawa Barat, Indonesia",
+      hobby: "Mengurus kegiatan warga dan membantu seluruh masyarakat Desa Tulus"
+    },
+    member: null,
+    config,
+    avatarUrl: ""
+  });
+  assert.ok(longNameBuffer.length > 100000, "Nama panjang membuat render KTP gagal atau kosong");
+
+  // Data kosong wajib memakai fallback dan tetap menghasilkan seluruh layer teks.
+  const fallbackBuffer = await renderKtpCard({
+    record: {
+      guildId: record.guildId,
+      userId: record.userId,
+      createdAt: Number.NaN
+    },
+    member: null,
+    config,
+    avatarUrl: ""
+  });
+  assert.ok(fallbackBuffer.length > 100000, "Fallback data kosong membuat render KTP gagal atau kosong");
+
   const rendered = await loadImage(buffer);
   assert.strictEqual(rendered.width, 1011, "Lebar kartu harus mengikuti background resmi");
   assert.strictEqual(rendered.height, 638, "Tinggi kartu harus mengikuti background resmi");
@@ -83,7 +110,7 @@ const {
   fs.mkdirSync(path.dirname(temp), { recursive: true });
   fs.writeFileSync(temp, buffer);
   fs.unlinkSync(temp);
-  console.log("✅ KTP Warga tests berhasil: 100 nomor random unik, background Desa Tulus terbaca, layout native 1011x638 tidak kosong dan background tidak keluar bingkai, attachment anti-cache, PNG rapi berhasil dirender.");
+  console.log("✅ KTP Warga tests berhasil: 100 nomor random unik, text layer tervalidasi, font fallback Railway aktif, nama panjang tetap muat, data kosong memakai fallback, background Desa Tulus terbaca, layout 1011x638 tidak kosong, dan attachment anti-cache aman.");
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;

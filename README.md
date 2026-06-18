@@ -290,3 +290,11 @@ Perubahan utama:
 - Avatar KTP dipaksa menjadi PNG statis 256 px dan batas unduhan dinaikkan agar avatar besar tidak terus gagal.
 - Log Active Voice Role serta hierarchy role dibatasi agar console tidak penuh oleh pesan yang sama.
 - Data level, poin, KTP, MongoDB, role, dan konfigurasi warga tidak dihapus atau diinisialisasi ulang.
+
+## Pak RW v10.10.88 — KTP Text Layer Railway Fix
+
+- Memperbaiki KTP yang hanya menampilkan background dan avatar di Railway.
+- Font dipilih lewat probe pixel runtime dengan generic `sans-serif` sebagai prioritas.
+- Seluruh tulisan KTP dirender pada layer transparan terpisah lalu divalidasi sebelum dikomposisikan.
+- Renderer tidak lagi mengirim kartu apabila text layer kosong.
+- AFK Voice v10.10.87 dan seluruh data lama tetap dipertahankan.
