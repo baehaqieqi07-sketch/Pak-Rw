@@ -6,7 +6,8 @@ const {
   renderKtpCard,
   generateUniqueKtpNumber,
   defaultKtpConfig,
-  makeKtpAttachmentName
+  makeKtpAttachmentName,
+  getKtpFontDiagnostics
 } = require("../services/ktpWarga");
 
 (async () => {
@@ -25,6 +26,10 @@ const {
       ktpNumber: number
     };
   }
+
+  const fontDiagnostics = getKtpFontDiagnostics();
+  assert.ok(fontDiagnostics.ready, "Font KTP harus terdaftar sebelum Canvas dibuat");
+  assert.ok(fontDiagnostics.activeFamily.includes("PakRW KTP") || fontDiagnostics.source === "font-host", "Renderer harus memakai font eksplisit, bukan generic sans-serif tanpa validasi");
 
   const config = { ktpSystem: defaultKtpConfig(), embedColor: "#7DBD77" };
   const record = {
@@ -110,7 +115,7 @@ const {
   fs.mkdirSync(path.dirname(temp), { recursive: true });
   fs.writeFileSync(temp, buffer);
   fs.unlinkSync(temp);
-  console.log("✅ KTP Warga tests berhasil: 100 nomor random unik, text layer tervalidasi, font fallback Railway aktif, nama panjang tetap muat, data kosong memakai fallback, background Desa Tulus terbaca, layout 1011x638 tidak kosong, dan attachment anti-cache aman.");
+  console.log("✅ KTP Warga tests berhasil: 100 nomor random unik, text layer tervalidasi, font eksplisit Railway aktif, nama panjang tetap muat, data kosong memakai fallback, background Desa Tulus terbaca, layout 1011x638 tidak kosong, dan attachment anti-cache aman.");
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;

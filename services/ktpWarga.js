@@ -13,7 +13,7 @@ const {
   TextInputBuilder,
   TextInputStyle
 } = require("discord.js");
-const { createCanvas, loadImage } = require("@napi-rs/canvas");
+const { createCanvas, loadImage, GlobalFonts } = require("@napi-rs/canvas");
 const { isMongoActive, readStore, writeStore } = require("../db/mongoStore");
 
 const KTP_STORE_KEY = "ktpWarga";
@@ -48,7 +48,7 @@ function defaultKtpConfig() {
     cardSubtitle: "DESA TULUS",
     privacyNote: "KARTU KOMUNITAS DIGITAL • BUKAN DOKUMEN RESMI",
     numberMode: "random_unique_18_digits_v2",
-    rendererVersion: "10.10.88",
+    rendererVersion: "10.10.89",
     logToConsole: true
   };
 }
@@ -260,10 +260,12 @@ function roundedRect(ctx, x, y, width, height, radius) {
   ctx.closePath();
 }
 
-let resolvedCanvasFontFamily = null;
+const KTP_FONT_REGULAR_FAMILY = "PakRW KTP Regular";
+const KTP_FONT_BOLD_FAMILY = "PakRW KTP Bold";
+let ktpFontState = null;
 let canvasFontLogShown = false;
 
-function canvasTextHasVisiblePixels(fontFamily) {
+function canvasTextHasVisiblePixels(fontFamily, weight = "normal") {
   try {
     const probe = createCanvas(260, 80);
     const probeCtx = probe.getContext("2d");
@@ -273,7 +275,7 @@ function canvasTextHasVisiblePixels(fontFamily) {
     probeCtx.fillStyle = "#ffffff";
     probeCtx.textAlign = "left";
     probeCtx.textBaseline = "alphabetic";
-    probeCtx.font = `bold 34px ${fontFamily}`;
+    probeCtx.font = `${weight} 34px ${fontFamily}`;
     probeCtx.fillText("DESA TULUS 123", 8, 52);
     const pixels = probeCtx.getImageData(0, 0, probe.width, probe.height).data;
     let visible = 0;
@@ -287,31 +289,117 @@ function canvasTextHasVisiblePixels(fontFamily) {
   }
 }
 
-function resolveCanvasFontFamily() {
-  if (resolvedCanvasFontFamily) return resolvedCanvasFontFamily;
+function firstExistingFile(candidates = []) {
+  return candidates
+    .map((candidate) => String(candidate || "").trim())
+    .find((candidate) => candidate && fs.existsSync(candidate)) || "";
+}
 
-  // Gunakan generic family terlebih dahulu. Railway/Linux tidak selalu memiliki
-  // font DejaVu Sans dengan nama yang sama seperti environment pengujian.
-  const candidates = [
-    "sans-serif",
-    "Arial",
-    "Liberation Sans",
-    "Noto Sans",
-    "DejaVu Sans"
-  ];
+function resolveDejaVuPackageFont(fileName) {
+  try {
+    const packageRoot = path.dirname(require.resolve("dejavu-fonts-ttf/package.json"));
+    return path.join(packageRoot, "ttf", fileName);
+  } catch {
+    return "";
+  }
+}
 
-  resolvedCanvasFontFamily = candidates.find(canvasTextHasVisiblePixels) || "sans-serif";
+function registerKtpCanvasFonts() {
+  if (ktpFontState) return ktpFontState;
+
+  const regularPath = firstExistingFile([
+    process.env.KTP_FONT_REGULAR_PATH,
+    resolveDejaVuPackageFont("DejaVuSans.ttf"),
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/TTF/DejaVuSans.ttf",
+    "C:\\Windows\\Fonts\\arial.ttf"
+  ]);
+  const boldPath = firstExistingFile([
+    process.env.KTP_FONT_BOLD_PATH,
+    resolveDejaVuPackageFont("DejaVuSans-Bold.ttf"),
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
+    "C:\\Windows\\Fonts\\arialbd.ttf"
+  ]);
+
+  let regularRegistered = false;
+  let boldRegistered = false;
+  try {
+    if (regularPath) regularRegistered = GlobalFonts.registerFromPath(regularPath, KTP_FONT_REGULAR_FAMILY) !== false;
+  } catch (error) {
+    console.log("[KTP WARGA] Font regular gagal didaftarkan:", error.message);
+  }
+  try {
+    if (boldPath) boldRegistered = GlobalFonts.registerFromPath(boldPath, KTP_FONT_BOLD_FAMILY) !== false;
+  } catch (error) {
+    console.log("[KTP WARGA] Font bold gagal didaftarkan:", error.message);
+  }
+
+  const regularReady = regularRegistered && canvasTextHasVisiblePixels(`"${KTP_FONT_REGULAR_FAMILY}"`);
+  const boldReady = boldRegistered && canvasTextHasVisiblePixels(`"${KTP_FONT_BOLD_FAMILY}"`);
+  const source = regularPath.includes("node_modules") || boldPath.includes("node_modules")
+    ? "npm:dejavu-fonts-ttf"
+    : regularPath || boldPath
+      ? "font-host"
+      : "tidak-ada";
+
+  ktpFontState = {
+    ready: regularReady || boldReady,
+    regularReady,
+    boldReady,
+    regularFamily: KTP_FONT_REGULAR_FAMILY,
+    boldFamily: KTP_FONT_BOLD_FAMILY,
+    source
+  };
+
   if (!canvasFontLogShown) {
     canvasFontLogShown = true;
-    console.log(`[KTP WARGA] Font Canvas aktif: ${resolvedCanvasFontFamily} (Railway-safe).`);
+    if (ktpFontState.ready) {
+      console.log(`[KTP WARGA] Font Canvas terdaftar: ${ktpFontState.boldReady ? KTP_FONT_BOLD_FAMILY : KTP_FONT_REGULAR_FAMILY} • ${source}.`);
+    } else {
+      console.log("[KTP WARGA] Font Canvas khusus belum tersedia; memeriksa fallback host.");
+    }
   }
-  return resolvedCanvasFontFamily;
+  return ktpFontState;
+}
+
+function resolveCanvasFontSpec(weight = 600) {
+  const state = registerKtpCanvasFonts();
+  if (Number(weight) >= 600 && state.boldReady) {
+    return { cssFamily: `"${state.boldFamily}"`, label: state.boldFamily, syntheticBold: false };
+  }
+  if (state.regularReady) {
+    return { cssFamily: `"${state.regularFamily}"`, label: state.regularFamily, syntheticBold: Number(weight) >= 600 };
+  }
+  if (state.boldReady) {
+    return { cssFamily: `"${state.boldFamily}"`, label: state.boldFamily, syntheticBold: false };
+  }
+
+  const fallback = ["Arial", "Liberation Sans", "Noto Sans", "DejaVu Sans", "sans-serif"]
+    .find((family) => canvasTextHasVisiblePixels(`"${family}"`));
+  if (fallback) {
+    return { cssFamily: `"${fallback}"`, label: fallback, syntheticBold: Number(weight) >= 600 };
+  }
+
+  throw new Error("Font KTP tidak tersedia. Dependency dejavu-fonts-ttf belum terpasang atau gagal dimuat.");
 }
 
 function setCanvasFont(ctx, size, weight = 600) {
-  const family = resolveCanvasFontFamily();
-  const style = Number(weight) >= 600 ? "bold" : "normal";
-  ctx.font = `${style} ${Math.max(8, Number(size) || 16)}px ${family}`;
+  const spec = resolveCanvasFontSpec(weight);
+  const style = spec.syntheticBold ? "bold " : "";
+  ctx.font = `${style}${Math.max(8, Number(size) || 16)}px ${spec.cssFamily}`;
+}
+
+function getKtpFontDiagnostics() {
+  const state = registerKtpCanvasFonts();
+  const active = resolveCanvasFontSpec(700);
+  return {
+    ready: Boolean(state.ready || active),
+    source: state.source,
+    regularReady: state.regularReady,
+    boldReady: state.boldReady,
+    activeFamily: active.label
+  };
 }
 
 function resetCanvasTextState(ctx) {
@@ -675,6 +763,17 @@ async function renderKtpCard({ record, member, config = {}, avatarUrl = "" }) {
   }
   ctx.restore();
 
+  // Garis aksen judul bukan bagian dari validasi teks. Dengan begitu, garis dekorasi
+  // tidak dapat membuat test salah mengira tulisan sudah berhasil dirender.
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(width / 2 - 48, 111);
+  ctx.lineTo(width / 2 + 48, 111);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = "rgba(42, 63, 27, 0.34)";
+  ctx.stroke();
+  ctx.restore();
+
   // Seluruh tulisan dirender pada canvas transparan terpisah. Ini mencegah
   // clip avatar, globalAlpha, atau state gambar lain membuat teks hilang di Railway.
   const textCanvas = createCanvas(width, height);
@@ -689,13 +788,6 @@ async function renderKtpCard({ record, member, config = {}, avatarUrl = "" }) {
   textCtx.fillText(String(cfg.cardTitle || "KARTU TANDA PENDUDUK").toUpperCase(), width / 2, 68);
   setCanvasFont(textCtx, 20, 900);
   textCtx.fillText(String(cfg.cardSubtitle || "DESA TULUS").toUpperCase(), width / 2, 96);
-
-  textCtx.beginPath();
-  textCtx.moveTo(width / 2 - 48, 111);
-  textCtx.lineTo(width / 2 + 48, 111);
-  textCtx.lineWidth = 2;
-  textCtx.strokeStyle = "rgba(42, 63, 27, 0.34)";
-  textCtx.stroke();
 
   // Data warga: enam baris wajib selalu tertulis pada gambar final.
   const rows = [
@@ -743,7 +835,7 @@ async function renderKtpCard({ record, member, config = {}, avatarUrl = "" }) {
 
   const visibleTextPixels = countVisibleAlphaPixels(textCtx, width, height, 2);
   if (visibleTextPixels < 1200) {
-    throw new Error(`Layer teks KTP gagal dirender (${visibleTextPixels} pixel). Font Railway tidak tersedia.`);
+    throw new Error(`Layer teks KTP gagal dirender (${visibleTextPixels} pixel). Font aktif: ${resolveCanvasFontSpec(700).label}.`);
   }
 
   ctx.save();
@@ -753,7 +845,7 @@ async function renderKtpCard({ record, member, config = {}, avatarUrl = "" }) {
   ctx.restore();
 
   if (cfg.logToConsole !== false) {
-    console.log(`[KTP WARGA] Render teks berhasil: ${visibleTextPixels} pixel • font ${resolveCanvasFontFamily()}.`);
+    console.log(`[KTP WARGA] Render teks berhasil: ${visibleTextPixels} pixel • font ${resolveCanvasFontSpec(700).label}.`);
   }
 
   const buffer = canvas.toBuffer("image/png");
@@ -1075,7 +1167,10 @@ async function handleKtpInteraction(interaction, config = {}) {
       channelId: interaction.channelId,
       error: error.message
     });
-    await interaction.editReply("Pak RW gagal membuat KTP. Periksa background KTP, permission Lampirkan File, dan koneksi bot.").catch(() => null);
+    const safeMessage = /font ktp|layer teks/i.test(String(error.message || ""))
+      ? "Pak RW gagal memuat font KTP. Pastikan dependency KTP terpasang lalu redeploy Railway dari commit terbaru."
+      : "Pak RW gagal membuat KTP. Periksa background KTP, permission Lampirkan File, dan koneksi bot.";
+    await interaction.editReply(safeMessage).catch(() => null);
   }
   return true;
 }
@@ -1097,5 +1192,6 @@ module.exports = {
   makeKtpNumber,
   generateUniqueKtpNumber,
   formatDateWib,
-  makeKtpAttachmentName
+  makeKtpAttachmentName,
+  getKtpFontDiagnostics
 };

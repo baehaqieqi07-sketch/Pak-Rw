@@ -1421,7 +1421,7 @@
     "privacyNote": "KARTU KOMUNITAS DIGITAL • BUKAN DOKUMEN RESMI",
     "logToConsole": true,
     "numberMode": "random_unique_18_digits_v2",
-    "rendererVersion": "10.10.88"
+    "rendererVersion": "10.10.89"
   },
   "afkVoice": {
     "enabled": false,

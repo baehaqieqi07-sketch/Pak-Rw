@@ -291,10 +291,15 @@ Perubahan utama:
 - Log Active Voice Role serta hierarchy role dibatasi agar console tidak penuh oleh pesan yang sama.
 - Data level, poin, KTP, MongoDB, role, dan konfigurasi warga tidak dihapus atau diinisialisasi ulang.
 
-## Pak RW v10.10.88 — KTP Text Layer Railway Fix
+## Pak RW v10.10.89 — KTP Text Layer Railway Fix
 
 - Memperbaiki KTP yang hanya menampilkan background dan avatar di Railway.
 - Font dipilih lewat probe pixel runtime dengan generic `sans-serif` sebagai prioritas.
 - Seluruh tulisan KTP dirender pada layer transparan terpisah lalu divalidasi sebelum dikomposisikan.
 - Renderer tidak lagi mengirim kartu apabila text layer kosong.
 - AFK Voice v10.10.87 dan seluruh data lama tetap dipertahankan.
+
+
+## KTP Font Railway v10.10.89
+
+Renderer KTP mendaftarkan DejaVu Sans dari dependency `dejavu-fonts-ttf` melalui `GlobalFonts.registerFromPath()` sebelum menggambar teks. Font generic host hanya menjadi fallback terakhir. Garis dekorasi tidak ikut dihitung sebagai pixel teks, sehingga KTP kosong tidak dapat lolos validasi.
