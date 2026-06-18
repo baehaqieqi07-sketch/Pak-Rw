@@ -1,6 +1,6 @@
 {
   "name": "pak-rw-desa-tulus",
-  "version": "10.10.91",
+  "version": "10.10.92",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -24,5 +24,5 @@
   "engines": {
     "node": ">=22.12.0 <23"
   },
-  "description": "Pak RW DESA TULUS v10.10.91 - background KTP resmi owner tanpa watermark tambahan, AI GPT-5.4 memory per warga, dan AFK Voice stabil"
+  "description": "Pak RW DESA TULUS v10.10.92 - background KTP owner dipakai persis 1:1 tanpa crop, tint, bingkai, atau watermark tambahan; AI GPT-5.4 memory per warga dan AFK Voice stabil"
 }

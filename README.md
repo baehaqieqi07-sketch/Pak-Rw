@@ -324,3 +324,13 @@ Renderer KTP mendaftarkan DejaVu Sans dari dependency `dejavu-fonts-ttf` melalui
 - Router hemat memakai `openai/gpt-5.4-mini` untuk pertanyaan rutin dan `openai/gpt-5.4` untuk pertanyaan kompleks.
 - Cache AI sekarang terpisah per warga agar jawaban atau konteks tidak tertukar.
 - KTP v10.10.89, AFK Voice v10.10.87, MongoDB, level, poin, role, dashboard, serta data lama tetap dipertahankan.
+
+
+## Pak RW v10.10.92 — Background KTP Owner 1:1 Tanpa Perubahan
+
+- Asset `assets/ktp-desa-tulus-background.png` diganti persis dengan PNG terbaru dari owner.
+- Background dirender pada ukuran native **1011 × 639** tanpa crop, resize, tint, gradient, frame, overlay, atau watermark tambahan.
+- Hanya layer data KTP dan foto warga yang ditambahkan di atas background.
+- Tata letak teks dan foto dirapikan tanpa mengubah pixel background pada area kosong.
+- Test menyimpan SHA-256 background resmi agar file tidak berubah tanpa sengaja.
+- AI v10.10.90, font Railway, AFK Voice, level, role, dashboard, MongoDB, dan data KTP lama tetap dipertahankan.

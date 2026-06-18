@@ -48,7 +48,7 @@ function defaultKtpConfig() {
     cardSubtitle: "DESA TULUS",
     privacyNote: "KARTU KOMUNITAS DIGITAL • BUKAN DOKUMEN RESMI",
     numberMode: "random_unique_18_digits_v2",
-    rendererVersion: "10.10.91",
+    rendererVersion: "10.10.92",
     logToConsole: true
   };
 }
@@ -537,54 +537,31 @@ async function renderKtpCard({ record, member, config = {}, avatarUrl = "" }) {
   const background = await loadImage(backgroundPath);
   if (!background?.width || !background?.height) throw new Error("Ukuran background KTP tidak valid.");
 
-  // Ukuran mengikuti background resmi agar pola tidak terpotong atau melebar tidak proporsional.
-  const width = 1011;
-  const height = 638;
+  // Background milik owner wajib dipakai 1:1 tanpa crop, resize, tint, bingkai,
+  // overlay, atau watermark tambahan. Canvas mengikuti ukuran PNG asli.
+  const width = Number(background.width);
+  const height = Number(background.height);
+  if (width !== 1011 || height !== 639) {
+    throw new Error(`Ukuran background KTP harus 1011x639, diterima ${width}x${height}.`);
+  }
+
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext("2d");
   if (cfg.logToConsole !== false) {
     console.log(`[KTP WARGA] Canvas berhasil dibuat: ${width}x${height}.`);
   }
 
-  const card = { x: 14, y: 14, w: width - 28, h: height - 28, radius: 22 };
+  const card = { x: 0, y: 0, w: width, h: height, radius: 0 };
 
-  // Area luar menjadi bingkai padat; background hanya dirender di dalam garis kartu.
-  const outerGradient = ctx.createLinearGradient(0, 0, width, height);
-  outerGradient.addColorStop(0, "#60783d");
-  outerGradient.addColorStop(1, "#415b2c");
-  ctx.fillStyle = outerGradient;
-  ctx.fillRect(0, 0, width, height);
-
-  ctx.save();
-  roundedRect(ctx, card.x, card.y, card.w, card.h, card.radius);
-  ctx.clip();
-  ctx.drawImage(background, card.x, card.y, card.w, card.h);
-
-  // Overlay keterbacaan dibuat sangat tipis. Tidak ada watermark atau ornamen tambahan:
-  // seluruh motif hanya berasal dari background resmi yang dipilih owner.
-  const tint = ctx.createLinearGradient(card.x, card.y, card.x + card.w, card.y);
-  tint.addColorStop(0, "rgba(232, 238, 174, 0.10)");
-  tint.addColorStop(0.64, "rgba(188, 204, 124, 0.04)");
-  tint.addColorStop(1, "rgba(39, 60, 25, 0.08)");
-  ctx.fillStyle = tint;
-  ctx.fillRect(card.x, card.y, card.w, card.h);
-  ctx.restore();
-
-  // Garis bingkai digambar terakhir agar tegas dan seluruh background tetap di dalamnya.
-  ctx.save();
-  roundedRect(ctx, card.x, card.y, card.w, card.h, card.radius);
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = "rgba(37, 59, 24, 0.72)";
-  ctx.stroke();
-  roundedRect(ctx, card.x + 7, card.y + 7, card.w - 14, card.h - 14, 17);
-  ctx.lineWidth = 1;
-  ctx.strokeStyle = "rgba(227, 235, 162, 0.22)";
-  ctx.stroke();
-  ctx.restore();
+  // Salin background asli tepat pada koordinat native. Tidak ada perubahan pixel
+  // pada area yang tidak ditempeli teks atau foto.
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
+  ctx.drawImage(background, 0, 0);
 
   // Foto dan teks dirender pada layer terpisah agar state clip/font tidak saling menutupi.
   // Foto warga dibuat lebih proporsional dengan frame yang lembut, tidak terlalu putih atau tebal.
-  const photoFrame = { x: 724, y: 151, w: 226, h: 274 };
+  const photoFrame = { x: 748, y: 154, w: 220, h: 270 };
   ctx.save();
   ctx.shadowColor = "rgba(30, 45, 19, 0.24)";
   ctx.shadowBlur = 12;
@@ -632,10 +609,10 @@ async function renderKtpCard({ record, member, config = {}, avatarUrl = "" }) {
   // tidak dapat membuat test salah mengira tulisan sudah berhasil dirender.
   ctx.save();
   ctx.beginPath();
-  ctx.moveTo(width / 2 - 48, 111);
-  ctx.lineTo(width / 2 + 48, 111);
+  ctx.moveTo(width / 2 - 42, 112);
+  ctx.lineTo(width / 2 + 42, 112);
   ctx.lineWidth = 2;
-  ctx.strokeStyle = "rgba(42, 63, 27, 0.34)";
+  ctx.strokeStyle = "rgba(42, 63, 27, 0.42)";
   ctx.stroke();
   ctx.restore();
 
@@ -650,9 +627,9 @@ async function renderKtpCard({ record, member, config = {}, avatarUrl = "" }) {
   textCtx.textAlign = "center";
   textCtx.fillStyle = "#1f3016";
   setCanvasFont(textCtx, 30, 900);
-  textCtx.fillText(String(cfg.cardTitle || "KARTU TANDA PENDUDUK").toUpperCase(), width / 2, 68);
+  textCtx.fillText(String(cfg.cardTitle || "KARTU TANDA PENDUDUK").toUpperCase(), width / 2, 66);
   setCanvasFont(textCtx, 20, 900);
-  textCtx.fillText(String(cfg.cardSubtitle || "DESA TULUS").toUpperCase(), width / 2, 96);
+  textCtx.fillText(String(cfg.cardSubtitle || "DESA TULUS").toUpperCase(), width / 2, 94);
 
   // Data warga: enam baris wajib selalu tertulis pada gambar final.
   const rows = [
@@ -663,14 +640,14 @@ async function renderKtpCard({ record, member, config = {}, avatarUrl = "" }) {
     ["Agama", safeRecord.religion, 21],
     ["Hobi", safeRecord.hobby, 21]
   ];
-  const firstY = 194;
-  const rowGap = 58;
+  const firstY = 190;
+  const rowGap = 57;
   rows.forEach(([label, value, valueSize], index) => {
     drawKtpField(textCtx, label, value, firstY + index * rowGap, {
-      labelX: 62,
-      colonX: 236,
-      valueX: 267,
-      maxWidth: 405,
+      labelX: 58,
+      colonX: 232,
+      valueX: 264,
+      maxWidth: 430,
       valueSize
     });
   });
@@ -680,23 +657,23 @@ async function renderKtpCard({ record, member, config = {}, avatarUrl = "" }) {
   textCtx.textAlign = "center";
   textCtx.fillStyle = "#31441f";
   setCanvasFont(textCtx, 15, 800);
-  textCtx.fillText("Tanggal Pembuatan:", photoFrame.x + photoFrame.w / 2, 460);
+  textCtx.fillText("Tanggal Pembuatan:", photoFrame.x + photoFrame.w / 2, 458);
   textCtx.fillStyle = "#1d2915";
   setCanvasFont(textCtx, 18, 900);
-  textCtx.fillText(formatDateWib(safeRecord.createdAt), photoFrame.x + photoFrame.w / 2, 485);
+  textCtx.fillText(formatDateWib(safeRecord.createdAt), photoFrame.x + photoFrame.w / 2, 483);
 
   textCtx.fillStyle = "rgba(35, 51, 22, 0.92)";
   setCanvasFont(textCtx, 14, 800);
-  textCtx.fillText("WARGA DESA TULUS", photoFrame.x + photoFrame.w / 2, 518);
+  textCtx.fillText("WARGA DESA TULUS", photoFrame.x + photoFrame.w / 2, 516);
 
   // Footer selalu berada di dalam garis kartu.
   textCtx.textAlign = "left";
   textCtx.fillStyle = "rgba(35, 51, 22, 0.84)";
   setCanvasFont(textCtx, 12, 800);
-  textCtx.fillText(String(cfg.privacyNote || "KARTU KOMUNITAS DIGITAL • BUKAN DOKUMEN RESMI").toUpperCase(), card.x + 22, card.y + card.h - 18);
+  textCtx.fillText(String(cfg.privacyNote || "KARTU KOMUNITAS DIGITAL • BUKAN DOKUMEN RESMI").toUpperCase(), 24, height - 18);
 
   textCtx.textAlign = "right";
-  textCtx.fillText("PAK RW • DESA TULUS", card.x + card.w - 22, card.y + card.h - 18);
+  textCtx.fillText("PAK RW • DESA TULUS", width - 24, height - 18);
 
   const visibleTextPixels = countVisibleAlphaPixels(textCtx, width, height, 2);
   if (visibleTextPixels < 1200) {

@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const assert = require("assert");
 const { createCanvas, loadImage } = require("@napi-rs/canvas");
 const {
@@ -85,17 +86,28 @@ const {
 
   const rendered = await loadImage(buffer);
   assert.strictEqual(rendered.width, 1011, "Lebar kartu harus mengikuti background resmi");
-  assert.strictEqual(rendered.height, 638, "Tinggi kartu harus mengikuti background resmi");
+  assert.strictEqual(rendered.height, 639, "Tinggi kartu harus mengikuti background resmi tanpa resize");
 
   const backgroundPath = path.join(__dirname, "..", "assets", "ktp-desa-tulus-background.png");
-  const background = await loadImage(backgroundPath);
-  const compareCanvas = createCanvas(1011, 638);
+  const backgroundBytes = fs.readFileSync(backgroundPath);
+  const backgroundHash = crypto.createHash("sha256").update(backgroundBytes).digest("hex");
+  assert.strictEqual(
+    backgroundHash,
+    "318a72adcb8d2857c50877699b89122000a75d604b0256d446c74e74aa86c59a",
+    "File background harus sama persis dengan PNG yang diberikan owner"
+  );
+
+  const background = await loadImage(backgroundBytes);
+  assert.strictEqual(background.width, 1011, "Lebar background asli tidak boleh diubah");
+  assert.strictEqual(background.height, 639, "Tinggi background asli tidak boleh diubah");
+
+  const compareCanvas = createCanvas(1011, 639);
   const compareCtx = compareCanvas.getContext("2d");
-  compareCtx.drawImage(background, 0, 0, 1011, 638);
-  const basePixels = compareCtx.getImageData(0, 0, 1011, 638).data;
-  compareCtx.clearRect(0, 0, 1011, 638);
-  compareCtx.drawImage(rendered, 0, 0, 1011, 638);
-  const renderedPixels = compareCtx.getImageData(0, 0, 1011, 638).data;
+  compareCtx.drawImage(background, 0, 0);
+  const basePixels = compareCtx.getImageData(0, 0, 1011, 639).data;
+  compareCtx.clearRect(0, 0, 1011, 639);
+  compareCtx.drawImage(rendered, 0, 0);
+  const renderedPixels = compareCtx.getImageData(0, 0, 1011, 639).data;
 
   let changedPixels = 0;
   for (let index = 0; index < basePixels.length; index += 16) {
@@ -104,18 +116,23 @@ const {
       Math.abs(basePixels[index + 2] - renderedPixels[index + 2]);
     if (difference > 45) changedPixels += 1;
   }
-  assert.ok(changedPixels > 13000, "Renderer tidak menambahkan cukup tema, tulisan, atau foto pada background");
+  assert.ok(changedPixels > 9000, "Renderer tidak menambahkan cukup tulisan atau foto pada background");
 
-  const corner = compareCtx.getImageData(2, 2, 1, 1).data;
-  const inside = compareCtx.getImageData(30, 30, 1, 1).data;
-  const cornerDifference = Math.abs(corner[0] - inside[0]) + Math.abs(corner[1] - inside[1]) + Math.abs(corner[2] - inside[2]);
-  assert.ok(cornerDifference > 20, "Background harus berhenti di dalam garis kartu dan tidak memenuhi area luar bingkai");
+  // Area kosong yang tidak ditempeli teks/foto harus tetap identik pixel demi pixel.
+  for (const [x, y] of [[2, 2], [1008, 2], [2, 636], [1008, 636], [700, 125]]) {
+    const offset = (y * 1011 + x) * 4;
+    assert.deepStrictEqual(
+      Array.from(renderedPixels.slice(offset, offset + 4)),
+      Array.from(basePixels.slice(offset, offset + 4)),
+      `Background berubah pada pixel aman ${x},${y}`
+    );
+  }
 
   const temp = path.join(__dirname, "..", "data", "ktp-render-test.png");
   fs.mkdirSync(path.dirname(temp), { recursive: true });
   fs.writeFileSync(temp, buffer);
   fs.unlinkSync(temp);
-  console.log("✅ KTP Warga tests berhasil: 100 nomor random unik, text layer tervalidasi, font eksplisit Railway aktif, nama panjang tetap muat, data kosong memakai fallback, background Desa Tulus terbaca, layout 1011x638 tidak kosong, dan attachment anti-cache aman.");
+  console.log("✅ KTP Warga tests berhasil: 100 nomor random unik, text layer tervalidasi, font eksplisit Railway aktif, nama panjang tetap muat, data kosong memakai fallback, background Desa Tulus terbaca, background asli 1011x639 tidak diubah dan layout tidak kosong, dan attachment anti-cache aman.");
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;
