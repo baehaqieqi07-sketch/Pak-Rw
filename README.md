@@ -304,6 +304,15 @@ Perubahan utama:
 
 Renderer KTP mendaftarkan DejaVu Sans dari dependency `dejavu-fonts-ttf` melalui `GlobalFonts.registerFromPath()` sebelum menggambar teks. Font generic host hanya menjadi fallback terakhir. Garis dekorasi tidak ikut dihitung sebagai pixel teks, sehingga KTP kosong tidak dapat lolos validasi.
 
+## Pak RW v10.10.91 — Background KTP Resmi Tanpa Watermark Tambahan
+
+- Background KTP diganti menggunakan asset resmi yang diberikan owner.
+- Asset disesuaikan ke ukuran native renderer **1011 × 638** tanpa memotong motif atau mengubah rasio desain.
+- Watermark, emblem, gunung, sawah, cahaya, dan ornamen tambahan dari kode Canvas dihapus agar tidak terjadi efek double.
+- Renderer hanya memakai motif yang sudah menyatu di file background resmi.
+- Overlay keterbacaan dibuat sangat tipis; bingkai, teks, avatar, tanggal, dan footer tetap rapi di dalam kartu.
+- AI v10.10.90, font Railway v10.10.89, AFK Voice v10.10.87, MongoDB, level, poin, role, dashboard, dan data lama tetap dipertahankan.
+
 ## Pak RW v10.10.90 — AI GPT-5.4, Memori Per Warga, dan Pengetahuan Server Live
 
 - Pak RW mengenal dirinya sebagai **Pak RW DESA TULUS** dan mengenal owner server sebagai **BEKIW**.

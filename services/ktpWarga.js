@@ -48,7 +48,7 @@ function defaultKtpConfig() {
     cardSubtitle: "DESA TULUS",
     privacyNote: "KARTU KOMUNITAS DIGITAL • BUKAN DOKUMEN RESMI",
     numberMode: "random_unique_18_digits_v2",
-    rendererVersion: "10.10.89",
+    rendererVersion: "10.10.91",
     logToConsole: true
   };
 }
@@ -480,132 +480,6 @@ function resolveBackgroundPath(config = {}) {
   return path.join(__dirname, "..", configured);
 }
 
-function drawVillageTheme(ctx, width, height, frame = {}) {
-  const x = Number(frame.x || 0);
-  const y = Number(frame.y || 0);
-  const w = Number(frame.w || width);
-  const h = Number(frame.h || height);
-
-  ctx.save();
-  roundedRect(ctx, x, y, w, h, Number(frame.radius || 20));
-  ctx.clip();
-
-  // Garis lanskap dibuat sangat tipis agar tema perdesaan terasa tanpa membuat kartu ramai.
-  ctx.globalAlpha = 0.052;
-  ctx.strokeStyle = "#29401d";
-  ctx.lineWidth = 2;
-
-  const baseY = y + h - 78;
-  ctx.beginPath();
-  ctx.moveTo(x + 20, baseY);
-  ctx.quadraticCurveTo(x + 128, baseY - 50, x + 238, baseY);
-  ctx.quadraticCurveTo(x + 344, baseY - 76, x + 470, baseY);
-  ctx.quadraticCurveTo(x + 575, baseY - 43, x + 690, baseY);
-  ctx.stroke();
-
-  for (let index = 0; index < 2; index += 1) {
-    const lineY = y + h - 48 + index * 17;
-    ctx.beginPath();
-    ctx.moveTo(x + 22, lineY);
-    ctx.bezierCurveTo(x + 165, lineY - 10, x + 310, lineY + 7, x + 475, lineY - 3);
-    ctx.bezierCurveTo(x + 610, lineY - 10, x + 720, lineY + 7, x + 820, lineY - 2);
-    ctx.stroke();
-  }
-
-  ctx.restore();
-}
-
-function drawVillageWatermark(ctx, frame = {}) {
-  const x = Number(frame.x || 0);
-  const y = Number(frame.y || 0);
-  const w = Number(frame.w || 1011);
-  const h = Number(frame.h || 638);
-  const radius = Number(frame.radius || 20);
-  const centerX = x + w * 0.505;
-  const centerY = y + h * 0.535;
-
-  ctx.save();
-  roundedRect(ctx, x, y, w, h, radius);
-  ctx.clip();
-
-  // Emblem utama sengaja sangat transparan: terlihat sebagai watermark, bukan elemen depan.
-  ctx.globalAlpha = 0.052;
-  ctx.strokeStyle = "#203617";
-  ctx.fillStyle = "#203617";
-  ctx.lineWidth = 2.4;
-
-  // Lingkaran emblem.
-  ctx.beginPath();
-  ctx.arc(centerX, centerY - 18, 112, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(centerX, centerY - 18, 101, 0, Math.PI * 2);
-  ctx.lineWidth = 1.2;
-  ctx.stroke();
-
-  // Matahari dan gunung sederhana.
-  ctx.beginPath();
-  ctx.arc(centerX + 47, centerY - 83, 15, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(centerX - 84, centerY - 19);
-  ctx.lineTo(centerX - 31, centerY - 70);
-  ctx.lineTo(centerX + 7, centerY - 30);
-  ctx.lineTo(centerX + 43, centerY - 63);
-  ctx.lineTo(centerX + 88, centerY - 18);
-  ctx.stroke();
-
-  // Bale desa kecil di tengah emblem.
-  ctx.lineWidth = 2.6;
-  ctx.beginPath();
-  ctx.moveTo(centerX - 34, centerY + 1);
-  ctx.lineTo(centerX, centerY - 23);
-  ctx.lineTo(centerX + 34, centerY + 1);
-  ctx.stroke();
-  ctx.strokeRect(centerX - 26, centerY + 1, 52, 29);
-  ctx.beginPath();
-  ctx.moveTo(centerX, centerY + 1);
-  ctx.lineTo(centerX, centerY + 30);
-  ctx.stroke();
-
-  // Sawah berupa tiga lengkung halus.
-  ctx.lineWidth = 1.8;
-  for (let index = 0; index < 3; index += 1) {
-    const fieldY = centerY + 45 + index * 12;
-    ctx.beginPath();
-    ctx.bezierCurveTo(
-      centerX - 88,
-      fieldY - 8,
-      centerX - 25,
-      fieldY + 8,
-      centerX,
-      fieldY
-    );
-    ctx.bezierCurveTo(
-      centerX + 25,
-      fieldY - 8,
-      centerX + 72,
-      fieldY + 7,
-      centerX + 88,
-      fieldY
-    );
-    ctx.stroke();
-  }
-
-  // Nama desa menjadi inti watermark seperti contoh, tetapi tetap tidak menonjol.
-  ctx.globalAlpha = 0.072;
-  ctx.textAlign = "center";
-  setCanvasFont(ctx, 43, 900);
-  ctx.fillText("DESA TULUS", centerX, centerY + 70);
-  ctx.globalAlpha = 0.058;
-  setCanvasFont(ctx, 11, 800);
-  ctx.fillText("RUKUN • NYAMAN • TULUS", centerX, centerY + 91);
-
-  ctx.restore();
-}
-
 function drawKtpField(ctx, label, value, y, options = {}) {
   resetCanvasTextState(ctx);
   const labelX = Number(options.labelX || 72);
@@ -686,24 +560,15 @@ async function renderKtpCard({ record, member, config = {}, avatarUrl = "" }) {
   ctx.clip();
   ctx.drawImage(background, card.x, card.y, card.w, card.h);
 
-  // Gradasi sangat tipis untuk menjaga teks terbaca tanpa menghilangkan pola asli.
+  // Overlay keterbacaan dibuat sangat tipis. Tidak ada watermark atau ornamen tambahan:
+  // seluruh motif hanya berasal dari background resmi yang dipilih owner.
   const tint = ctx.createLinearGradient(card.x, card.y, card.x + card.w, card.y);
-  tint.addColorStop(0, "rgba(205, 219, 121, 0.22)");
-  tint.addColorStop(0.62, "rgba(130, 157, 72, 0.10)");
-  tint.addColorStop(1, "rgba(51, 78, 31, 0.22)");
+  tint.addColorStop(0, "rgba(232, 238, 174, 0.10)");
+  tint.addColorStop(0.64, "rgba(188, 204, 124, 0.04)");
+  tint.addColorStop(1, "rgba(39, 60, 25, 0.08)");
   ctx.fillStyle = tint;
   ctx.fillRect(card.x, card.y, card.w, card.h);
-
-  // Cahaya lembut hanya pada area data agar tampak premium dan tidak ramai.
-  const softGlow = ctx.createRadialGradient(310, 300, 40, 310, 300, 430);
-  softGlow.addColorStop(0, "rgba(231, 236, 164, 0.20)");
-  softGlow.addColorStop(1, "rgba(231, 236, 164, 0)");
-  ctx.fillStyle = softGlow;
-  ctx.fillRect(card.x, card.y, card.w, card.h);
   ctx.restore();
-
-  drawVillageTheme(ctx, width, height, card);
-  drawVillageWatermark(ctx, card);
 
   // Garis bingkai digambar terakhir agar tegas dan seluruh background tetap di dalamnya.
   ctx.save();

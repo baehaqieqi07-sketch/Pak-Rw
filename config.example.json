@@ -719,7 +719,7 @@
     "easyEditMode": true,
     "showFeatureFlow": true,
     "showAiStylePanel": true,
-    "releaseVersion": "10.10.90",
+    "releaseVersion": "10.10.91",
     "releaseName": "KTP Warga dan AFK Voice Stabil",
     "premiumMode": true,
     "comfortMode": true,
@@ -745,7 +745,7 @@
     "placeholderSelectionMode": "channel_role_user_server_bot_live_from_discord",
     "discordPickerMode": "live_api",
     "discordPickerAutoRefresh": true,
-    "uiVersion": "10.10.90",
+    "uiVersion": "10.10.91",
     "architecture": "react_vite_static_dashboard_only",
     "backgroundStyle": "2d-village-premium",
     "embedColorLocked": "#7DBD77",
@@ -1187,7 +1187,7 @@
       "Discord Manager"
     ]
   },
-  "version": "10.10.90",
+  "version": "10.10.91",
   "bigBot": {
     "releaseName": "Pak RW KTP Warga dan AFK Voice Stabil"
   },
