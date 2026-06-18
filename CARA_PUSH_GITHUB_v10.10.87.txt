@@ -1,0 +1,21 @@
+PAK RW v10.10.87 — CARA PUSH KE GITHUB
+
+1. Ekstrak ZIP ke folder proyek Pak RW lama.
+2. Jangan hapus file .env, config.json milikmu, folder data, atau volume Railway.
+3. Buka PowerShell / terminal pada folder proyek.
+
+Perintah:
+
+cd "D:\Pak Rw"
+git status
+git add index.js services/afkVoiceManager.js services/ktpWarga.js tests/afkVoice.test.js package.json package-lock.json .nvmrc README.md UPDATE_FINAL_v10.10.87.md config.example.json dashboard/package.json dashboard/package-lock.json
+
+git commit -m "fix Pak RW v10.10.87 AFK Voice single-flight"
+git push origin main
+
+Setelah push, cek log Railway. Runtime harus menampilkan @discordjs/voice 0.19.2 dan Node.js 22.12 atau lebih baru.
+
+Log sukses yang diharapkan:
+[AFK VOICE] Pak RW sudah masuk ke 💼│kantor-pejabat.
+
+Bila transport UDP belum Ready tetapi bot sudah terlihat di voice, dashboard tetap menampilkan Terhubung dalam mode afk-gateway. Itu bukan kegagalan untuk fitur AFK tanpa audio.

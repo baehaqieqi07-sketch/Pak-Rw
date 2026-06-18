@@ -1,14 +1,15 @@
 {
   "name": "pak-rw-desa-tulus",
-  "version": "10.10.89",
+  "version": "10.10.90",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "check": "node --check index.js && node --check services/afkVoiceManager.js && node --check services/serverIdExporter.js && node --check services/ktpWarga.js && node --check ai/brain.js && node --check utils/cooldown.js && node --check db/mongoStore.js && node --check level/levelRoleTiers.js && node tests/levelRoleTiers.test.js && node tests/ktpWarga.test.js && node tests/dashboardAllowedPaths.test.js && node tests/afkVoice.test.js",
+    "check": "node --check index.js && node --check services/afkVoiceManager.js && node --check services/serverIdExporter.js && node --check services/ktpWarga.js && node --check ai/brain.js && node --check utils/cooldown.js && node --check db/mongoStore.js && node --check level/levelRoleTiers.js && node tests/levelRoleTiers.test.js && node tests/ktpWarga.test.js && node tests/dashboardAllowedPaths.test.js && node tests/afkVoice.test.js && node tests/aiBrain.test.js",
     "dashboard:build": "npm --prefix dashboard run build",
     "dashboard:dev": "npm --prefix dashboard run dev",
     "test:level-roles": "node tests/levelRoleTiers.test.js",
-    "test:ktp": "node tests/ktpWarga.test.js"
+    "test:ktp": "node tests/ktpWarga.test.js",
+    "test:ai": "node tests/aiBrain.test.js"
   },
   "dependencies": {
     "@discordjs/voice": "0.19.2",
@@ -23,5 +24,5 @@
   "engines": {
     "node": ">=22.12.0 <23"
   },
-  "description": "Pak RW DESA TULUS v10.10.89 - KTP font Railway terdaftar eksplisit, AFK Voice 24/7 single-flight, tanpa reset data"
+  "description": "Pak RW DESA TULUS v10.10.90 - AI GPT-5.4 pintar, router hemat, memori MongoDB terpisah per warga, channel knowledge live, KTP dan AFK Voice tetap aman"
 }

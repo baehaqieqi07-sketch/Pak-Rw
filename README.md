@@ -303,3 +303,15 @@ Perubahan utama:
 ## KTP Font Railway v10.10.89
 
 Renderer KTP mendaftarkan DejaVu Sans dari dependency `dejavu-fonts-ttf` melalui `GlobalFonts.registerFromPath()` sebelum menggambar teks. Font generic host hanya menjadi fallback terakhir. Garis dekorasi tidak ikut dihitung sebagai pixel teks, sehingga KTP kosong tidak dapat lolos validasi.
+
+## Pak RW v10.10.90 — AI GPT-5.4, Memori Per Warga, dan Pengetahuan Server Live
+
+- Pak RW mengenal dirinya sebagai **Pak RW DESA TULUS** dan mengenal owner server sebagai **BEKIW**.
+- Pak RW memanggil warga dengan sebutan **nak** secara natural tanpa mengulanginya di setiap kalimat.
+- Memori percakapan disimpan terpisah berdasarkan `guildId:userId`, sehingga pembahasan satu warga tidak tercampur dengan warga lain.
+- Memori dibatasi hingga 10 turn per warga, maksimal 600 warga, dan pola token/kunci API disensor sebelum disimpan.
+- Direktori channel dibaca langsung dari guild sesuai permission warga. Pak RW tidak mengarang channel atau role yang tidak ditemukan.
+- Mode curhat dipisahkan dari mode tanya umum: Pak RW mendengarkan lebih dulu dan tidak mengubah curhat menjadi tutorial bot kecuali diminta.
+- Router hemat memakai `openai/gpt-5.4-mini` untuk pertanyaan rutin dan `openai/gpt-5.4` untuk pertanyaan kompleks.
+- Cache AI sekarang terpisah per warga agar jawaban atau konteks tidak tertukar.
+- KTP v10.10.89, AFK Voice v10.10.87, MongoDB, level, poin, role, dashboard, serta data lama tetap dipertahankan.

@@ -150,6 +150,91 @@ const {
 const app = express();
 
 
+function getPakRwOwnerName() {
+  const configured = String(config.ownerName || "").trim();
+  return !configured || configured.toLowerCase() === "pak rw" ? "BEKIW" : configured;
+}
+
+function aiChannelTypeLabel(type) {
+  const labels = {
+    [ChannelType.GuildText]: "text",
+    [ChannelType.GuildVoice]: "voice",
+    [ChannelType.GuildCategory]: "category",
+    [ChannelType.GuildAnnouncement]: "announcement",
+    [ChannelType.AnnouncementThread]: "thread",
+    [ChannelType.PublicThread]: "thread",
+    [ChannelType.PrivateThread]: "thread",
+    [ChannelType.GuildStageVoice]: "stage",
+    [ChannelType.GuildForum]: "forum",
+    [ChannelType.GuildMedia]: "media"
+  };
+  return labels[type] || "channel";
+}
+
+function buildPakRwChannelDirectory(message) {
+  const guild = message?.guild;
+  if (!guild?.channels?.cache) return "";
+  const member = message.member;
+  const isOwner = message.author?.id === guild.ownerId;
+  const channels = [...guild.channels.cache.values()]
+    .filter((channel) => channel && channel.type !== ChannelType.GuildCategory)
+    .filter((channel) => {
+      if (isOwner || !member || !channel.permissionsFor) return true;
+      try {
+        return channel.permissionsFor(member)?.has(PermissionsBitField.Flags.ViewChannel);
+      } catch {
+        return false;
+      }
+    })
+    .sort((a, b) => {
+      const categoryA = a.parent?.position ?? -1;
+      const categoryB = b.parent?.position ?? -1;
+      if (categoryA !== categoryB) return categoryA - categoryB;
+      return (a.rawPosition ?? a.position ?? 0) - (b.rawPosition ?? b.position ?? 0);
+    });
+
+  const lines = channels.map((channel) => {
+    const parent = channel.parent?.name ? ` • kategori: ${channel.parent.name}` : "";
+    return `<#${channel.id}> • ${channel.name} • ${aiChannelTypeLabel(channel.type)}${parent}`;
+  });
+
+  return lines.join("\n").slice(0, 6500);
+}
+
+function buildPakRwRoleDirectory(message) {
+  const guild = message?.guild;
+  if (!guild?.roles?.cache) return "";
+  return [...guild.roles.cache.values()]
+    .filter((role) => role && role.name !== "@everyone" && !role.managed)
+    .sort((a, b) => b.position - a.position)
+    .slice(0, 35)
+    .map((role) => `<@&${role.id}> • ${role.name}`)
+    .join("\n")
+    .slice(0, 2500);
+}
+
+function buildPakRwAiContext(message, userText = "", mode = "normal") {
+  const guild = message?.guild;
+  const member = message?.member;
+  const user = message?.author;
+  return {
+    guildId: guild?.id || "global",
+    guildName: guild?.name || config.serverName || "DESA TULUS",
+    userId: user?.id || "anonymous",
+    displayName: member?.displayName || user?.globalName || user?.username || "Warga Desa",
+    username: user?.username || "warga",
+    channelId: message?.channel?.id || "",
+    channelName: message?.channel?.name || "",
+    channelDirectory: buildPakRwChannelDirectory(message),
+    roleDirectory: buildPakRwRoleDirectory(message),
+    isOwner: Boolean(guild && user && user.id === guild.ownerId),
+    ownerName: getPakRwOwnerName(),
+    mode,
+    topic: String(userText || "").slice(0, 300)
+  };
+}
+
+
 app.use(express.urlencoded({ extended: true, limit: "8mb" }));
 app.use(express.json({ limit: "8mb" }));
 
@@ -11252,7 +11337,7 @@ app.put("/api/dashboard/settings", requireDashboardAuth, (req, res) => {
       if (!isSafeDashboardPath(pathText)) return res.status(400).json({ ok: false, error: `Path config tidak diizinkan: ${pathText}` });
       setDashboardPath(cfg, pathText, patch.value);
     }
-    cfg.version = "10.10.89";
+    cfg.version = "10.10.90";
     writeConfigFile(cfg);
     appendDashboardActivity("settings", "Setting dashboard disimpan", `${patches.length} field diperbarui melalui adapter aman.`);
     if (levelRoleConfigChanged) {
@@ -11272,7 +11357,7 @@ app.put("/api/dashboard/embed/:key", requireDashboardAuth, (req, res) => {
     const cfg = readConfigFile();
     cfg.embeds = cfg.embeds || {};
     cfg.embeds[key] = mergeDashboardEmbed(cfg.embeds[key] || {}, req.body?.embed || {});
-    cfg.version = "10.10.89";
+    cfg.version = "10.10.90";
     writeConfigFile(cfg);
     appendDashboardActivity("embed", "Template embed disimpan", `Template ${key} diperbarui dari Embed Builder.`);
     return res.json({ ok: true, embed: cfg.embeds[key] });
@@ -11359,7 +11444,7 @@ app.put("/api/afk-voice/config", requireDashboardAuth, async (req, res) => {
       if (!valid.ok) return res.status(400).json({ success: false, message: valid.message, errorCode: valid.errorCode });
     }
     cfg.afkVoice = next;
-    cfg.version = "10.10.89";
+    cfg.version = "10.10.90";
     writeConfigFile(cfg);
     appendDashboardActivity("afk-voice", "AFK Voice diperbarui", next.enabled ? `Channel voice ${next.channelId} diterapkan.` : "Fitur dinonaktifkan.");
 
@@ -11401,7 +11486,7 @@ app.post("/api/afk-voice/disconnect", requireDashboardAuth, async (req, res) => 
   if (!checkActionRateLimit()) return res.status(429).json({ success: false, message: "Tunggu sebentar sebelum memutus koneksi.", errorCode: "RATE_LIMITED" });
   const cfg = readConfigFile();
   cfg.afkVoice = { ...(cfg.afkVoice || {}), enabled: false, updatedAt: new Date().toISOString(), updatedBy: "dashboard" };
-  cfg.version = "10.10.89";
+  cfg.version = "10.10.90";
   writeConfigFile(cfg);
   const result = await disconnectAfkVoice({ disable: true });
   return res.json(result);
@@ -18243,14 +18328,14 @@ async function handleRwTanyaCommand(message) {
   const username = message.author.username;
 
   const personalizedQuestion = [
-    `Nama member yang bertanya adalah ${displayName}.`,
-    `Username Discord-nya adalah ${username}.`,
-    "Saat menjawab, panggil dia dengan nama tersebut secara natural jika cocok.",
-    "",
-    `Pertanyaan: ${question}`
+    `Pertanyaan warga: ${question}`
   ].join("\n");
 
-  const answer = await askAI(personalizedQuestion, "juragan");
+  const answer = await askAI(
+    personalizedQuestion,
+    "juragan",
+    buildPakRwAiContext(message, question, "juragan")
+  );
 
   const embed = new EmbedBuilder()
     .setColor(DESA_TULUS_EMBED_COLOR_INT)
@@ -19205,15 +19290,23 @@ async function handlePakRwCommandCenterPrefix(message, cmd, args = []) {
     config.ai = config.ai || {};
     if (sub === "status") {
       await safeReply(message, { embeds: [commandEmbed("🤖 Status AI Pak RW", [
-        `Model: \`${config.ai.openRouterModel || "belum diatur"}\``,
+        `Model pintar: \`${config.ai.smartModel || "openai/gpt-5.4"}\``,
+        `Model hemat: \`${config.ai.economyModel || "openai/gpt-5.4-mini"}\``,
+        `Router: **otomatis sesuai tingkat kesulitan**`,
+        `Memori per warga: **${config.ai.memoryEnabled === false ? "Nonaktif" : "Aktif"}**`,
         `Channel: ${isFilledId(config.aiChannelId) ? `<#${config.aiChannelId}>` : "belum diatur"}`,
-        `Cooldown: **${config.ai.cooldownMs || 4500}ms**`,
-        `Max reply: **${config.ai.maxMessageLength || 1900} karakter**`,
-        `Style: **${config.ai.styleMode || "auto"}**`
+        `Cooldown: **${config.ai.cooldownMs || 12000}ms**`,
+        `Max reply: **${config.ai.maxMessageLength || 1100} karakter**`,
+        `Persona: **Pak RW DESA TULUS • owner BEKIW • panggilan nak**`
       ])] });
       return true;
     }
-    if (sub === "model") config.ai.openRouterModel = args[1] || config.ai.openRouterModel;
+    if (sub === "model" || sub === "smart") {
+      config.ai.smartModel = args[1] || config.ai.smartModel || "openai/gpt-5.4";
+      config.ai.openRouterModel = config.ai.smartModel;
+    }
+    else if (sub === "hemat" || sub === "economy") config.ai.economyModel = args[1] || config.ai.economyModel || "openai/gpt-5.4-mini";
+    else if (sub === "memory") config.ai.memoryEnabled = normalizeOnOff(args[1], config.ai.memoryEnabled !== false);
     else if (sub === "cooldown") config.ai.cooldownMs = Math.max(1000, parseNumberInput(args[1], config.ai.cooldownMs || 4500));
     else if (sub === "max") config.ai.maxMessageLength = Math.max(500, Math.min(2000, parseNumberInput(args[1], config.ai.maxMessageLength || 1900)));
     else if (sub === "style") config.ai.styleMode = args[1] || "auto_mirror_safe";
@@ -19221,7 +19314,7 @@ async function handlePakRwCommandCenterPrefix(message, cmd, args = []) {
       const ch = resolveTextChannelArg(message, args[1]);
       if (!ch) return safeReply(message, `❌ Channel AI tidak ditemukan. Contoh: \`${p}ai channel #nanya-pak-rw\``), true;
       config.aiChannelId = ch.id;
-    } else return safeReply(message, `⚠️ Contoh: \`${p}ai status\`, \`${p}ai model openai/gpt-4o-mini\`, \`${p}ai cooldown 4500\`, \`${p}ai max 1900\`, \`${p}ai channel #channel\`, \`${p}ai style auto\``), true;
+    } else return safeReply(message, `⚠️ Contoh: \`${p}ai status\`, \`${p}ai smart openai/gpt-5.4\`, \`${p}ai hemat openai/gpt-5.4-mini\`, \`${p}ai memory on\`, \`${p}ai cooldown 12000\`, atau \`${p}ai channel #channel\``), true;
     await saveLiveConfigFromOwner(message, "Setting AI Pak RW berhasil diperbarui");
     return true;
   }
@@ -19263,7 +19356,7 @@ async function handlePakRwCommandCenterPrefix(message, cmd, args = []) {
     if (isCooldown(message.author.id, config.ai?.cooldownMs || 4500)) return safeReply(message, `⏳ Tunggu **${getRemaining(message.author.id)} detik** dulu ya.`), true;
     await message.channel.sendTyping().catch(() => null);
     try {
-      const reply = await askAI(text, "curhat", message.author.username);
+      const reply = await askAI(text, "curhat", buildPakRwAiContext(message, text, "curhat"));
       const embedCfg = config.embeds?.curhatReply || {};
       const embed = new EmbedBuilder()
         .setColor(DESA_TULUS_EMBED_COLOR_INT)
@@ -20633,12 +20726,12 @@ client.on(Events.MessageCreate, async (message) => {
     if (!clean && mentioned) clean = "halo";
 
     if (lower.includes("owner") || lower.includes("pemilik")) {
-      return safeReply(message, `👑 Owner **${config.serverName}** adalah **${config.ownerName}** 🤍`);
+      return safeReply(message, `👑 Owner **${config.serverName}** adalah **${getPakRwOwnerName()}** 🤍`);
     }
 
     let mode = inCurhatChannel ? "curhat" : "normal";
     if (inJuraganAi) mode = "juragan";
-    const reply = await askAI(clean || "halo", mode);
+    const reply = await askAI(clean || "halo", mode, buildPakRwAiContext(message, clean || "halo", mode));
 
     return safeReply(message, trimReply(reply));
   } catch (err) {

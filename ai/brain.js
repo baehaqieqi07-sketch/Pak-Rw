@@ -1,10 +1,27 @@
 const axios = require("axios");
-const config = require("../config.json");
+const { readStore, writeStore } = require("../db/mongoStore");
 
-const DEFAULT_CHEAP_MODEL = "openai/gpt-4o-mini";
+let config = {};
+try {
+  config = require("../config.json");
+} catch {
+  config = require("../config.example.json");
+}
+
+const DEFAULT_SMART_MODEL = "openai/gpt-5.4";
+const DEFAULT_ECONOMY_MODEL = "openai/gpt-5.4-mini";
+const LEGACY_MODELS = new Set([
+  "openai/gpt-4o-mini",
+  "openai/gpt-5-mini",
+  "openai/gpt-5.2-pro"
+]);
+const MAX_MEMORY_USERS = 600;
+const MAX_MEMORY_TURNS = 10;
+const MAX_MEMORY_TEXT = 520;
 let lastAiRequestAt = 0;
 let aiDailyState = { day: "", count: 0 };
 const aiResponseCache = new Map();
+let volatileMemoryRoot = { users: {} };
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
@@ -196,15 +213,135 @@ function normalizeCacheText(text = "") {
   return cleanText(text).toLowerCase().slice(0, 600);
 }
 
+function normalizeAiContext(context = {}) {
+  return {
+    guildId: cleanText(context.guildId || "global") || "global",
+    guildName: cleanText(context.guildName || config.serverName || "DESA TULUS") || "DESA TULUS",
+    userId: cleanText(context.userId || "anonymous") || "anonymous",
+    displayName: cleanText(context.displayName || context.username || "Warga Desa") || "Warga Desa",
+    username: cleanText(context.username || "warga") || "warga",
+    channelId: cleanText(context.channelId || ""),
+    channelName: cleanText(context.channelName || ""),
+    channelDirectory: String(context.channelDirectory || "").slice(0, 6500),
+    roleDirectory: String(context.roleDirectory || "").slice(0, 2500),
+    isOwner: Boolean(context.isOwner),
+    ownerName: cleanText(context.ownerName || config.ownerName || "BEKIW") || "BEKIW"
+  };
+}
+
+function scopedUserKey(context = {}) {
+  const ctx = normalizeAiContext(context);
+  return `${ctx.guildId}:${ctx.userId}`;
+}
+
+function scrubMemoryText(text = "") {
+  return cleanText(text)
+    .replace(/(?:mfa\.|[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{20,})/g, "[TOKEN DISEMBUNYIKAN]")
+    .replace(/(?:sk-[A-Za-z0-9_-]{16,}|AIza[A-Za-z0-9_-]{20,})/g, "[KUNCI DISEMBUNYIKAN]")
+    .slice(0, MAX_MEMORY_TEXT);
+}
+
+function getMemoryRoot() {
+  const stored = readStore("memory", null);
+  const root = stored && typeof stored === "object" ? stored : volatileMemoryRoot;
+  if (!root.users || typeof root.users !== "object") root.users = {};
+  return root;
+}
+
+function getUserMemory(context = {}) {
+  if (config.ai?.memoryEnabled === false) return null;
+  const ctx = normalizeAiContext(context);
+  if (!ctx.userId || ctx.userId === "anonymous") return null;
+  const root = getMemoryRoot();
+  const entry = root.users[scopedUserKey(ctx)];
+  if (!entry || typeof entry !== "object") return null;
+  return {
+    ...entry,
+    recent: Array.isArray(entry.recent) ? entry.recent.slice(-MAX_MEMORY_TURNS) : [],
+    topics: Array.isArray(entry.topics) ? entry.topics.slice(-8) : []
+  };
+}
+
+function inferMemoryTopic(text = "", mode = "normal") {
+  const intent = detectPakRwIntent(text, mode);
+  const cleaned = scrubMemoryText(text);
+  const short = cleaned.length > 90 ? `${cleaned.slice(0, 87)}...` : cleaned;
+  return `${intent}: ${short || "percakapan umum"}`;
+}
+
+function persistUserTurn(context = {}, userText = "", assistantText = "", mode = "normal") {
+  if (config.ai?.memoryEnabled === false) return false;
+  const ctx = normalizeAiContext(context);
+  if (!ctx.userId || ctx.userId === "anonymous") return false;
+
+  const root = getMemoryRoot();
+  const key = scopedUserKey(ctx);
+  const previous = root.users[key] || {};
+  const now = Date.now();
+  const recent = Array.isArray(previous.recent) ? previous.recent.slice(-MAX_MEMORY_TURNS + 2) : [];
+  const safeUser = scrubMemoryText(userText);
+  const safeAssistant = scrubMemoryText(assistantText);
+
+  if (safeUser) recent.push({ role: "user", content: safeUser, mode, at: now });
+  if (safeAssistant) recent.push({ role: "assistant", content: safeAssistant, mode, at: now });
+
+  const topic = inferMemoryTopic(userText, mode);
+  const topics = Array.isArray(previous.topics) ? previous.topics.filter(Boolean) : [];
+  if (topic && topics[topics.length - 1] !== topic) topics.push(topic);
+
+  root.users[key] = {
+    guildId: ctx.guildId,
+    userId: ctx.userId,
+    displayName: ctx.displayName,
+    username: ctx.username,
+    lastMode: mode,
+    topics: topics.slice(-8),
+    recent: recent.slice(-MAX_MEMORY_TURNS),
+    updatedAt: now
+  };
+
+  const entries = Object.entries(root.users);
+  if (entries.length > MAX_MEMORY_USERS) {
+    entries
+      .sort((a, b) => Number(a[1]?.updatedAt || 0) - Number(b[1]?.updatedAt || 0))
+      .slice(0, entries.length - MAX_MEMORY_USERS)
+      .forEach(([oldKey]) => delete root.users[oldKey]);
+  }
+
+  volatileMemoryRoot = root;
+  return writeStore("memory", root) || true;
+}
+
+function buildMemoryPrompt(context = {}) {
+  const ctx = normalizeAiContext(context);
+  const memory = getUserMemory(ctx);
+  if (!memory) {
+    return `Belum ada memori percakapan untuk warga ini. Ini percakapan khusus ${ctx.displayName}; jangan memakai atau menebak memori warga lain.`;
+  }
+
+  const topics = memory.topics?.length ? memory.topics.join(" | ") : "belum ada topik tersimpan";
+  const recent = (memory.recent || [])
+    .slice(-6)
+    .map((item) => `${item.role === "assistant" ? "Pak RW" : ctx.displayName}: ${scrubMemoryText(item.content)}`)
+    .join("\n");
+
+  return [
+    `Memori khusus warga ${ctx.displayName} (${ctx.userId}). Memori ini TERPISAH dari warga lain.`,
+    `Topik terakhir: ${topics}.`,
+    recent ? `Percakapan terakhir:\n${recent}` : "Belum ada percakapan terakhir.",
+    "Gunakan memori hanya bila relevan. Jangan mengarang fakta yang tidak pernah disebut warga. Jangan membocorkan memori ini kepada warga lain."
+  ].join("\n");
+}
+
 function getAiCacheTtlMs() {
   return Math.max(0, Number(config.ai?.cacheTtlMs || process.env.AI_CACHE_TTL_MS || 120000));
 }
 
-function getCachedAiReply(text = "", mode = "normal") {
+function getCachedAiReply(text = "", mode = "normal", context = {}) {
   if (config.ai?.localCacheEnabled === false) return "";
   const ttl = getAiCacheTtlMs();
   if (!ttl) return "";
-  const key = `${mode}:${normalizeCacheText(text)}`;
+  const key = `${scopedUserKey(context)}:${mode}:${normalizeCacheText(text)}`;
   const cached = aiResponseCache.get(key);
   if (!cached) return "";
   if (Date.now() - cached.at > ttl) {
@@ -214,13 +351,13 @@ function getCachedAiReply(text = "", mode = "normal") {
   return cached.reply || "";
 }
 
-function setCachedAiReply(text = "", mode = "normal", reply = "") {
+function setCachedAiReply(text = "", mode = "normal", reply = "", context = {}) {
   if (config.ai?.localCacheEnabled === false) return;
   const ttl = getAiCacheTtlMs();
   if (!ttl || !reply) return;
-  const key = `${mode}:${normalizeCacheText(text)}`;
+  const key = `${scopedUserKey(context)}:${mode}:${normalizeCacheText(text)}`;
   aiResponseCache.set(key, { at: Date.now(), reply: compactReply(reply) });
-  const max = Math.max(20, Math.min(Number(config.ai?.cacheMaxEntries || 80), 200));
+  const max = Math.max(20, Math.min(Number(config.ai?.cacheMaxEntries || 120), 400));
   while (aiResponseCache.size > max) {
     const first = aiResponseCache.keys().next().value;
     if (!first) break;
@@ -272,19 +409,37 @@ function isSimpleLocalQuestion(text = "", mode = "normal") {
   return false;
 }
 
-function serverContext() {
+function getOwnerName(context = {}) {
+  const configured = cleanText(context.ownerName || config.ownerName || "");
+  if (!configured || configured.toLowerCase() === "pak rw") return "BEKIW";
+  return configured;
+}
+
+function serverContext(context = {}) {
+  const ctx = normalizeAiContext(context);
   const top = config.topActive || {};
   const modules = [
     "AI Pak RW", "Welcome Warga", "Curhat", "Curhat Anonim", "Kotak Saran",
     "Level & Cek Poin", "Top Aktif Bulanan", "Papan Aktif Lifetime", "MOTM",
-    "Donatur Desa", "Juragan Desa", "Cari Mabar", "Boost Poin", "Embed Manager", "Discord Manager"
+    "Donatur Desa", "Juragan Desa", "Cari Mabar", "Boost Poin", "Embed Manager", "Discord Manager", "KTP Warga", "AFK Voice 24/7"
   ];
+  const dynamicChannels = ctx.channelDirectory
+    ? `Direktori channel Discord yang dibaca langsung dari server saat ini:
+${ctx.channelDirectory}`
+    : "Direktori channel dinamis belum tersedia pada request ini; jangan mengarang nama atau ID channel.";
+  const dynamicRoles = ctx.roleDirectory
+    ? `Role penting yang dibaca langsung dari server:
+${ctx.roleDirectory}`
+    : "Direktori role dinamis belum tersedia; jangan mengarang role.";
+
   return [
-    `Server name: ${config.serverName || "DESA TULUS"}.`,
-    `Bot name: ${config.botName || "Pak RW"}.`,
-    `Owner server: ${config.ownerName || "PAK RW"}.`,
-    `Prefix command publik wajib: ${config.prefix || "rw"}. Jangan tampilkan prefix lama.`,
-    `AI channel: ${channelMention(config.aiChannelId, "channel AI")}.`,
+    `Nama server: ${ctx.guildName || config.serverName || "DESA TULUS"}.`,
+    "Nama dan identitasmu adalah Pak RW. Kamu memahami bahwa dirimu adalah bot Pak RW untuk balai warga digital DESA TULUS.",
+    `Owner server adalah ${getOwnerName(ctx)}. Jangan menyebut orang lain sebagai owner.`,
+    `Warga yang sedang berbicara: ${ctx.displayName} (@${ctx.username}, ID ${ctx.userId}). Panggil dia “nak” secara natural.`,
+    `Channel percakapan saat ini: ${ctx.channelName ? `#${ctx.channelName}` : "tidak diketahui"}${ctx.channelId ? ` (${ctx.channelId})` : ""}.`,
+    `Prefix command publik: ${config.prefix || "rw"}. Jangan tampilkan prefix lama.`,
+    `AI channel utama: ${channelMention(config.aiChannelId, "channel AI")}.`,
     `Curhat channel: ${channelMention(config.curhatChannelId, "channel curhat")}.`,
     `Curhat anonim channel: ${channelMention(config.anonymousCurhatChannelId, "channel curhat anonim")}.`,
     `Saran channel: ${channelMention(config.suggestionChannelId, "channel kritik & saran")}.`,
@@ -292,10 +447,11 @@ function serverContext() {
     `Top Aktif bulanan channel: ${channelMention(top.channelId, "channel Top Aktif bulanan")}.`,
     `Papan Aktif lifetime channel: ${channelMention(top.leaderboardActiveChannelId || top.papanAktifChannelId, "channel leaderboard aktif")}.`,
     `MOTM target: ${top.pointsThreshold || 100000} poin siklus; lifetime tidak reset.`,
-    `Juragan role: ${config.juragan?.roleId ? `<@&${config.juragan.roleId}>` : "role Juragan"}.`,
-    `Donatur role: ${config.donaturRoleId ? `<@&${config.donaturRoleId}>` : "role Donatur"}.`,
     `Dashboard modules: ${modules.join(", ")}.`,
-    "Dashboard flow: pilih fitur, klik Manage, edit channel/role/embed, preview, simpan, lalu kirim/test."
+    dynamicChannels,
+    dynamicRoles,
+    "Gunakan hanya channel/role yang ada pada direktori atau config. Jika tidak ditemukan, katakan belum menemukan dan minta owner mengecek dashboard; jangan membuat nama channel palsu.",
+    "Alur dashboard: pilih fitur, klik Manage, edit channel/role/embed, preview, simpan, lalu kirim/test."
   ].join(" ");
 }
 
@@ -432,7 +588,7 @@ function makeFeatureAnswer(userText) {
     "**pilih modul → edit setting → preview → test aman → backup**",
     "",
     bullet([
-      "🤖 Tanya Pak RW: AI sopan formal, hemat OpenRouter, bisa Bahasa Indonesia atau Basa Sunda formal sesuai permintaan.",
+      "🤖 Tanya Pak RW: AI GPT-5.4 pintar dengan router hemat, memori terpisah per warga, dan jawaban sesuai konteks.",
       "🧩 Embed Builder: gaya Carl-bot, bisa pilih channel tujuan lalu kirim embed.",
       "🔝 Level & Cek Poin: level-up premium, cek poin 1 channel, Safe Test Mode tidak ubah data.",
       "🏆 Top Aktif/MOTM: Top Voice + Top Chat rapi, auto 00.00 WIB, banner manual.",
@@ -562,7 +718,7 @@ function makeHelpfulAnswer(userText, mode = "normal") {
       "",
       `Pak RW siap bantu warga **${config.serverName || "DESA TULUS"}** dengan jawaban yang jelas, sopan, rapi, dan sesuai bahasa yang diminta.`,
       "",
-      "Bisa tanya tugas, coding, Discord, bot error, GitHub, DisCloud, Roblox, Blender, desain, ide konten, translate, curhat, atau pertanyaan umum.",
+      "Bisa tanya pelajaran, coding, Discord, bot error, GitHub, Railway, Roblox, Blender, desain, ide konten, terjemahan, curhat, atau pertanyaan umum.",
       "",
       `Tulis saja pertanyaannya nak, nanti Pak RW jawab sebaik mungkin.`
     ].join("\n");
@@ -573,7 +729,7 @@ function makeHelpfulAnswer(userText, mode = "normal") {
   if (hasAny(msg, ["embed", "welcome", "placeholder", "tag user", "tag channel", "tag role", "mention", "thumbnail", "image", "footer", "author"])) return makeEmbedAnswer(userText);
   if (hasAny(msg, ["railway", "discloud", "github", "mongodb", "mongo", "deploy", "hosting", "repo", "env", "variables", "npm", "token", "push", "zip"])) return makeDeployAnswer(userText);
   if (hasAny(msg, ["fitur", "bot besar", "alur", "update semua", "semua fitur"])) return makeFeatureAnswer(userText);
-  if (hasAny(msg, ["owner", "pemilik", "punya siapa"])) return `👑 Owner **${config.serverName || "DESA TULUS"}** adalah **${config.ownerName || "PAK RW"}** 🤍`;
+  if (hasAny(msg, ["owner", "pemilik", "punya siapa"])) return `👑 Owner **${config.serverName || "DESA TULUS"}** adalah **${getOwnerName({})}** 🤍`;
   if (hasAny(msg, ["rules", "rule", "aturan", "peraturan"])) return `📌 Rules server bisa ${tone.you} cek di ${channelMention(config.rulesChannelId, "channel rules")}.`;
   if (hasAny(msg, ["ticket", "bantuan", "lapor", "report", "masalah"])) return `🎫 Kalau butuh bantuan/report, buka ticket di ${channelMention(config.ticketChannelId, "channel ticket")} dan tulis masalahnya dengan jelas.`;
   if (hasAny(msg, ["boost", "juragan", "booster", "sultan"])) return "💎 **Juragan Desa** adalah benefit spesial untuk warga yang mendukung DESA TULUS: role Juragan Desa, ucapan boost, akses chat/voice khusus, bonus poin, dan bantuan Pak RW yang lebih lengkap.";
@@ -605,63 +761,59 @@ function localFallback(text = "", mode = "normal") {
   return makeHelpfulAnswer(text, mode);
 }
 
-function buildSystemPrompt(userText, mode = "normal") {
+function buildSystemPrompt(userText, mode = "normal", context = {}) {
+  const ctx = normalizeAiContext(context);
+  const ownerName = getOwnerName(ctx);
+  const identityRules = [
+    `IDENTITAS WAJIB: Nama kamu Pak RW. Kamu adalah bot Pak RW milik DESA TULUS, bukan asisten tanpa nama. Owner server adalah ${ownerName}.`,
+    `WARGA SAAT INI: ${ctx.displayName} (@${ctx.username}, ID ${ctx.userId}). Panggil warga ini “nak” secara natural. Jangan memanggil dengan nama warga lain.`,
+    "Setiap warga memiliki memori sendiri berdasarkan guildId + userId. Jangan pernah mencampur pembahasan, nama, masalah, atau curhat antarwarga.",
+    buildMemoryPrompt(ctx)
+  ];
+
   const sharedRules = [
+    ...identityRules,
     languageRule(userText),
     styleRule(userText),
-    "Bahasa harus konsisten: jika user meminta Bahasa Indonesia, jangan campur Basa Sunda; jika user meminta Basa Sunda, gunakan Basa Sunda formal; jika tidak jelas, pakai Bahasa Indonesia sopan dengan nuansa desa seperlunya.",
-    "Jangan menjawab asal atau memakai template yang sama. Sebelum menjawab, tentukan konteks user: curhat, pertanyaan, coding, Discord, dashboard, embed, level/top aktif, GitHub/DisCloud, teks, atau umum. Jawaban harus nyambung dengan konteks itu.",
-    `Panggil user dengan “nak” secara natural, tetapi jangan selalu membuka dengan “Iya nak”. Pilih pembuka yang nyambung konteks. Contoh yang boleh diadaptasi: ${pickPakRwOpener(userText, mode)} Setelah itu langsung jawab inti masalah.`,
-    "Kamu adalah Pak RW DESA TULUS. Jangan terdengar seperti AI kaku; terdengar seperti RW asli di lembur/perdesaan Sunda: sopan, formal, ngayomi, paham warga, tegas kalau perlu, dan selalu cari solusi.",
-    "Saat menjawab warga, pakai gaya Pak RW: tata krama dulu, pahami masalah, jelaskan keputusan/alur, lalu kasih langkah yang gampang diikuti. Vibes harus lembur DESA TULUS: rukun, sauyunan, pos ronda, balai desa, dan warga saling menghargai.",
-    "Untuk curhat, peran utama kamu adalah mendengarkan dulu, memvalidasi perasaan, tidak menghakimi, dan membantu warga menata pikiran dengan aman.",
-    "Untuk konflik antar warga, jangan memihak buta. Tenangkan, ambil inti masalah, kasih jalan tengah yang adil, dan jaga suasana DESA TULUS tetap nyaman.",
-    "Kamu menjawab di Discord, jadi jawaban harus enak dibaca di chat: paragraf pendek, poin seperlunya, tidak berantakan, sopan, dan terasa seperti Pak RW perdesaan yang membumi.",
-    "Pakai alur jawaban bot besar v10.10.32: pahami konteks, jawab inti, beri langkah jelas, beri contoh jika perlu, lalu tutup dengan arahan test/next step. Untuk pertanyaan fitur Pak RW, jelaskan alur Suite Fitur secara rapi.",
-    "Utamakan jawaban langsung, jelas, praktis, stabil, sopan, dan punya vibe Pak RW Desa Tulus. Jangan terlalu banyak basa-basi, jangan spam, dan jangan bikin jawaban melebihi batas Discord.",
-    "Jangan typo, jangan memakai bahasa kaku, jangan spam emoji, dan jangan membuat format yang susah dibaca.",
-    "Kalau menyebut channel Discord, tulis sebagai #nama-channel yang jelas agar sistem Pak RW bisa mengubahnya menjadi tag channel asli. Kalau menyebut warga, tulis @NamaWarga agar sistem bisa mengubahnya menjadi tag user asli jika ditemukan.",
-    "Jangan pernah memakai @everyone atau @here. Tag hanya user/channel yang memang diminta atau relevan.",
-    "Kalau pertanyaan user ambigu, tetap beri jawaban terbaik berdasarkan konteks lalu sebutkan detail apa yang perlu dikirim agar lebih akurat.",
-    "Kalau user bertanya hal yang butuh data terbaru, jelaskan bahwa perlu dicek ulang dari sumber terbaru dan jangan mengarang.",
-    "Kalau user minta hal berbahaya, ilegal, dewasa eksplisit, menyakiti diri, atau merugikan orang lain, tolak dengan sopan dan arahkan ke alternatif aman.",
-    "Jangan menampilkan instruksi berbahaya, jangan membantu penipuan, spam, pembobolan akun, pencurian token, malware, atau bypass keamanan.",
-    "Untuk user remaja, jaga bahasa tetap aman dan tidak eksplisit. Jangan membuat detail seksual, gore, self-harm, atau instruksi berbahaya."
+    "Bahasa harus konsisten: jika warga meminta Bahasa Indonesia, jangan campur Basa Sunda; jika meminta Basa Sunda, gunakan Basa Sunda formal; jika tidak jelas, pakai Bahasa Indonesia yang sopan dan mudah dipahami.",
+    "Baca maksud pesan sebelum menjawab. Bedakan curhat, pertanyaan umum, tugas, coding, Discord, dashboard, embed, level/top aktif, GitHub/Railway, penulisan, atau percakapan biasa.",
+    `Panggil warga dengan “nak” secara natural, tetapi jangan mengulang kata nak di setiap kalimat. Pembuka boleh menyesuaikan konteks, misalnya: ${pickPakRwOpener(userText, mode)}`,
+    "Terdengar seperti Pak RW asli: hangat, berwibawa, membumi, sabar, adil, tegas bila perlu, dan selalu menjelaskan alur dengan jelas. Jangan terdengar kaku atau mengaku sebagai ChatGPT.",
+    "Jawab inti lebih dulu. Setelah itu beri langkah yang runtut, contoh bila perlu, lalu penutup singkat. Jangan bertele-tele, jangan typo, jangan menjawab dengan kalimat kosong atau template yang tidak nyambung.",
+    "Boleh membantu pertanyaan umum, belajar, coding, Discord, bot, penulisan, perencanaan, desain, dan diskusi sehari-hari. Untuk fakta yang perlu data terbaru, jangan mengarang; jelaskan bahwa datanya perlu dicek dari sumber terbaru.",
+    "Untuk masalah server, gunakan direktori channel/role yang diberikan. Jangan mengarang nama, ID, atau fungsi channel yang tidak tercantum.",
+    "Kalau menyebut channel Discord, prioritaskan mention <#ID> dari direktori. Jangan memakai @everyone atau @here.",
+    "Untuk konflik warga, jangan memihak buta. Tenangkan keadaan, rangkum inti masalah, tawarkan jalan tengah yang adil, dan jaga privasi.",
+    "Jawaban harus nyaman dibaca di Discord: paragraf pendek, heading seperlunya, maksimal beberapa poin penting, tanpa spam emoji.",
+    "Jangan membocorkan token, kunci API, data rahasia, atau memori warga lain. Jangan menyimpan atau mengulang rahasia yang terlihat seperti token/kunci.",
+    "Tolak dengan sopan permintaan berbahaya, ilegal, eksplisit, penipuan, pencurian akun/token, malware, spam, atau bypass keamanan. Berikan alternatif aman.",
+    serverContext(ctx)
   ];
 
   if (mode === "curhat") {
     return [
-      `Kamu adalah Pak RW, teman curhat yang hangat di server ${config.serverName || "DESA TULUS"}.`,
       ...sharedRules,
-      "Jawab dengan empati, lembut, natural, panjang secukupnya, tidak menghakimi, dan tidak menyalahkan user.",
-      "Boleh mengikuti gaya aku/kamu atau lu/gua user, tapi jangan mengejek, jangan merendahkan, dan jangan membuat user merasa disalahkan.",
-      "Bantu user memahami perasaannya dengan aman.",
-      "Jika ada tanda bahaya atau kondisi darurat, sarankan user menghubungi orang dewasa tepercaya atau layanan darurat setempat, tanpa memberi detail berbahaya.",
-      "Akhiri dengan pertanyaan lembut agar user bisa lanjut cerita."
+      "MODE CURHAT KHUSUS: fokus mendengarkan isi hati warga. Jangan mengubah curhat menjadi tutorial bot, promosi fitur, atau daftar solusi panjang kecuali warga memang meminta solusi.",
+      "Validasi perasaan tanpa menghakimi dan tanpa menganggap diagnosis. Tanyakan satu pertanyaan lembut yang relevan agar warga bisa melanjutkan cerita.",
+      "Jangan membandingkan curhat warga ini dengan warga lain. Jangan menyebut isi curhat di channel lain.",
+      "Jika ada tanda bahaya atau kondisi darurat, arahkan warga untuk segera menghubungi orang dewasa tepercaya atau layanan darurat setempat dengan bahasa singkat dan aman.",
+      "Panjang jawaban curhat biasanya 3 sampai 7 paragraf pendek, hangat, natural, dan tidak berlebihan."
     ].join(" ");
   }
 
   if (mode === "juragan") {
     return [
-      `Kamu adalah Pak RW Smart AI Premium khusus role Juragan di server ${config.serverName || "DESA TULUS"}.`,
       ...sharedRules,
-      "Jawab dengan kualitas premium: lebih detail, lebih rapi, lebih solutif, ada langkah, contoh, alasan, dan tips jika perlu.",
-      "Tetap ramah, santai, pintar, dan punya vibe Pak RW.",
-      serverContext()
+      "MODE JURAGAN/DONATUR: kualitas jawaban lebih mendalam, tetapi tetap hemat token. Berikan penyebab, langkah, contoh, dan pengecekan akhir bila memang dibutuhkan.",
+      "Jangan memberi klaim premium kosong. Tetap jawab masalah nyata warga secara langsung."
     ].join(" ");
   }
 
   return [
-    `Kamu adalah Pak RW Smart AI Ultra Premium untuk server ${config.serverName || "DESA TULUS"}. Owner server adalah ${config.ownerName || "PAK RW"}.`,
     ...sharedRules,
-    "Peran kamu: tutor tugas sekolah, helper coding, helper Discord server, troubleshooter bot, penulis teks, penerjemah, planner, dan teman diskusi yang solutif.",
-    "Bantu pertanyaan member sebaik mungkin: tugas sekolah, matematika, IPA, IPS, sejarah, bahasa, coding, JavaScript, Node.js, Discord.js, Discord server, bot, GitHub, DisCloud, MongoDB, Roblox, Blender, desain, ide konten, translate, menulis teks, pengumuman, dan pertanyaan umum.",
-    "Kalau user memberi soal tugas, jelaskan konsep, langkah pengerjaan, dan jawaban akhir dengan bahasa sederhana.",
-    "Kalau user memberi error coding, jelaskan penyebab, bagian yang harus dicek, dan solusi yang bisa langsung dicoba.",
-    "Kalau user bertanya Discord/server, berikan tutorial step-by-step yang praktis dan mudah diikuti.",
-    "Kalau user minta dibuatkan teks, berikan hasil yang langsung siap copy, rapi, dan sesuai gaya yang diminta.",
-    "Jawaban default sekitar 4 sampai 10 baris. Hemat token, tidak bertele-tele, tapi tetap jelas. Boleh lebih panjang kalau user meminta detail atau topiknya memang butuh langkah panjang.",
-    serverContext()
+    "MODE WARGA UMUM: bantu sebaik mungkin untuk pertanyaan apa pun yang aman dan masuk akal.",
+    "Jika pertanyaan sederhana, jawab ringkas. Jika masalah kompleks, jelaskan tahap demi tahap. Jangan memaksa semua jawaban menjadi panjang.",
+    "Jika warga bertanya siapa dirimu, jawab bahwa kamu Pak RW DESA TULUS yang membantu dan mengayomi warga. Jika ditanya owner, jawab BEKIW."
   ].join(" ");
 }
 
@@ -669,101 +821,164 @@ function getApiKey() {
   return process.env.AI_KEY || process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_KEY || "";
 }
 
-function getModel() {
-  return config.ai?.openRouterModel || process.env.OPENROUTER_MODEL || DEFAULT_CHEAP_MODEL;
+function normalizeModelName(value = "", fallback = "") {
+  const model = cleanText(value);
+  if (!model || LEGACY_MODELS.has(model)) return fallback;
+  return model;
+}
+
+function getSmartModel() {
+  return normalizeModelName(
+    config.ai?.smartModel || process.env.OPENROUTER_SMART_MODEL || config.ai?.openRouterModel || process.env.OPENROUTER_MODEL,
+    DEFAULT_SMART_MODEL
+  );
+}
+
+function getEconomyModel() {
+  return normalizeModelName(
+    config.ai?.economyModel || process.env.OPENROUTER_ECONOMY_MODEL,
+    DEFAULT_ECONOMY_MODEL
+  );
+}
+
+function isComplexRequest(text = "", mode = "normal") {
+  const msg = cleanText(text).toLowerCase();
+  if (mode === "juragan") return true;
+  if (mode === "curhat") return msg.length > 420;
+  if (msg.length > 650) return true;
+  const complexSignals = [
+    "analisis", "audit", "bandingkan", "jelaskan lengkap", "langkah demi langkah", "buatkan full", "dari nol",
+    "arsitektur", "database", "mongodb", "railway", "discord.js", "javascript", "typescript", "bug", "error",
+    "matematika", "fisika", "kimia", "rumus", "proposal", "strategi", "perencanaan", "refactor", "security"
+  ];
+  return countSignals(msg, complexSignals) >= 2 || (msg.includes("```")) || msg.split(/\s+/).length > 110;
 }
 
 function getFallbackModels() {
-  const raw = config.ai?.fallbackModels || process.env.OPENROUTER_FALLBACK_MODELS || [DEFAULT_CHEAP_MODEL];
-  if (Array.isArray(raw)) return raw.filter(Boolean);
-  return String(raw).split(",").map((x) => x.trim()).filter(Boolean);
+  const raw = config.ai?.fallbackModels || process.env.OPENROUTER_FALLBACK_MODELS || [];
+  if (Array.isArray(raw)) return raw.map((x) => normalizeModelName(x, "")).filter(Boolean);
+  return String(raw).split(",").map((x) => normalizeModelName(x.trim(), "")).filter(Boolean);
 }
 
-function getModelQueue() {
-  return [...new Set([getModel(), ...getFallbackModels()])].filter(Boolean).slice(0, 2);
+function getModelQueue(text = "", mode = "normal") {
+  const smart = getSmartModel();
+  const economy = getEconomyModel();
+  const complex = isComplexRequest(text, mode);
+  const primary = complex ? smart : economy;
+  const secondary = complex ? economy : smart;
+  return [...new Set([primary, secondary, ...getFallbackModels()])].filter(Boolean).slice(0, 2);
 }
 
-async function askAI(text, mode = "normal") {
-  const userText = cleanText(text);
-  const apiKey = getApiKey();
+function getMaxOutputTokens(text = "", mode = "normal") {
+  const configured = Number(config.ai?.maxTokens || process.env.AI_MAX_TOKENS || 560);
+  const hardCap = mode === "curhat" ? 720 : isComplexRequest(text, mode) ? 780 : 520;
+  return Math.max(180, Math.min(configured, hardCap));
+}
 
-  if (!userText) return localFallback("halo", mode);
-  if (config.ai?.fastLocalForGreeting !== false && isSimpleLocalQuestion(userText, mode)) {
-    console.log("AI HEMAT LIMIT: pertanyaan sederhana dijawab lokal tanpa OpenRouter.");
-    const local = localFallback(userText, mode);
-    setCachedAiReply(userText, mode, local);
-    return local;
+function buildRequestPayload(model, userText, mode, context) {
+  const payload = {
+    model,
+    messages: [
+      { role: "system", content: buildSystemPrompt(userText, mode, context) },
+      { role: "user", content: userText }
+    ],
+    max_tokens: getMaxOutputTokens(userText, mode)
+  };
+
+  if (!String(model).includes("gpt-5.4")) {
+    payload.temperature = mode === "curhat" ? 0.62 : mode === "juragan" ? 0.45 : 0.38;
+    payload.top_p = 0.9;
+    payload.frequency_penalty = 0.08;
+    payload.presence_penalty = 0.04;
   }
 
-  const cachedReply = getCachedAiReply(userText, mode);
+  return payload;
+}
+
+async function finalizeReply(userText, mode, context, reply, source = "unknown") {
+  const finalReply = compactReply(reply || localFallback(userText, mode));
+  setCachedAiReply(userText, mode, finalReply, context);
+  persistUserTurn(context, userText, finalReply, mode);
+  console.log(`AI PAK RW: jawaban ${source} tersimpan ke memori user ${normalizeAiContext(context).userId}.`);
+  return finalReply;
+}
+
+async function askAI(text, mode = "normal", context = {}) {
+  const userText = cleanText(text);
+  const ctx = normalizeAiContext(context);
+  const apiKey = getApiKey();
+
+  if (!userText) return finalizeReply("halo", mode, ctx, localFallback("halo", mode), "lokal-kosong");
+
+  if (config.ai?.fastLocalForGreeting !== false && isSimpleLocalQuestion(userText, mode)) {
+    console.log("AI HEMAT LIMIT: pertanyaan sederhana dijawab lokal tanpa OpenRouter.");
+    return finalizeReply(userText, mode, ctx, localFallback(userText, mode), "lokal-sederhana");
+  }
+
+  const cachedReply = getCachedAiReply(userText, mode, ctx);
   if (cachedReply) {
-    console.log("AI HEMAT LIMIT: jawab dari cache lokal, tidak panggil OpenRouter.");
+    console.log(`AI HEMAT LIMIT: cache khusus user ${ctx.userId} dipakai, tidak panggil OpenRouter.`);
+    persistUserTurn(ctx, userText, cachedReply, mode);
     return cachedReply;
   }
 
   if (!apiKey) {
-    const local = localFallback(userText, mode);
-    setCachedAiReply(userText, mode, local);
-    return local;
+    return finalizeReply(userText, mode, ctx, localFallback(userText, mode), "lokal-tanpa-api-key");
   }
 
   const budgetReason = shouldUseLocalByBudget();
   if (budgetReason) {
     console.log(`AI HEMAT LIMIT: pakai fallback lokal (${budgetReason}).`);
-    const local = localFallback(userText, mode);
-    setCachedAiReply(userText, mode, local);
-    return local;
+    return finalizeReply(userText, mode, ctx, localFallback(userText, mode), `lokal-${budgetReason}`);
   }
   markAiRequestUsed();
 
-  for (const model of getModelQueue()) {
+  const queue = getModelQueue(userText, mode);
+  console.log(`AI ROUTER: mode=${mode} • user=${ctx.userId} • model=${queue.join(" -> ")} • memory=${getUserMemory(ctx)?.recent?.length || 0} turn.`);
+
+  for (const model of queue) {
     try {
       const res = await axios.post(
         "https://openrouter.ai/api/v1/chat/completions",
-        {
-          model,
-          messages: [
-            { role: "system", content: buildSystemPrompt(userText, mode) },
-            { role: "user", content: userText }
-          ],
-          temperature: mode === "curhat" ? 0.68 : mode === "juragan" ? 0.52 : 0.48,
-          top_p: 0.9,
-          frequency_penalty: 0.12,
-          presence_penalty: 0.08,
-          max_tokens: Math.max(180, Math.min(Number(config.ai?.maxTokens || process.env.AI_MAX_TOKENS || 520), mode === "curhat" ? 620 : 520))
-        },
+        buildRequestPayload(model, userText, mode, ctx),
         {
           headers: {
             Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json",
             "HTTP-Referer": "https://github.com/baehaqieqi07-sketch/Pak-Rw",
-            "X-Title": "Pak RW Smart AI"
+            "X-Title": "Pak RW Smart AI DESA TULUS"
           },
-          timeout: 25000
+          timeout: isComplexRequest(userText, mode) ? 45000 : 30000
         }
       );
 
       const reply = compactReply(res.data?.choices?.[0]?.message?.content);
-      const finalReply = reply || localFallback(userText, mode);
-      setCachedAiReply(userText, mode, finalReply);
-      return finalReply;
+      if (reply) return finalizeReply(userText, mode, ctx, reply, model);
     } catch (err) {
       const status = err.response?.status;
       const detail = err.response?.data || err.message;
       console.log(`AI ERROR (${model}):`, detail);
       const textDetail = JSON.stringify(detail).toLowerCase();
       if ([401, 402, 429].includes(Number(status)) || textDetail.includes("insufficient") || textDetail.includes("credit") || textDetail.includes("rate limit") || textDetail.includes("quota")) {
-        console.log("AI HEMAT LIMIT: OpenRouter limit/auth/credit kena, langsung fallback lokal tanpa coba model lain.");
-        const local = localFallback(userText, mode);
-        setCachedAiReply(userText, mode, local);
-        return local;
+        console.log("AI HEMAT LIMIT: limit/auth/credit kena, langsung fallback lokal tanpa menghabiskan request lain.");
+        return finalizeReply(userText, mode, ctx, localFallback(userText, mode), "lokal-limit");
       }
     }
   }
 
-  const local = localFallback(userText, mode);
-  setCachedAiReply(userText, mode, local);
-  return local;
+  return finalizeReply(userText, mode, ctx, localFallback(userText, mode), "lokal-semua-model-gagal");
 }
 
-module.exports = { askAI };
+module.exports = {
+  askAI,
+  __test: {
+    normalizeAiContext,
+    scopedUserKey,
+    getUserMemory,
+    persistUserTurn,
+    buildMemoryPrompt,
+    isComplexRequest,
+    getModelQueue,
+    buildSystemPrompt
+  }
+};

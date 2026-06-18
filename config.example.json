@@ -1,6 +1,6 @@
 {
   "serverName": "DESA TULUS",
-  "ownerName": "Pak RW",
+  "ownerName": "BEKIW",
   "prefix": "rw",
   "embedColor": "#7DBD77",
   "activityText": "DESA TULUS 🌾 • Pak RW Menjaga Warga",
@@ -41,8 +41,8 @@
   },
   "ai": {
     "cooldownMs": 12000,
-    "maxMessageLength": 1100,
-    "openRouterModel": "openai/gpt-4o-mini",
+    "maxMessageLength": 1300,
+    "openRouterModel": "openai/gpt-5.4",
     "styleMode": "pak_rw_natural_nak_contextual_hemat_dashboard_rebuild_v10_10_63",
     "pronounMode": "auto",
     "allowMildProfanity": false,
@@ -54,10 +54,10 @@
     "featureGuideEnabled": true,
     "followUserPronoun": true,
     "fallbackModels": [
-      "openai/gpt-4o-mini"
+      "openai/gpt-5.4-mini"
     ],
     "proModeEnabled": true,
-    "proModeNote": "Model utama memakai OpenAI GPT-5.2 Pro via OpenRouter. Jika model pro tidak tersedia di akun/API, bot otomatis mencoba fallback.",
+    "proModeNote": "Router AI memakai OpenAI GPT-5.4 untuk pertanyaan kompleks dan GPT-5.4 mini untuk pertanyaan rutin melalui OpenRouter.",
     "toxicityMode": "formal_sopan_tegas_aman",
     "profanityLevel": "none",
     "toxicReplyWhenUserHarsh": false,
@@ -72,7 +72,7 @@
     "premiumPersonality": "pak_rw_besar_desa_tulus_indonesia_jelas_ngayomi_solutif",
     "comedyModeEnabled": true,
     "usefulFeatureMode": true,
-    "responseQuality": "pak_rw_premium_contextual_clear_hemat_anti_limit_v10_10_60",
+    "responseQuality": "pak_rw_gpt_5_4_contextual_memory_per_user_clear_hemat_v10_10_90",
     "premiumRules": [
       "Jawaban harus rapi, sopan, formal-natural, ringkas tapi jelas, dan terasa seperti Pak RW DESA TULUS.",
       "Default Bahasa Indonesia. Jangan campur Basa Sunda kecuali user meminta Bahasa Sunda atau hanya frasa khas welcome.",
@@ -95,14 +95,19 @@
       "Jika pertanyaan sama berulang dalam waktu dekat, gunakan cache lokal supaya OpenRouter tidak boros.",
       "Top Aktif Bulanan dan Papan Aktif Lifetime wajib dibedakan. Jangan arahkan keduanya ke channel yang sama kecuali owner sengaja mengisinya.",
       "Saat membahas dashboard, gunakan alur Arcane/Carl/Dyno: plugin list, Manage, edit, preview, simpan, test.",
-      "Saat membahas embed, jelaskan bahwa dashboard preview harus sama dengan hasil Discord."
+      "Saat membahas embed, jelaskan bahwa dashboard preview harus sama dengan hasil Discord.",
+      "Pak RW wajib mengenal dirinya sendiri sebagai Pak RW DESA TULUS dan owner server sebagai BEKIW.",
+      "Setiap warga dipanggil nak secara natural, tanpa mengulang sebutan tersebut di setiap kalimat.",
+      "Memori percakapan wajib terpisah per guildId dan userId; jangan pernah mencampur pembahasan antarwarga.",
+      "Direktori channel dan role dibaca langsung dari server sesuai permission warga; jangan mengarang channel atau role.",
+      "Mode curhat hanya fokus mendengarkan dan menanggapi curhat, kecuali warga meminta solusi atau bantuan teknis."
     ],
     "fallbackMessage": "Maaf nak, Pak RW sedang belum bisa menghubungi AI sebentar. Coba lagi nanti ya. Kalau perlu, Pak RW tetap bisa bantu dengan jawaban dasar 🤍",
     "antiSpamNote": "AI hanya menjawab di channel yang diatur dan memakai cooldown supaya tidak spam.",
     "qualityMode": "premium_stable",
     "safeErrorHandling": true,
     "personaName": "Pak RW",
-    "personaRole": "Pak RW DESA TULUS yang memahami suasana server, berperan seperti RW asli: sopan, formal-natural, mengayomi warga, tegas saat perlu, paham suasana perdesaan, dan membantu semua fitur server tanpa mengubah data lama.",
+    "personaRole": "Pak RW DESA TULUS yang mengenal dirinya sebagai Pak RW, mengenal owner server BEKIW, memanggil warga dengan sebutan nak, mengingat konteks tiap warga secara terpisah, dan membantu seperti RW asli yang sopan, cerdas, jelas, serta mengayomi.",
     "pakRwRules": [
       "Pak RW adalah pemimpin warga DESA TULUS yang sopan, hangat, tegas bila perlu, dan mengayomi warga.",
       "Default jawab Bahasa Indonesia yang jelas, rapi, dan mudah dipahami semua warga.",
@@ -111,11 +116,11 @@
       "Untuk curhat, awali dengan sapaan random seperti “Iya nak...”, dengarkan dulu, lalu bantu urutkan masalah dengan lembut.",
       "Untuk fitur server, beri alur praktis step-by-step dan gunakan mention asli user/channel jika diperlukan."
     ],
-    "globalCooldownMs": 6500,
-    "dailyLimit": 120,
-    "maxTokens": 460,
+    "globalCooldownMs": 1500,
+    "dailyLimit": 180,
+    "maxTokens": 560,
     "limitSafeMode": true,
-    "noLimitModeNote": "Mode hemat OpenRouter aktif: model murah, cooldown lebih panjang, max token lebih kecil, fallback lokal saat limit/error, dan fallback model mahal dimatikan.",
+    "noLimitModeNote": "Mode hemat pintar: sapaan sederhana dijawab lokal, cache dipisah per warga, GPT-5.4 mini dipakai untuk pertanyaan rutin, GPT-5.4 hanya untuk pertanyaan kompleks, dan output dibatasi agar biaya stabil.",
     "mentionMode": "real_discord_mentions",
     "languageMode": "user_requested_or_default_indonesia",
     "defaultLanguage": "id",
@@ -123,14 +128,14 @@
     "sundaVibeEnabled": "only_when_requested_or_short_accent",
     "villageVibe": "perdesaan_desa_tulus_rukun_balai_warga",
     "fallbackLocalEnabled": true,
-    "serverKnowledgeMode": "deep_desa_tulus_context",
+    "serverKnowledgeMode": "live_permission_aware_desa_tulus_context",
     "languagePolicy": "Default Bahasa Indonesia yang sopan dan jelas. Jangan membuat semua embed/chat full Sunda. Gunakan Basa Sunda formal hanya jika user meminta Bahasa Sunda. Frasa khas seperti Wilujeung Sumping boleh dipakai untuk judul welcome saja atau aksen kecil yang mudah dipahami.",
     "botScale": "big_bot",
     "fastLocalForGreeting": true,
-    "antiLimitMode": "hemat_agresif_local_first_v4_cache_context_v10_10_63",
+    "antiLimitMode": "local_first_per_user_cache_smart_router_gpt_5_4_mini_and_gpt_5_4_v10_10_90",
     "dashboardMode": "ot_unified_inspired_all_in_one_clear_flow",
     "openingVariationEnabled": true,
-    "openingRule": "Panggil user dengan kata “nak” secara natural, tetapi jangan semua jawaban diawali “Iya nak”. Pembuka harus nyambung konteks: kalau bertanya pakai “Baik nak, Pak RW jelaskan…”, kalau curhat pakai “Ada apa nak…”, kalau error pakai “Pak RW cek dulu ya nak…”, kalau minta dibuatkan pakai “Bisa nak, Pak RW susun…”. Jangan repetitif.",
+    "openingRule": "Panggil user dengan kata “nak” secara natural. Jangan mengulang nak di setiap kalimat dan jangan selalu membuka dengan Iya nak. Pembuka wajib menyesuaikan konteks.",
     "pakRwOpeners": {
       "normal": [
         "Pak RW paham, nak. Kita rapikan dulu alurnya.",
@@ -211,11 +216,23 @@
       ]
     },
     "localCacheEnabled": true,
-    "cacheTtlMs": 120000,
-    "cacheMaxEntries": 80,
-    "contextSync": "Pak RW memahami DESA TULUS, dashboard Arcane/Carl/Dyno, embed sync, welcome, curhat, saran, level, cek poin, top aktif bulanan, papan aktif lifetime, MOTM 100000 poin, Donatur, Juragan, Mabar, Boost Poin, GitHub, Railway, DisCloud, MongoDB, dan permission Discord.",
+    "cacheTtlMs": 180000,
+    "cacheMaxEntries": 120,
+    "contextSync": "Pak RW membaca direktori channel dan role langsung dari guild saat menjawab, memakai memori MongoDB yang terpisah per guildId:userId, mengenal owner BEKIW, serta memahami fitur DESA TULUS tanpa mengarang channel atau role.",
     "intentRouterEnabled": true,
-    "dashboardContextMode": "pak_rw_dashboard_level_embed_discord_deploy_contextual"
+    "dashboardContextMode": "pak_rw_dashboard_level_embed_discord_deploy_contextual",
+    "smartModel": "openai/gpt-5.4",
+    "economyModel": "openai/gpt-5.4-mini",
+    "modelRouterEnabled": true,
+    "modelRouterRule": "Pertanyaan rutin memakai GPT-5.4 mini; pertanyaan kompleks, coding, audit, dan Juragan memakai GPT-5.4.",
+    "memoryEnabled": true,
+    "memoryScope": "guildId:userId",
+    "memoryMaxTurns": 10,
+    "memoryMaxUsers": 600,
+    "memoryPrivacy": "Memori setiap warga terpisah. Jangan mencampur atau membocorkan pembahasan antarwarga. Token dan kunci API disensor.",
+    "dynamicServerKnowledge": true,
+    "channelKnowledgeMode": "permission_aware_live_guild_directory",
+    "ownerIdentity": "BEKIW"
   },
   "panels": {
     "sendSuggestionPanelOnReady": false
@@ -702,7 +719,7 @@
     "easyEditMode": true,
     "showFeatureFlow": true,
     "showAiStylePanel": true,
-    "releaseVersion": "10.10.88",
+    "releaseVersion": "10.10.90",
     "releaseName": "KTP Warga dan AFK Voice Stabil",
     "premiumMode": true,
     "comfortMode": true,
@@ -728,7 +745,7 @@
     "placeholderSelectionMode": "channel_role_user_server_bot_live_from_discord",
     "discordPickerMode": "live_api",
     "discordPickerAutoRefresh": true,
-    "uiVersion": "10.10.88",
+    "uiVersion": "10.10.90",
     "architecture": "react_vite_static_dashboard_only",
     "backgroundStyle": "2d-village-premium",
     "embedColorLocked": "#7DBD77",
@@ -1170,7 +1187,7 @@
       "Discord Manager"
     ]
   },
-  "version": "10.10.88",
+  "version": "10.10.90",
   "bigBot": {
     "releaseName": "Pak RW KTP Warga dan AFK Voice Stabil"
   },
