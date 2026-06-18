@@ -274,3 +274,19 @@ Renderer KTP kini memakai layout 16:9 seperti kartu referensi: data rata di kiri
 - Watermark, lanskap, background, serta seluruh dekorasi selalu dipotong di dalam garis kartu.
 - Jarak judul, foto, tanggal, data warga, dan footer dirapikan tanpa mengubah data KTP lama.
 - AFK Voice 24/7 dan seluruh fitur/data dari versi sebelumnya tetap dipertahankan.
+
+## Pak RW v10.10.87 — AFK Voice Single-Flight Fix
+
+Update ini memperbaiki koneksi AFK Voice yang sebelumnya berulang kali menampilkan `The operation was aborted` dan membuat beberapa timer reconnect sekaligus.
+
+Perubahan utama:
+
+- AFK Voice memakai voice state Discord sebagai sumber kebenaran utama untuk mode AFK tanpa audio.
+- Pak RW tidak lagi langsung keluar hanya karena transport UDP belum mencapai status `Ready`.
+- Hanya satu proses koneksi dan satu timer reconnect yang boleh aktif pada satu waktu.
+- Penyimpanan dashboard yang tidak mengubah channel tidak lagi memutus dan menyambungkan bot.
+- Health check 30 detik menjaga bot tetap berada di channel tujuan.
+- `@discordjs/voice` diperbarui ke 0.19.2 dan runtime dikunci ke Node.js 22.12 atau lebih baru dalam seri Node 22.
+- Avatar KTP dipaksa menjadi PNG statis 256 px dan batas unduhan dinaikkan agar avatar besar tidak terus gagal.
+- Log Active Voice Role serta hierarchy role dibatasi agar console tidak penuh oleh pesan yang sama.
+- Data level, poin, KTP, MongoDB, role, dan konfigurasi warga tidak dihapus atau diinisialisasi ulang.

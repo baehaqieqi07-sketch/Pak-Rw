@@ -702,7 +702,7 @@
     "easyEditMode": true,
     "showFeatureFlow": true,
     "showAiStylePanel": true,
-    "releaseVersion": "10.10.86",
+    "releaseVersion": "10.10.87",
     "releaseName": "KTP Warga dan AFK Voice Stabil",
     "premiumMode": true,
     "comfortMode": true,
@@ -728,7 +728,7 @@
     "placeholderSelectionMode": "channel_role_user_server_bot_live_from_discord",
     "discordPickerMode": "live_api",
     "discordPickerAutoRefresh": true,
-    "uiVersion": "10.10.86",
+    "uiVersion": "10.10.87",
     "architecture": "react_vite_static_dashboard_only",
     "backgroundStyle": "2d-village-premium",
     "embedColorLocked": "#7DBD77",
@@ -1170,7 +1170,7 @@
       "Discord Manager"
     ]
   },
-  "version": "10.10.86",
+  "version": "10.10.87",
   "bigBot": {
     "releaseName": "Pak RW KTP Warga dan AFK Voice Stabil"
   },
@@ -1421,7 +1421,7 @@
     "privacyNote": "KARTU KOMUNITAS DIGITAL • BUKAN DOKUMEN RESMI",
     "logToConsole": true,
     "numberMode": "random_unique_18_digits_v2",
-    "rendererVersion": "10.10.86"
+    "rendererVersion": "10.10.87"
   },
   "afkVoice": {
     "enabled": false,
@@ -1433,6 +1433,9 @@
     "reconnectDelayMs": 5000,
     "maxReconnectDelayMs": 60000,
     "updatedAt": null,
-    "updatedBy": null
+    "updatedBy": null,
+    "gatewayJoinTimeoutMs": 15000,
+    "transportReadyTimeoutMs": 45000,
+    "healthCheckIntervalMs": 30000
   }
 }

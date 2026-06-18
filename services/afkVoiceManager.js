@@ -3,8 +3,8 @@
 const {
   joinVoiceChannel,
   getVoiceConnection,
-  entersState,
-  VoiceConnectionStatus
+  VoiceConnectionStatus,
+  generateDependencyReport
 } = require("@discordjs/voice");
 const { ChannelType, PermissionsBitField } = require("discord.js");
 
@@ -17,6 +17,9 @@ const DEFAULTS = Object.freeze({
   autoReconnect: true,
   reconnectDelayMs: 5000,
   maxReconnectDelayMs: 60000,
+  gatewayJoinTimeoutMs: 15000,
+  transportReadyTimeoutMs: 45000,
+  healthCheckIntervalMs: 30000,
   updatedAt: null,
   updatedBy: null
 });
@@ -24,15 +27,26 @@ const DEFAULTS = Object.freeze({
 let clientRef = null;
 let configReader = null;
 let reconnectTimer = null;
+let healthTimer = null;
 let reconnectAttempts = 0;
-let manualDisconnect = false;
 let shuttingDown = false;
+let manualDisconnect = false;
+let suppressVoiceStateUntil = 0;
 let operation = Promise.resolve();
 let lastActionAt = 0;
 let voiceStateListener = null;
+let activeConnection = null;
+let activeAttemptController = null;
+let activeConnectPromise = null;
+let activeConnectKey = "";
+let attemptSequence = 0;
+let lastHealthRepairAt = 0;
+let dependencyReportLogged = false;
 
 const intentionalConnections = new WeakSet();
-const recoveringConnections = new WeakSet();
+const attachedConnections = new WeakSet();
+const disconnectCheckTimers = new WeakMap();
+const connectionAttemptIds = new WeakMap();
 
 const runtime = {
   state: "Dinonaktifkan",
@@ -45,11 +59,32 @@ const runtime = {
   lastAttemptAt: null,
   reconnectAttempts: 0,
   lastError: "",
+  lastWarning: "",
   errorCode: "",
+  transportState: null,
+  transportReady: false,
+  connectionMode: "none",
   updatedAt: new Date().toISOString()
 };
 
 function nowIso() { return new Date().toISOString(); }
+function sleep(ms, signal) {
+  return new Promise((resolve) => {
+    if (signal?.aborted) return resolve(false);
+    const timer = setTimeout(() => {
+      cleanup();
+      resolve(true);
+    }, ms);
+    timer.unref?.();
+    const onAbort = () => {
+      clearTimeout(timer);
+      cleanup();
+      resolve(false);
+    };
+    const cleanup = () => signal?.removeEventListener?.("abort", onAbort);
+    signal?.addEventListener?.("abort", onAbort, { once: true });
+  });
+}
 function readConfig() {
   const raw = typeof configReader === "function" ? configReader() : {};
   return { ...DEFAULTS, ...(raw?.afkVoice || raw || {}) };
@@ -57,9 +92,14 @@ function readConfig() {
 function setRuntime(patch) {
   Object.assign(runtime, patch, { updatedAt: nowIso(), reconnectAttempts });
 }
-function clearReconnectTimer() {
+function clearReconnectTimer({ resetAttempts = false } = {}) {
   if (reconnectTimer) clearTimeout(reconnectTimer);
   reconnectTimer = null;
+  if (resetAttempts) reconnectAttempts = 0;
+}
+function clearHealthTimer() {
+  if (healthTimer) clearInterval(healthTimer);
+  healthTimer = null;
 }
 function queue(task) {
   operation = operation.then(task, task);
@@ -91,12 +131,18 @@ function currentBotVoiceChannelId(guildId) {
   const guild = clientRef?.guilds?.cache?.get?.(String(guildId || ""));
   return String(guild?.members?.me?.voice?.channelId || "");
 }
-function isActuallyConnected(config = readConfig(), connection = actualConnection(config.guildId)) {
-  return connectionIsReady(connection) && currentBotVoiceChannelId(config.guildId) === String(config.channelId || "");
+function voicePresenceMatches(config = readConfig()) {
+  return Boolean(config.channelId) && currentBotVoiceChannelId(config.guildId) === String(config.channelId || "");
 }
-function connectedRuntime(guild, channel) {
+function isActuallyConnected(config = readConfig()) {
+  // Untuk bot AFK, voice state Discord adalah sumber kebenaran utama. Transport UDP
+  // boleh belum Ready selama akun bot benar-benar sudah terlihat di channel tujuan.
+  return voicePresenceMatches(config);
+}
+function connectedRuntime(guild, channel, connection = actualConnection(guild?.id), warning = "") {
   reconnectAttempts = 0;
   clearReconnectTimer();
+  const ready = connectionIsReady(connection);
   setRuntime({
     state: "Terhubung",
     guildId: guild.id,
@@ -105,8 +151,19 @@ function connectedRuntime(guild, channel) {
     categoryName: channel.parent?.name || "Tanpa kategori",
     connectedAt: runtime.connectedAt || nowIso(),
     lastError: "",
-    errorCode: ""
+    lastWarning: warning,
+    errorCode: "",
+    transportState: connection?.state?.status || null,
+    transportReady: ready,
+    connectionMode: ready ? "full" : "afk-gateway"
   });
+}
+
+function abortActiveAttempt() {
+  if (activeAttemptController && !activeAttemptController.signal.aborted) {
+    activeAttemptController.abort();
+  }
+  activeAttemptController = null;
 }
 
 async function validateAfkVoiceChannel(config = readConfig()) {
@@ -144,96 +201,206 @@ async function validateAfkVoiceChannel(config = readConfig()) {
 function destroyConnectionObject(connection, { intentional = true } = {}) {
   if (!connection) return false;
   if (intentional) intentionalConnections.add(connection);
+  const timer = disconnectCheckTimers.get(connection);
+  if (timer) clearTimeout(timer);
+  disconnectCheckTimers.delete(connection);
   try { connection.removeAllListeners(); } catch {}
   try { connection.destroy(); } catch {}
+  if (activeConnection === connection) activeConnection = null;
   return true;
 }
 
 function destroyExistingConnection(guildId, { intentional = true } = {}) {
   const connection = actualConnection(guildId);
   if (!connection) return false;
-  manualDisconnect = intentional;
   return destroyConnectionObject(connection, { intentional });
 }
 
 function scheduleReconnect(reason = "Koneksi terputus", errorCode = "VOICE_DISCONNECTED") {
   const cfg = readConfig();
   if (shuttingDown || manualDisconnect || !cfg.enabled || cfg.autoReconnect === false || !isRetryableErrorCode(errorCode)) return false;
-  if (isActuallyConnected(cfg)) return false;
 
-  clearReconnectTimer();
+  // Jangan menghancurkan bot yang sebenarnya sudah berada di channel. Ini adalah
+  // fallback penting untuk AFK-only saat transport UDP belum mencapai Ready.
+  if (voicePresenceMatches(cfg)) {
+    const guild = clientRef?.guilds?.cache?.get?.(String(cfg.guildId));
+    const channel = guild?.channels?.cache?.get?.(String(cfg.channelId));
+    if (guild && channel) connectedRuntime(guild, channel, actualConnection(cfg.guildId), reason);
+    return false;
+  }
+
+  // Satu timer saja. Event error, disconnected, voiceStateUpdate, dan timeout tidak
+  // boleh membuat empat countdown reconnect yang saling bertabrakan.
+  if (reconnectTimer) return false;
+
   reconnectAttempts += 1;
   const base = Math.max(1000, Number(cfg.reconnectDelayMs) || 5000);
   const max = Math.max(base, Number(cfg.maxReconnectDelayMs) || 60000);
   const delay = Math.min(max, base * Math.max(1, 2 ** Math.min(reconnectAttempts - 1, 5)));
-  setRuntime({ state: "Menghubungkan Ulang", lastError: reason, errorCode });
+  setRuntime({
+    state: "Menghubungkan Ulang",
+    lastError: reason,
+    lastWarning: "",
+    errorCode,
+    transportReady: false,
+    connectionMode: "none"
+  });
   console.log(`[AFK VOICE] Koneksi terputus. Reconnect dalam ${Math.round(delay / 1000)} detik.`);
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
     connectAfkVoice({ reason: "auto-reconnect" }).catch((error) => {
       console.log(`[AFK VOICE] Reconnect gagal: ${error?.message || error}`);
+      scheduleReconnect(error?.message || "Reconnect gagal.", "VOICE_RECONNECT_FAILED");
     });
   }, delay);
   reconnectTimer.unref?.();
   return true;
 }
 
-async function waitForBotVoiceState(guild, channelId, timeoutMs = 8000) {
+async function waitForBotVoiceState(guild, channelId, timeoutMs = 15000, signal = null) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
+    if (signal?.aborted) return false;
     const me = guild.members.me || await guild.members.fetchMe().catch(() => null);
-    if (me?.voice?.channelId === channelId) return true;
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    if (String(me?.voice?.channelId || "") === String(channelId)) return true;
+    const continued = await sleep(250, signal);
+    if (!continued) return false;
   }
   return false;
 }
 
-function attachConnectionListeners(connection, guild, channel) {
-  connection.on(VoiceConnectionStatus.Ready, () => {
-    if (!intentionalConnections.has(connection)) connectedRuntime(guild, channel);
+function waitForConnectionReady(connection, timeoutMs = 45000) {
+  return new Promise((resolve) => {
+    if (!connection) return resolve(false);
+    if (connectionIsReady(connection)) return resolve(true);
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      connection.off?.(VoiceConnectionStatus.Ready, onReady);
+      connection.off?.(VoiceConnectionStatus.Destroyed, onDestroyed);
+      resolve(value);
+    };
+    const onReady = () => finish(true);
+    const onDestroyed = () => finish(false);
+    const timer = setTimeout(() => finish(false), Math.max(1000, Number(timeoutMs) || 45000));
+    timer.unref?.();
+    connection.once?.(VoiceConnectionStatus.Ready, onReady);
+    connection.once?.(VoiceConnectionStatus.Destroyed, onDestroyed);
   });
+}
 
-  connection.on(VoiceConnectionStatus.Disconnected, async () => {
-    if (shuttingDown || manualDisconnect || intentionalConnections.has(connection) || recoveringConnections.has(connection)) return;
-    recoveringConnections.add(connection);
-    setRuntime({ state: "Terputus", lastDisconnectedAt: nowIso(), lastError: "Sesi voice Discord terputus.", errorCode: "VOICE_DISCONNECTED" });
-    try {
-      await Promise.race([
-        entersState(connection, VoiceConnectionStatus.Signalling, 5000),
-        entersState(connection, VoiceConnectionStatus.Connecting, 5000)
-      ]);
-      await entersState(connection, VoiceConnectionStatus.Ready, 20000);
-      connectedRuntime(guild, channel);
-    } catch {
-      destroyConnectionObject(connection, { intentional: true });
-      scheduleReconnect("Sesi voice Discord terputus.", "VOICE_DISCONNECTED");
-    } finally {
-      recoveringConnections.delete(connection);
+function scheduleDisconnectedCheck(connection, guild, channel) {
+  if (!connection || disconnectCheckTimers.has(connection)) return;
+  const timer = setTimeout(() => {
+    disconnectCheckTimers.delete(connection);
+    if (shuttingDown || manualDisconnect || intentionalConnections.has(connection) || activeConnection !== connection) return;
+    const cfg = readConfig();
+    if (voicePresenceMatches(cfg)) {
+      connectedRuntime(guild, channel, connection, "Transport voice sedang memulihkan sesi; mode AFK tetap aktif.");
+      return;
+    }
+    destroyConnectionObject(connection, { intentional: true });
+    setRuntime({ state: "Terputus", lastDisconnectedAt: nowIso(), transportReady: false, connectionMode: "none" });
+    scheduleReconnect("Sesi voice Discord benar-benar terputus.", "VOICE_DISCONNECTED");
+  }, 8000);
+  timer.unref?.();
+  disconnectCheckTimers.set(connection, timer);
+}
+
+function attachConnectionListeners(connection, guild, channel, attemptId) {
+  if (!connection || attachedConnections.has(connection)) return;
+  attachedConnections.add(connection);
+  connectionAttemptIds.set(connection, attemptId);
+
+  connection.on("stateChange", (oldState, newState) => {
+    if (activeConnection !== connection || intentionalConnections.has(connection)) return;
+    setRuntime({ transportState: newState?.status || null, transportReady: newState?.status === VoiceConnectionStatus.Ready });
+    if (oldState?.status !== newState?.status) {
+      console.log(`[AFK VOICE] Transport: ${oldState?.status || "unknown"} → ${newState?.status || "unknown"}.`);
     }
   });
 
+  connection.on(VoiceConnectionStatus.Ready, () => {
+    if (activeConnection !== connection || intentionalConnections.has(connection)) return;
+    connectedRuntime(guild, channel, connection);
+    console.log("[AFK VOICE] Transport voice Ready. Pak RW terhubung penuh.");
+  });
+
+  connection.on(VoiceConnectionStatus.Disconnected, () => {
+    if (shuttingDown || manualDisconnect || intentionalConnections.has(connection) || activeConnection !== connection) return;
+    setRuntime({
+      state: voicePresenceMatches(readConfig()) ? "Terhubung" : "Terputus",
+      lastDisconnectedAt: nowIso(),
+      lastWarning: "Transport voice terputus sementara dan sedang dipulihkan.",
+      errorCode: "VOICE_DISCONNECTED",
+      transportReady: false,
+      connectionMode: voicePresenceMatches(readConfig()) ? "afk-gateway" : "none"
+    });
+    scheduleDisconnectedCheck(connection, guild, channel);
+  });
+
   connection.on(VoiceConnectionStatus.Destroyed, () => {
-    if (shuttingDown || manualDisconnect || intentionalConnections.has(connection)) return;
-    setRuntime({ state: "Terputus", lastDisconnectedAt: nowIso(), lastError: "Koneksi voice dihancurkan oleh Discord.", errorCode: "VOICE_DESTROYED" });
+    if (shuttingDown || manualDisconnect || intentionalConnections.has(connection) || activeConnection !== connection) return;
+    activeConnection = null;
+    setRuntime({ state: "Terputus", lastDisconnectedAt: nowIso(), transportReady: false, connectionMode: "none" });
+    if (voicePresenceMatches(readConfig())) {
+      // Gateway masih menunjukkan bot di channel, jadi bangun ulang transport sekali saja.
+      setTimeout(() => connectAfkVoice({ reason: "transport-rebuild" }).catch(() => null), 1000).unref?.();
+      return;
+    }
     scheduleReconnect("Koneksi voice dihancurkan oleh Discord.", "VOICE_DESTROYED");
   });
 
   connection.on("error", (error) => {
-    if (shuttingDown || intentionalConnections.has(connection)) return;
+    if (shuttingDown || intentionalConnections.has(connection) || activeConnection !== connection) return;
     const message = error?.message || String(error);
-    setRuntime({ state: "Gagal Terhubung", lastError: message, errorCode: "VOICE_CONNECTION_ERROR" });
-    console.log(`[AFK VOICE] Gagal terhubung: ${message}`);
-    scheduleReconnect(message, "VOICE_CONNECTION_ERROR");
+    const present = voicePresenceMatches(readConfig());
+    setRuntime({
+      state: present ? "Terhubung" : "Gagal Terhubung",
+      lastError: present ? "" : message,
+      lastWarning: present ? `Transport voice: ${message}` : "",
+      errorCode: present ? "VOICE_TRANSPORT_WARNING" : "VOICE_CONNECTION_ERROR",
+      transportReady: connectionIsReady(connection),
+      connectionMode: present ? (connectionIsReady(connection) ? "full" : "afk-gateway") : "none"
+    });
+    console.log(`[AFK VOICE] Peringatan transport: ${message}`);
+    if (!present) scheduleReconnect(message, "VOICE_CONNECTION_ERROR");
   });
 }
 
-async function connectInternal({ reason = "manual" } = {}) {
+async function monitorTransport(connection, guild, channel, attemptId, timeoutMs) {
+  const ready = await waitForConnectionReady(connection, timeoutMs);
+  if (shuttingDown || activeConnection !== connection || connectionAttemptIds.get(connection) !== attemptId) return;
+  if (ready) {
+    connectedRuntime(guild, channel, connection);
+    return;
+  }
+  if (voicePresenceMatches(readConfig())) {
+    const warning = "Pak RW sudah berada di voice channel. Transport UDP belum Ready, tetapi mode AFK 24/7 tetap dipertahankan.";
+    connectedRuntime(guild, channel, connection, warning);
+    console.log(`[AFK VOICE] ${warning}`);
+    return;
+  }
+  destroyConnectionObject(connection, { intentional: true });
+  setRuntime({
+    state: "Gagal Terhubung",
+    lastError: "Pak RW tidak terdeteksi di voice channel setelah proses koneksi.",
+    errorCode: "VOICE_CONNECT_TIMEOUT",
+    lastDisconnectedAt: nowIso(),
+    transportReady: false,
+    connectionMode: "none"
+  });
+  scheduleReconnect("Pak RW tidak terdeteksi di voice channel setelah proses koneksi.", "VOICE_CONNECT_TIMEOUT");
+}
+
+async function connectInternal({ reason = "manual", force = false, signal = null } = {}) {
   const cfg = readConfig();
   manualDisconnect = false;
-  clearReconnectTimer();
 
   if (!cfg.enabled) {
-    setRuntime({ state: "Dinonaktifkan", lastError: "", errorCode: "" });
+    setRuntime({ state: "Dinonaktifkan", lastError: "", lastWarning: "", errorCode: "", connectionMode: "none", transportReady: false });
     return { success: false, message: "AFK Voice 24/7 sedang dinonaktifkan.", errorCode: "FEATURE_DISABLED", data: getAfkVoiceStatus() };
   }
 
@@ -241,9 +408,11 @@ async function connectInternal({ reason = "manual" } = {}) {
     state: reconnectAttempts ? "Menghubungkan Ulang" : "Sedang Menghubungkan",
     lastAttemptAt: nowIso(),
     lastError: "",
+    lastWarning: "",
     errorCode: "",
     guildId: String(cfg.guildId || ""),
-    channelId: String(cfg.channelId || "")
+    channelId: String(cfg.channelId || ""),
+    connectionMode: "none"
   });
 
   const valid = await validateAfkVoiceChannel(cfg);
@@ -253,27 +422,37 @@ async function connectInternal({ reason = "manual" } = {}) {
       : valid.errorCode?.startsWith("MISSING_") || valid.errorCode === "CHANNEL_FULL"
         ? "Izin Tidak Cukup"
         : "Gagal Terhubung";
-    setRuntime({ state, lastError: valid.message, errorCode: valid.errorCode });
+    setRuntime({ state, lastError: valid.message, lastWarning: "", errorCode: valid.errorCode, transportReady: false, connectionMode: "none" });
     console.log(`[AFK VOICE] Gagal terhubung: ${valid.message}`);
     scheduleReconnect(valid.message, valid.errorCode);
     return { success: false, message: valid.message, errorCode: valid.errorCode, data: getAfkVoiceStatus() };
   }
 
+  if (signal?.aborted) return { success: false, message: "Percobaan koneksi sebelumnya dibatalkan karena ada pengaturan baru.", errorCode: "CONNECT_SUPERSEDED", data: getAfkVoiceStatus() };
+
   const { guild, channel } = valid;
-  const current = actualConnection(guild.id);
-  if (current && current.joinConfig.channelId === channel.id && connectionIsReady(current)) {
-    const voiceStateReady = await waitForBotVoiceState(guild, channel.id, 3000);
-    if (voiceStateReady) {
-      connectedRuntime(guild, channel);
-      return { success: true, message: `Pak RW sudah terhubung ke ${channel.name}.`, data: getAfkVoiceStatus() };
-    }
+  let current = actualConnection(guild.id);
+
+  if (!force && current && String(current.joinConfig?.channelId || "") === channel.id && voicePresenceMatches(cfg)) {
+    activeConnection = current;
+    attachConnectionListeners(current, guild, channel, connectionAttemptIds.get(current) || ++attemptSequence);
+    connectedRuntime(guild, channel, current, connectionIsReady(current) ? "" : "Mode AFK aktif; transport voice masih menstabilkan koneksi.");
+    return { success: true, message: `Pak RW sudah berada di ${channel.name}.`, data: getAfkVoiceStatus() };
   }
 
-  if (current) destroyExistingConnection(guild.id, { intentional: true });
-  manualDisconnect = false;
+  if (current && (force || String(current.joinConfig?.channelId || "") !== channel.id)) {
+    suppressVoiceStateUntil = Date.now() + 5000;
+    destroyConnectionObject(current, { intentional: true });
+    current = null;
+    await sleep(500, signal);
+  }
+
+  if (signal?.aborted) return { success: false, message: "Percobaan koneksi dibatalkan karena ada pengaturan baru.", errorCode: "CONNECT_SUPERSEDED", data: getAfkVoiceStatus() };
+
   console.log(`[AFK VOICE] Menghubungkan Pak RW ke: ${channel.name} (${channel.id}) • ${reason}`);
 
   let connection;
+  const attemptId = ++attemptSequence;
   try {
     connection = joinVoiceChannel({
       channelId: channel.id,
@@ -282,46 +461,97 @@ async function connectInternal({ reason = "manual" } = {}) {
       selfMute: cfg.selfMute !== false,
       selfDeaf: cfg.selfDeaf !== false
     });
+    activeConnection = connection;
+    attachConnectionListeners(connection, guild, channel, attemptId);
   } catch (error) {
     const message = error?.message || "Voice adapter gagal membuat koneksi.";
-    setRuntime({ state: "Gagal Terhubung", lastError: message, errorCode: "VOICE_JOIN_ERROR" });
+    setRuntime({ state: "Gagal Terhubung", lastError: message, errorCode: "VOICE_JOIN_ERROR", transportReady: false, connectionMode: "none" });
     console.log(`[AFK VOICE] Gagal membuat koneksi: ${message}`);
     scheduleReconnect(message, "VOICE_JOIN_ERROR");
     return { success: false, message: "Pak RW gagal membuat koneksi voice. Coba hubungkan ulang beberapa detik lagi.", errorCode: "VOICE_JOIN_ERROR", data: getAfkVoiceStatus() };
   }
 
-  attachConnectionListeners(connection, guild, channel);
+  const joinedGateway = await waitForBotVoiceState(
+    guild,
+    channel.id,
+    Math.max(5000, Number(cfg.gatewayJoinTimeoutMs) || DEFAULTS.gatewayJoinTimeoutMs),
+    signal
+  );
 
-  try {
-    await entersState(connection, VoiceConnectionStatus.Ready, 30000);
-    const voiceStateReady = await waitForBotVoiceState(guild, channel.id, 8000);
-    if (!voiceStateReady) throw new Error("Koneksi Ready tetapi voice state bot belum masuk ke channel tujuan.");
-    connectedRuntime(guild, channel);
-    console.log("[AFK VOICE] Pak RW berhasil terhubung.");
-    return { success: true, message: `Pak RW berhasil terhubung ke ${channel.name}.`, data: getAfkVoiceStatus() };
-  } catch (error) {
-    const message = error?.message || "Koneksi voice melewati batas waktu.";
-    destroyConnectionObject(connection, { intentional: true });
-    setRuntime({ state: "Gagal Terhubung", lastError: message, errorCode: "VOICE_CONNECT_TIMEOUT", lastDisconnectedAt: nowIso() });
-    console.log(`[AFK VOICE] Gagal terhubung: ${message}`);
-    scheduleReconnect(message, "VOICE_CONNECT_TIMEOUT");
-    return { success: false, message: "Pak RW gagal terhubung ke voice channel. Periksa permission dan coba hubungkan ulang.", errorCode: "VOICE_CONNECT_TIMEOUT", data: getAfkVoiceStatus() };
+  if (signal?.aborted) {
+    if (activeConnection === connection) destroyConnectionObject(connection, { intentional: true });
+    return { success: false, message: "Percobaan koneksi dibatalkan karena ada pengaturan baru.", errorCode: "CONNECT_SUPERSEDED", data: getAfkVoiceStatus() };
   }
+
+  if (!joinedGateway) {
+    destroyConnectionObject(connection, { intentional: true });
+    const message = "Discord tidak menempatkan Pak RW ke voice channel dalam batas waktu.";
+    setRuntime({ state: "Gagal Terhubung", lastError: message, errorCode: "VOICE_GATEWAY_TIMEOUT", lastDisconnectedAt: nowIso(), transportReady: false, connectionMode: "none" });
+    console.log(`[AFK VOICE] Gagal terhubung: ${message}`);
+    scheduleReconnect(message, "VOICE_GATEWAY_TIMEOUT");
+    return { success: false, message: `${message} Periksa izin Connect/View Channel dan region voice.`, errorCode: "VOICE_GATEWAY_TIMEOUT", data: getAfkVoiceStatus() };
+  }
+
+  // Begitu voice state Discord menunjukkan bot sudah masuk, fitur AFK dianggap sukses.
+  // Jangan langsung menghancurkan koneksi hanya karena handshake UDP belum Ready.
+  connectedRuntime(
+    guild,
+    channel,
+    connection,
+    connectionIsReady(connection) ? "" : "Pak RW sudah masuk voice; transport voice sedang menstabilkan koneksi."
+  );
+  console.log(`[AFK VOICE] Pak RW sudah masuk ke ${channel.name}.`);
+
+  monitorTransport(
+    connection,
+    guild,
+    channel,
+    attemptId,
+    Math.max(10000, Number(cfg.transportReadyTimeoutMs) || DEFAULTS.transportReadyTimeoutMs)
+  ).catch((error) => console.log(`[AFK VOICE] Monitor transport gagal: ${error?.message || error}`));
+
+  return { success: true, message: `Pak RW berhasil masuk dan AFK di ${channel.name}.`, data: getAfkVoiceStatus() };
 }
 
 function connectAfkVoice(options = {}) {
-  return queue(() => connectInternal(options));
+  const cfg = readConfig();
+  const key = `${cfg.guildId}:${cfg.channelId}`;
+  const force = Boolean(options.force);
+  if (!force && activeConnectPromise && activeConnectKey === key) return activeConnectPromise;
+  if (force) abortActiveAttempt();
+
+  const controller = new AbortController();
+  activeAttemptController = controller;
+  const promise = queue(() => connectInternal({ ...options, force, signal: controller.signal }));
+  activeConnectPromise = promise;
+  activeConnectKey = key;
+  promise.finally(() => {
+    if (activeConnectPromise === promise) {
+      activeConnectPromise = null;
+      activeConnectKey = "";
+    }
+    if (activeAttemptController === controller) activeAttemptController = null;
+  }).catch(() => null);
+  return promise;
 }
 
 function reconnectAfkVoice() {
+  abortActiveAttempt();
   return queue(async () => {
     const cfg = readConfig();
-    clearReconnectTimer();
+    clearReconnectTimer({ resetAttempts: true });
     manualDisconnect = true;
+    suppressVoiceStateUntil = Date.now() + 5000;
     destroyExistingConnection(cfg.guildId, { intentional: true });
     manualDisconnect = false;
-    reconnectAttempts = 0;
-    return connectInternal({ reason: "dashboard-reconnect" });
+    await sleep(600);
+    const controller = new AbortController();
+    activeAttemptController = controller;
+    try {
+      return await connectInternal({ reason: "dashboard-reconnect", force: true, signal: controller.signal });
+    } finally {
+      if (activeAttemptController === controller) activeAttemptController = null;
+    }
   });
 }
 
@@ -330,12 +560,14 @@ function moveAfkVoiceChannel() {
 }
 
 function disconnectAfkVoice({ disable = false } = {}) {
+  abortActiveAttempt();
   return queue(async () => {
-    clearReconnectTimer();
+    clearReconnectTimer({ resetAttempts: true });
     manualDisconnect = true;
-    reconnectAttempts = 0;
+    suppressVoiceStateUntil = Date.now() + 5000;
     const cfg = readConfig();
     destroyExistingConnection(cfg.guildId, { intentional: true });
+    activeConnection = null;
     setRuntime({
       state: disable ? "Dinonaktifkan" : "Terputus",
       connectedAt: null,
@@ -343,9 +575,14 @@ function disconnectAfkVoice({ disable = false } = {}) {
       channelName: "",
       categoryName: "",
       lastError: "",
-      errorCode: ""
+      lastWarning: "",
+      errorCode: "",
+      transportState: null,
+      transportReady: false,
+      connectionMode: "none"
     });
     console.log(disable ? "[AFK VOICE] Fitur dinonaktifkan melalui dashboard." : "[AFK VOICE] Koneksi diputuskan.");
+    setTimeout(() => { manualDisconnect = false; }, 1500).unref?.();
     return {
       success: true,
       message: disable ? "AFK Voice 24/7 dinonaktifkan dan Pak RW sudah keluar dari voice." : "Pak RW sudah keluar dari voice.",
@@ -358,13 +595,15 @@ function getAfkVoiceStatus() {
   const cfg = readConfig();
   const connection = actualConnection(cfg.guildId);
   const connectionState = connection?.state?.status || null;
-  let state = runtime.state;
   const actualChannelId = currentBotVoiceChannelId(cfg.guildId);
+  const present = Boolean(cfg.channelId) && actualChannelId === String(cfg.channelId || "");
+  let state = runtime.state;
+
   if (!cfg.enabled) state = "Dinonaktifkan";
-  else if (connectionState === VoiceConnectionStatus.Ready && actualChannelId === String(cfg.channelId || "")) state = "Terhubung";
+  else if (present) state = "Terhubung";
   else if (connectionState === VoiceConnectionStatus.Connecting || connectionState === VoiceConnectionStatus.Signalling) state = "Sedang Menghubungkan";
-  else if (connectionState === VoiceConnectionStatus.Ready && actualChannelId !== String(cfg.channelId || "")) state = reconnectTimer ? "Menghubungkan Ulang" : "Terputus";
-  else if (connectionState === VoiceConnectionStatus.Disconnected && !reconnectTimer) state = "Terputus";
+  else if (reconnectTimer) state = "Menghubungkan Ulang";
+  else if (connectionState === VoiceConnectionStatus.Disconnected) state = "Terputus";
 
   return {
     ...runtime,
@@ -377,13 +616,48 @@ function getAfkVoiceStatus() {
     configuredChannelId: String(cfg.channelId || ""),
     connectionState,
     actualChannelId,
+    voiceStateConnected: present,
+    transportReady: connectionIsReady(connection),
+    connectionMode: present ? (connectionIsReady(connection) ? "full" : "afk-gateway") : "none",
     reconnectAttempts,
-    hasReconnectTimer: Boolean(reconnectTimer)
+    hasReconnectTimer: Boolean(reconnectTimer),
+    connectInProgress: Boolean(activeConnectPromise)
   };
+}
+
+function runHealthCheck() {
+  if (healthTimer || !clientRef) return;
+  const intervalMs = Math.max(10000, Number(readConfig().healthCheckIntervalMs) || DEFAULTS.healthCheckIntervalMs);
+  healthTimer = setInterval(() => {
+    if (shuttingDown) return;
+    const cfg = readConfig();
+    if (!cfg.enabled || !cfg.channelId) return;
+    const present = voicePresenceMatches(cfg);
+    const connection = actualConnection(cfg.guildId);
+
+    if (present) {
+      const guild = clientRef.guilds.cache.get(String(cfg.guildId));
+      const channel = guild?.channels?.cache?.get?.(String(cfg.channelId));
+      if (guild && channel) connectedRuntime(guild, channel, connection, connectionIsReady(connection) ? "" : runtime.lastWarning);
+
+      if (!connection && Date.now() - lastHealthRepairAt > 30000) {
+        lastHealthRepairAt = Date.now();
+        connectAfkVoice({ reason: "health-transport-rebuild" }).catch(() => null);
+      }
+      return;
+    }
+
+    if (!reconnectTimer && !activeConnectPromise && Date.now() - lastHealthRepairAt > 10000) {
+      lastHealthRepairAt = Date.now();
+      scheduleReconnect("Health check mendeteksi Pak RW tidak berada di channel AFK.", "VOICE_HEALTH_MISSING");
+    }
+  }, intervalMs);
+  healthTimer.unref?.();
 }
 
 function initializeAfkVoiceManager({ client, getConfig }) {
   if (clientRef && voiceStateListener) clientRef.off?.("voiceStateUpdate", voiceStateListener);
+  clearHealthTimer();
   clientRef = client;
   configReader = getConfig;
   shuttingDown = false;
@@ -391,18 +665,26 @@ function initializeAfkVoiceManager({ client, getConfig }) {
   voiceStateListener = (oldState, newState) => {
     if (!clientRef?.user || newState?.id !== clientRef.user.id) return;
     const cfg = readConfig();
-    if (shuttingDown || manualDisconnect || !cfg.enabled) return;
+    if (shuttingDown || manualDisconnect || Date.now() < suppressVoiceStateUntil || !cfg.enabled) return;
     const targetId = String(cfg.channelId || "");
     if (!targetId) return;
 
-    if (newState.channelId === targetId) {
-      const channel = newState.channel;
-      if (channel) connectedRuntime(newState.guild, channel);
+    if (String(newState.channelId || "") === targetId) {
+      const channel = newState.channel || newState.guild.channels.cache.get(targetId);
+      if (channel) connectedRuntime(newState.guild, channel, actualConnection(newState.guild.id), connectionIsReady(actualConnection(newState.guild.id)) ? "" : "Pak RW sudah masuk voice; transport voice sedang menstabilkan koneksi.");
       return;
     }
 
-    if (oldState.channelId === targetId || newState.channelId) {
-      setRuntime({ state: "Terputus", lastDisconnectedAt: nowIso(), lastError: "Pak RW tidak lagi berada di voice channel AFK tersimpan.", errorCode: "VOICE_STATE_LEFT_TARGET" });
+    if (String(oldState.channelId || "") === targetId || newState.channelId) {
+      setRuntime({
+        state: "Terputus",
+        lastDisconnectedAt: nowIso(),
+        lastError: "Pak RW tidak lagi berada di voice channel AFK tersimpan.",
+        lastWarning: "",
+        errorCode: "VOICE_STATE_LEFT_TARGET",
+        transportReady: false,
+        connectionMode: "none"
+      });
       scheduleReconnect("Pak RW tidak lagi berada di voice channel AFK tersimpan.", "VOICE_STATE_LEFT_TARGET");
     }
   };
@@ -412,18 +694,31 @@ function initializeAfkVoiceManager({ client, getConfig }) {
   runtime.guildId = String(cfg.guildId || "");
   runtime.channelId = String(cfg.channelId || "");
   setRuntime({ state: cfg.enabled ? "Terputus" : "Dinonaktifkan" });
-  console.log("[AFK VOICE] Konfigurasi Pak RW dimuat.");
+  runHealthCheck();
+
+  if (!dependencyReportLogged) {
+    dependencyReportLogged = true;
+    try {
+      const summary = generateDependencyReport().split("\n").filter((line) => /@discordjs\/voice|discord\.js/.test(line)).join(" • ");
+      console.log(`[AFK VOICE] Runtime Node ${process.version}${summary ? ` • ${summary}` : ""}`);
+    } catch {}
+  }
+  console.log("[AFK VOICE] Konfigurasi Pak RW dimuat dengan single-flight reconnect.");
   return module.exports;
 }
 
 async function shutdownAfkVoice() {
   shuttingDown = true;
-  clearReconnectTimer();
+  abortActiveAttempt();
+  clearReconnectTimer({ resetAttempts: true });
+  clearHealthTimer();
   manualDisconnect = true;
+  suppressVoiceStateUntil = Date.now() + 5000;
   const cfg = readConfig();
   destroyExistingConnection(cfg.guildId, { intentional: true });
+  activeConnection = null;
   if (clientRef && voiceStateListener) clientRef.off?.("voiceStateUpdate", voiceStateListener);
-  setRuntime({ state: "Terputus", lastDisconnectedAt: nowIso() });
+  setRuntime({ state: "Terputus", lastDisconnectedAt: nowIso(), transportReady: false, connectionMode: "none" });
 }
 
 function checkActionRateLimit(windowMs = 1800) {
@@ -434,12 +729,18 @@ function checkActionRateLimit(windowMs = 1800) {
 }
 
 function resetForTests() {
-  clearReconnectTimer();
-  reconnectAttempts = 0;
+  abortActiveAttempt();
+  clearReconnectTimer({ resetAttempts: true });
+  clearHealthTimer();
   manualDisconnect = false;
   shuttingDown = false;
+  suppressVoiceStateUntil = 0;
   lastActionAt = 0;
+  lastHealthRepairAt = 0;
   operation = Promise.resolve();
+  activeConnectPromise = null;
+  activeConnectKey = "";
+  activeConnection = null;
   if (clientRef && voiceStateListener) clientRef.off?.("voiceStateUpdate", voiceStateListener);
   clientRef = null;
   configReader = null;
@@ -455,7 +756,11 @@ function resetForTests() {
     lastAttemptAt: null,
     reconnectAttempts: 0,
     lastError: "",
+    lastWarning: "",
     errorCode: "",
+    transportState: null,
+    transportReady: false,
+    connectionMode: "none",
     updatedAt: nowIso()
   });
 }
@@ -474,5 +779,7 @@ module.exports = {
   shutdownAfkVoice,
   checkActionRateLimit,
   _isRetryableErrorCode: isRetryableErrorCode,
+  _voicePresenceMatches: voicePresenceMatches,
+  _isActuallyConnected: isActuallyConnected,
   _resetForTests: resetForTests
 };

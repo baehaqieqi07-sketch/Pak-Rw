@@ -48,7 +48,7 @@ function defaultKtpConfig() {
     cardSubtitle: "DESA TULUS",
     privacyNote: "KARTU KOMUNITAS DIGITAL • BUKAN DOKUMEN RESMI",
     numberMode: "random_unique_18_digits_v2",
-    rendererVersion: "10.10.86",
+    rendererVersion: "10.10.87",
     logToConsole: true
   };
 }
@@ -300,7 +300,13 @@ function drawPanel(ctx, x, y, width, height, radius, fill, stroke = "rgba(41, 61
 async function loadAvatarImage(avatarUrl) {
   if (!avatarUrl) return null;
   try {
-    const response = await axios.get(avatarUrl, { responseType: "arraybuffer", timeout: 10000, maxContentLength: 5 * 1024 * 1024 });
+    const response = await axios.get(avatarUrl, {
+      responseType: "arraybuffer",
+      timeout: 12000,
+      maxContentLength: 12 * 1024 * 1024,
+      maxBodyLength: 12 * 1024 * 1024,
+      headers: { Accept: "image/avif,image/webp,image/png,image/jpeg,*/*" }
+    });
     return await loadImage(Buffer.from(response.data));
   } catch (error) {
     console.log("[KTP WARGA] Avatar tidak dapat dimuat, memakai inisial:", error.message);
@@ -576,7 +582,7 @@ async function renderKtpCard({ record, member, config = {}, avatarUrl = "" }) {
   ctx.stroke();
 
   const inset = 10;
-  const avatar = await loadAvatarImage(avatarUrl || member?.user?.displayAvatarURL?.({ extension: "png", size: 512 }));
+  const avatar = await loadAvatarImage(avatarUrl || member?.user?.displayAvatarURL?.({ extension: "png", size: 256, forceStatic: true }));
   ctx.save();
   roundedRect(ctx, photoFrame.x + inset, photoFrame.y + inset, photoFrame.w - inset * 2, photoFrame.h - inset * 2, 4);
   ctx.clip();

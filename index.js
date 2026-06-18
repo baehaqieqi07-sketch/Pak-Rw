@@ -11252,7 +11252,7 @@ app.put("/api/dashboard/settings", requireDashboardAuth, (req, res) => {
       if (!isSafeDashboardPath(pathText)) return res.status(400).json({ ok: false, error: `Path config tidak diizinkan: ${pathText}` });
       setDashboardPath(cfg, pathText, patch.value);
     }
-    cfg.version = "10.10.86";
+    cfg.version = "10.10.87";
     writeConfigFile(cfg);
     appendDashboardActivity("settings", "Setting dashboard disimpan", `${patches.length} field diperbarui melalui adapter aman.`);
     if (levelRoleConfigChanged) {
@@ -11272,7 +11272,7 @@ app.put("/api/dashboard/embed/:key", requireDashboardAuth, (req, res) => {
     const cfg = readConfigFile();
     cfg.embeds = cfg.embeds || {};
     cfg.embeds[key] = mergeDashboardEmbed(cfg.embeds[key] || {}, req.body?.embed || {});
-    cfg.version = "10.10.86";
+    cfg.version = "10.10.87";
     writeConfigFile(cfg);
     appendDashboardActivity("embed", "Template embed disimpan", `Template ${key} diperbarui dari Embed Builder.`);
     return res.json({ ok: true, embed: cfg.embeds[key] });
@@ -11359,10 +11359,26 @@ app.put("/api/afk-voice/config", requireDashboardAuth, async (req, res) => {
       if (!valid.ok) return res.status(400).json({ success: false, message: valid.message, errorCode: valid.errorCode });
     }
     cfg.afkVoice = next;
-    cfg.version = "10.10.86";
+    cfg.version = "10.10.87";
     writeConfigFile(cfg);
     appendDashboardActivity("afk-voice", "AFK Voice diperbarui", next.enabled ? `Channel voice ${next.channelId} diterapkan.` : "Fitur dinonaktifkan.");
-    const result = next.enabled ? await reconnectAfkVoice() : await disconnectAfkVoice({ disable: true });
+
+    const connectionSettingsChanged =
+      String(previous.guildId || "") !== String(next.guildId || "") ||
+      String(previous.channelId || "") !== String(next.channelId || "") ||
+      previous.selfMute !== next.selfMute ||
+      previous.selfDeaf !== next.selfDeaf;
+
+    let result;
+    if (!next.enabled) {
+      result = await disconnectAfkVoice({ disable: true });
+    } else if (!previous.enabled || connectionSettingsChanged) {
+      result = await reconnectAfkVoice();
+    } else {
+      // Penyimpanan dashboard yang hanya mengubah delay/auto reconnect tidak boleh
+      // memutus dan menyambungkan Pak RW berulang kali.
+      result = await connectAfkVoice({ reason: "dashboard-save" });
+    }
     return res.status(result.success ? 200 : 502).json(result);
   } catch (err) {
     return res.status(500).json({ success: false, message: "Pengaturan AFK Voice gagal disimpan.", errorCode: "SAVE_FAILED", error: err.message || String(err) });
@@ -11385,7 +11401,7 @@ app.post("/api/afk-voice/disconnect", requireDashboardAuth, async (req, res) => 
   if (!checkActionRateLimit()) return res.status(429).json({ success: false, message: "Tunggu sebentar sebelum memutus koneksi.", errorCode: "RATE_LIMITED" });
   const cfg = readConfigFile();
   cfg.afkVoice = { ...(cfg.afkVoice || {}), enabled: false, updatedAt: new Date().toISOString(), updatedBy: "dashboard" };
-  cfg.version = "10.10.86";
+  cfg.version = "10.10.87";
   writeConfigFile(cfg);
   const result = await disconnectAfkVoice({ disable: true });
   return res.json(result);
@@ -13931,6 +13947,15 @@ function getLevelRoleSyncStatus(member, level) {
   return { tier, currentRoleIds, correct };
 }
 
+const levelRoleWarningTimes = new Map();
+function logLevelRoleWarningOnce(key, message, ttlMs = 30 * 60 * 1000) {
+  const now = Date.now();
+  const last = Number(levelRoleWarningTimes.get(key) || 0);
+  if (now - last < ttlMs) return;
+  levelRoleWarningTimes.set(key, now);
+  console.log(message);
+}
+
 async function syncMemberLevelRole(member, level, options = {}) {
   const system = getPakRwLevelSystemConfig();
   const safeLevel = Math.max(1, Math.min(PAK_RW_MAX_LEVEL, Number(level) || 1));
@@ -13970,7 +13995,7 @@ async function syncMemberLevelRole(member, level, options = {}) {
     return { success: false, reason: "ROLE_HIERARCHY", tier };
   }
   if (member.id === guild.ownerId || botMember.roles.highest.comparePositionTo(member.roles.highest) <= 0) {
-    console.log(`[LEVEL ROLE] ERROR: Pak RW tidak dapat mengelola role member ${member.user.tag} karena hierarchy member.`);
+    logLevelRoleWarningOnce(`member-hierarchy:${guild.id}:${member.id}`, `[LEVEL ROLE] SKIP: Pak RW tidak dapat mengelola role member ${member.user.tag} karena hierarchy member.`);
     return { success: false, reason: "MEMBER_HIERARCHY", tier };
   }
 
@@ -17898,6 +17923,14 @@ function startVoiceLevelAutoFlush() {
 
 
 // ================= ACTIVE VOICE ROLE =================
+const activeVoiceRoleLogTimes = new Map();
+function logActiveVoiceRoleOnce(key, message, ttlMs = 15 * 60 * 1000) {
+  const now = Date.now();
+  const last = Number(activeVoiceRoleLogTimes.get(key) || 0);
+  if (now - last < ttlMs) return;
+  activeVoiceRoleLogTimes.set(key, now);
+  console.log(message);
+}
 function getActiveVoiceRoleConfig() {
   const cfg = config.activeVoiceRole || {};
   return {
@@ -17944,12 +17977,12 @@ async function applyActiveVoiceRole(member, shouldHaveRole, reason = "voice_upda
 
   const role = resolveActiveVoiceRole(member.guild);
   if (!role) {
-    if (cfg.logToConsole) console.log(`🎙️ ACTIVE VOICE ROLE SKIP: role '${cfg.roleName}' belum ditemukan / roleId kosong.`);
+    if (cfg.logToConsole) logActiveVoiceRoleOnce(`missing:${member.guild.id}:${cfg.roleName}`, `🎙️ ACTIVE VOICE ROLE SKIP: role '${cfg.roleName}' belum ditemukan / roleId kosong.`);
     return false;
   }
 
   if (!canManageTargetRole(member.guild, role)) {
-    if (cfg.logToConsole) console.log(`🎙️ ACTIVE VOICE ROLE SKIP: bot tidak bisa manage role ${role.name}. Naikkan posisi role bot dan aktifkan Manage Roles.`);
+    if (cfg.logToConsole) logActiveVoiceRoleOnce(`unmanageable:${member.guild.id}:${role.id}`, `🎙️ ACTIVE VOICE ROLE SKIP: bot tidak bisa manage role ${role.name}. Naikkan posisi role bot dan aktifkan Manage Roles.`);
     return false;
   }
 
@@ -17994,7 +18027,7 @@ async function seedActiveVoiceRoles() {
       await guild.members.fetch().catch(() => null);
       const role = resolveActiveVoiceRole(guild);
       if (!role) {
-        if (cfg.logToConsole) console.log(`🎙️ Active Voice Role: role '${cfg.roleName}' belum ditemukan di ${guild.name}.`);
+        if (cfg.logToConsole) logActiveVoiceRoleOnce(`seed-missing:${guild.id}:${cfg.roleName}`, `🎙️ Active Voice Role: role '${cfg.roleName}' belum ditemukan di ${guild.name}.`);
         continue;
       }
       for (const member of guild.members.cache.values()) {
