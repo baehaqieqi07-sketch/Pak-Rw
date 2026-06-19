@@ -18373,7 +18373,7 @@ async function handleRwTanyaCommand(message) {
 
   if (isCooldown(key, cooldownMs)) {
     const sisa = getRemaining(key);
-    await safeReply(message, `⏳ Tunggu **${sisa} detik** dulu sebelum pakai rwtanya lagi ya.`);
+    await safeReply(message, `⏳ Pelan-pelan dulu ya nak. Tunggu **${sisa} detik** sebelum pakai rwtanya lagi supaya Pak RW tidak spam.`);
     return true;
   }
 
@@ -20769,7 +20769,7 @@ client.on(Events.MessageCreate, async (message) => {
     const cooldownMs = config.ai?.cooldownMs || 4500;
     if (isCooldown(message.author.id, cooldownMs)) {
       const sisa = getRemaining(message.author.id);
-      return safeReply(message, `⏳ Tunggu **${sisa} detik** dulu sebelum chat Pak RW lagi ya.`);
+      return safeReply(message, `⏳ Pelan-pelan dulu ya nak. Tunggu **${sisa} detik** sebelum chat Pak RW lagi supaya jawaban tetap rapi.`);
     }
 
     await message.channel.sendTyping();

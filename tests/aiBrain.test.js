@@ -55,3 +55,15 @@ assert.match(curhatPrompt, /MODE CURHAT KHUSUS/i);
 assert.match(curhatPrompt, /Jangan mengubah curhat menjadi tutorial bot/i);
 
 console.log("✅ AI Pak RW tests berhasil: identitas Pak RW, owner BEKIW, panggilan nak, memori terpisah per user, direktori channel, mode curhat, dan router GPT-5.4 lulus.");
+
+assert.equal(__test.isSundaneseRequested("iye aya warga garelut"), false);
+assert.equal(__test.isConflictReport("iye aya warga garelut"), true);
+const conflictReply = __test.localFallback("iye aya warga garelut", "normal");
+assert.match(conflictReply, /ribut|garelut|berantem/i);
+assert.match(conflictReply, /jangan ikut panas|ulah/i);
+assert.match(conflictReply, /channel/i);
+assert.doesNotMatch(conflictReply, /Biar jelas, jawabannya bakal dibuat begini/i);
+assert.doesNotMatch(conflictReply, /Basa Sunda formal/i);
+
+assert.equal(__test.isGreetingText("pak rw ada warga ribut"), false);
+assert.equal(__test.isConflictReport("pak rw ada warga ribut"), true);

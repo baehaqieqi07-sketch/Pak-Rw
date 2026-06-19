@@ -83,9 +83,13 @@ function hasExactWord(msg = "", word = "") {
 
 function isGreetingText(msg = "") {
   const text = cleanText(msg).toLowerCase();
-  return hasAny(text, ["halo", "hai", "hi", "woi", "pak rw", "assalamualaikum", "makasih", "terima kasih"])
-    || hasExactWord(text, "p")
-    || hasExactWord(text, "rw");
+  if (!text) return true;
+  const words = text.split(/\s+/).filter(Boolean);
+  const hasGreetingPhrase = hasAny(text, ["halo", "hai", "hi", "assalamualaikum", "makasih", "terima kasih"]);
+  if (hasGreetingPhrase && words.length <= 5) return true;
+  if ((hasExactWord(text, "p") || hasExactWord(text, "rw")) && words.length <= 2) return true;
+  if ((text === "pak rw" || text === "rw pak" || text === "pak") && words.length <= 3) return true;
+  return false;
 }
 
 function countSignals(msg, words) {
@@ -102,11 +106,17 @@ function bullet(items) {
 
 function isSundaneseRequested(text = "") {
   const msg = cleanText(text).toLowerCase();
-  const signals = [
-    "bahasa sunda", "basa sunda", "pakai sunda", "make sunda", "nganggo sunda", "sunda formal", "sundaan",
-    "punten", "mangga", "hatur nuhun", "wilujeung", "kumaha", "mugia", "warga", "lembur", "sauyunan"
+  const explicitSignals = [
+    "bahasa sunda", "basa sunda", "pakai sunda", "pake sunda", "make sunda", "nganggo sunda", "sunda formal", "sundaan"
   ];
-  return hasAny(msg, signals);
+  if (hasAny(msg, explicitSignals)) return true;
+
+  const strongSignals = ["punten", "mangga", "hatur nuhun", "wilujeung", "kumaha", "mugia", "anjeunna", "abdi", "ulah", "aya", "garelut", "gelut"];
+  const score = countSignals(msg, strongSignals);
+
+  // Kata umum seperti “warga”, “lembur”, dan “sauyunan” tidak cukup untuk memaksa Basa Sunda formal.
+  // Ini mencegah Pak RW salah membaca laporan pendek seperti “iya ada warga garelut”.
+  return score >= 3;
 }
 
 function isIndonesianRequested(text = "") {
@@ -374,8 +384,52 @@ function localPrefix(text = "") {
 }
 
 
+function isConflictReport(text = "") {
+  const msg = cleanText(text).toLowerCase();
+  const conflictSignals = [
+    "garelut", "gelut", "ribut", "berantem", "bertengkar", "cekcok", "bermasalah",
+    "adu mulut", "berantakan", "rusuh", "rame", "gaduh", "saling ejek", "saling hina", "tawuran"
+  ];
+  return hasAny(msg, conflictSignals) || (hasAny(msg, ["warga", "member", "orang"]) && hasAny(msg, ["ribut", "gelut", "garelut", "cekcok", "berantem"]));
+}
+
+function makeConflictAnswer(userText) {
+  const text = cleanText(userText);
+  const su = isSundaneseRequested(text);
+  if (su) {
+    return [
+      "Pak RW tangkep, nak. Mun aya warga garelut/ribut, urang tenangkeun heula ulah nambahan panas.",
+      "",
+      "Léngkah aman:",
+      bullet([
+        "ulah dibales ku hinaan atawa provokasi",
+        "pisahkeun obrolan lamun bisa jeung ajak ka channel anu leuwih tenang",
+        "catet saha anu ribut, di channel mana, jeung bukti pesenna",
+        "mun geus ngaganggu warga séjén, laporkeun ka staff/owner B E K I W supaya bisa ditangani adil"
+      ]),
+      "",
+      "Kirim detailna: saha jeung ributna di channel mana, supaya Pak RW bisa bantu runtuykeun."
+    ].join("\n");
+  }
+
+  return [
+    "Pak RW paham, nak. Kalau ada warga yang ribut, jangan ikut panas dulu. Kita tenangkan dan urutkan baik-baik.",
+    "",
+    "Yang perlu dilakukan sekarang:",
+    bullet([
+      "jangan balas dengan hinaan atau provokasi",
+      "cek ributnya terjadi di channel mana",
+      "simpan bukti pesan kalau ada yang melewati batas",
+      "kalau sudah mengganggu, panggil staff/owner B E K I W agar ditangani adil"
+    ]),
+    "",
+    "Kirim detailnya, nak: siapa yang ribut, di channel mana, dan masalah awalnya apa. Pak RW bantu rapikan alurnya."
+  ].join("\n");
+}
+
 function detectPakRwIntent(text = "", mode = "normal") {
   const msg = cleanText(text).toLowerCase();
+  if (isConflictReport(text)) return "conflict";
   if (isSundaneseRequested(text)) return "sunda";
   if (mode === "curhat" || hasAny(msg, ["curhat", "sedih", "capek", "cape", "kecewa", "takut", "kesel", "pusing", "overthinking", "sendiri", "bingung", "nangis", "marah"])) return "curhat";
   if (hasAny(msg, ["dashboard", "manage", "arcane", "carl", "dyno", "web", "panel", "preview", "ui", "ux", "layout", "mobile", "device"])) return "dashboard";
@@ -605,6 +659,7 @@ function contextSummaryLine(userText = "", mode = "normal") {
   const intent = detectPakRwIntent(userText, mode);
   const map = {
     curhat: "Pak RW tangkap ini sebagai curhat atau perasaan yang sedang berat.",
+    conflict: "Pak RW tangkap ini sebagai laporan warga yang sedang ribut dan perlu ditenangkan dengan alur yang adil.",
     coding: "Pak RW tangkap ini sebagai masalah teknis/coding yang perlu dibaca dari error dan alurnya.",
     discord: "Pak RW tangkap ini sebagai pengaturan Discord/server yang perlu dicek dari channel, role, permission, dan bot.",
     dashboard: "Pak RW tangkap ini sebagai kebutuhan dashboard supaya editnya rapi, jelas, dan sinkron dengan Discord.",
@@ -698,6 +753,8 @@ function makeHelpfulAnswer(userText, mode = "normal") {
   const msg = text.toLowerCase();
   const tone = localPrefix(text);
 
+  if (isConflictReport(text)) return makeConflictAnswer(text);
+
   if (mode === "juragan") {
     return [
       "💎 **Halo Juragan, Pak RW Premium siap bantu.**",
@@ -744,15 +801,17 @@ function makeHelpfulAnswer(userText, mode = "normal") {
     "",
     `${contextSummaryLine(text, mode)}`,
     "",
-    "Biar jelas, jawabannya bakal dibuat begini:",
+    `Pak RW belum dapat detail yang cukup untuk menjawab sampai tuntas, nak. Tapi intinya Pak RW sudah menangkap pesan: **${text || "belum ada isi pesan"}**`,
+    "",
+    "Supaya jawabannya tepat, kirim salah satu dari ini:",
     bullet([
-      "inti masalahnya dulu",
-      "langkah/solusi yang bisa dicoba",
-      "contoh kalau dibutuhkan",
-      "catatan penting biar nggak salah jalan"
+      "apa masalah utamanya",
+      "di channel mana kejadiannya kalau ini soal server",
+      "siapa/fitur apa yang terlibat",
+      "screenshot atau log kalau ada error"
     ]),
     "",
-    `Kirim detail tambahan kalau mau Pak RW jawab lebih tepat, nak.`
+    "Nanti Pak RW jawab langsung ke solusi, bukan template kosong."
   ].join("\n");
 }
 
@@ -776,7 +835,8 @@ function buildSystemPrompt(userText, mode = "normal", context = {}) {
     languageRule(userText),
     styleRule(userText),
     "Bahasa harus konsisten: jika warga meminta Bahasa Indonesia, jangan campur Basa Sunda; jika meminta Basa Sunda, gunakan Basa Sunda formal; jika tidak jelas, pakai Bahasa Indonesia yang sopan dan mudah dipahami.",
-    "Baca maksud pesan sebelum menjawab. Bedakan curhat, pertanyaan umum, tugas, coding, Discord, dashboard, embed, level/top aktif, GitHub/Railway, penulisan, atau percakapan biasa.",
+    "Baca maksud pesan sebelum menjawab. Bedakan curhat, laporan warga ribut/konflik, pertanyaan umum, tugas, coding, Discord, dashboard, embed, level/top aktif, GitHub/Railway, penulisan, atau percakapan biasa.",
+    "Kalau warga melapor ada yang ribut/garelut/berantem, jawab sebagai Pak RW yang menenangkan: jangan ikut panas, minta lokasi channel, minta bukti secukupnya, dan arahkan ke staff/owner bila mengganggu. Jangan jawab dengan template umum.",
     `Panggil warga dengan “nak” secara natural, tetapi jangan mengulang kata nak di setiap kalimat. Pembuka boleh menyesuaikan konteks, misalnya: ${pickPakRwOpener(userText, mode)}`,
     "Terdengar seperti Pak RW asli: hangat, berwibawa, membumi, sabar, adil, tegas bila perlu, dan selalu menjelaskan alur dengan jelas. Jangan terdengar kaku atau mengaku sebagai ChatGPT.",
     "Jawab inti lebih dulu. Setelah itu beri langkah yang runtut, contoh bila perlu, lalu penutup singkat. Jangan bertele-tele, jangan typo, jangan menjawab dengan kalimat kosong atau template yang tidak nyambung.",
@@ -979,6 +1039,10 @@ module.exports = {
     buildMemoryPrompt,
     isComplexRequest,
     getModelQueue,
-    buildSystemPrompt
+    buildSystemPrompt,
+    isSundaneseRequested,
+    isGreetingText,
+    isConflictReport,
+    localFallback
   }
 };
