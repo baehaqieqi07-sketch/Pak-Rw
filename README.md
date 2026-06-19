@@ -334,3 +334,8 @@ Renderer KTP mendaftarkan DejaVu Sans dari dependency `dejavu-fonts-ttf` melalui
 - Tata letak teks dan foto dirapikan tanpa mengubah pixel background pada area kosong.
 - Test menyimpan SHA-256 background resmi agar file tidak berubah tanpa sengaja.
 - AI v10.10.90, font Railway, AFK Voice, level, role, dashboard, MongoDB, dan data KTP lama tetap dipertahankan.
+
+
+## Pak RW v10.10.96 — AI Natural Chat
+
+Pak RW sekarang menjawab lebih natural seperti chat orang asli. Chat singkat dibalas singkat, masalah serius baru diberi alur. Gaya template lama seperti “Pak RW tangkap inti pesannya”, “Pak RW belum dapat detail”, dan “Supaya jawabannya tepat” sudah diblokir dari fallback lokal serta disaring dari jawaban AI.

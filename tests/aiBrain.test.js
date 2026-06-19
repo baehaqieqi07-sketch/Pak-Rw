@@ -54,8 +54,6 @@ const curhatPrompt = __test.buildSystemPrompt("aku lagi sedih", "curhat", userA)
 assert.match(curhatPrompt, /MODE CURHAT KHUSUS/i);
 assert.match(curhatPrompt, /Jangan mengubah curhat menjadi tutorial bot/i);
 
-console.log("✅ AI Pak RW tests berhasil: identitas Pak RW, owner BEKIW, panggilan nak, memori terpisah per user, direktori channel, mode curhat, dan router GPT-5.4 lulus.");
-
 assert.equal(__test.isSundaneseRequested("iye aya warga garelut"), false);
 assert.equal(__test.isConflictReport("iye aya warga garelut"), true);
 const conflictReply = __test.localFallback("iye aya warga garelut", "normal");
@@ -67,3 +65,24 @@ assert.doesNotMatch(conflictReply, /Basa Sunda formal/i);
 
 assert.equal(__test.isGreetingText("pak rw ada warga ribut"), false);
 assert.equal(__test.isConflictReport("pak rw ada warga ribut"), true);
+
+const vagueReply = __test.localFallback("pa", "normal");
+assert.match(vagueReply, /Pak RW di sini|Mau tanya apa/i);
+assert.doesNotMatch(vagueReply, /Pak RW belum dapat detail/i);
+assert.doesNotMatch(vagueReply, /Supaya jawabannya tepat/i);
+
+const unknownReply = __test.localFallback("hmm", "normal");
+assert.doesNotMatch(unknownReply, /Biar jelas, jawabannya bakal dibuat begini/i);
+assert.doesNotMatch(unknownReply, /Pak RW tangkap inti pesannya/i);
+assert.ok(unknownReply.length < 180, `jawaban chat singkat terlalu panjang: ${unknownReply}`);
+
+const sanitized = __test.removeTemplateNoise(
+  "Siap nak, kita bereskan pelan-pelan biar jelas.\n\nPak RW tangkap inti pesannya dan akan jawab langsung ke kebutuhan utamanya.\n\nPak RW belum dapat detail yang cukup untuk menjawab sampai tuntas, nak.",
+  "pa",
+  "normal"
+);
+assert.doesNotMatch(sanitized, /Pak RW tangkap inti pesannya/i);
+assert.doesNotMatch(sanitized, /belum dapat detail/i);
+assert.match(sanitized, /Pak RW di sini|Mau tanya apa/i);
+
+console.log("✅ AI Pak RW tests berhasil: identitas, memori per user, router, konflik, dan gaya chat natural tanpa template kosong lulus.");

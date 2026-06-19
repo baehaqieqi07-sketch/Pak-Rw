@@ -87,8 +87,8 @@ function isGreetingText(msg = "") {
   const words = text.split(/\s+/).filter(Boolean);
   const hasGreetingPhrase = hasAny(text, ["halo", "hai", "hi", "assalamualaikum", "makasih", "terima kasih"]);
   if (hasGreetingPhrase && words.length <= 5) return true;
-  if ((hasExactWord(text, "p") || hasExactWord(text, "rw")) && words.length <= 2) return true;
-  if ((text === "pak rw" || text === "rw pak" || text === "pak") && words.length <= 3) return true;
+  if ((hasExactWord(text, "p") || hasExactWord(text, "pa") || hasExactWord(text, "pak") || hasExactWord(text, "rw")) && words.length <= 3) return true;
+  if ((text === "pak rw" || text === "rw pak" || text === "pak" || text === "pa") && words.length <= 3) return true;
   return false;
 }
 
@@ -655,23 +655,83 @@ function makeFeatureAnswer(userText) {
 }
 
 
+function isLowDetailChat(text = "") {
+  const msg = cleanText(text).toLowerCase();
+  if (!msg) return true;
+  const words = msg.split(/\s+/).filter(Boolean);
+  if (words.length <= 3) return true;
+  const vague = ["pa", "pak", "pak rw", "rw", "iya", "iye", "hmm", "lah", "gimana", "kenapa", "kok", "ko", "ini", "itu", "test", "tes"];
+  return words.length <= 5 && vague.some((word) => msg === word || msg.startsWith(`${word} `));
+}
+
+function naturalQuestionFromText(text = "", mode = "normal") {
+  const msg = cleanText(text).toLowerCase();
+  if (mode === "curhat") return "Ceritain bagian yang paling kerasa dulu, nak. Pak RW dengerin.";
+  if (isConflictReport(msg)) return "Coba sebutin ributnya di channel mana dan siapa yang terlibat, biar Pak RW bisa bantu tenangin.";
+  if (hasAny(msg, ["error", "bug", "crash", "gagal", "npm", "railway", "github", "deploy"])) return "Kirim log error paling bawah sama bagian yang merah, nanti Pak RW cek dari situ.";
+  if (hasAny(msg, ["channel", "role", "permission", "discord", "bot", "server"])) return "Sebut channel atau fitur yang mau dicek, nanti Pak RW bantu urutkan.";
+  if (hasAny(msg, ["dashboard", "panel", "preview", "layout"])) return "Bagian dashboard mana yang berantakan? Kirim nama menunya atau screenshot-nya.";
+  return "Ceritain maksudnya sedikit lagi, nak. Pak RW siap bantu dari bagian yang paling penting.";
+}
+
+function makeChattyUnknownAnswer(userText = "", mode = "normal") {
+  const text = cleanText(userText);
+  if (!text || isGreetingText(text)) {
+    return "Iya nak, Pak RW di sini. Ada yang mau ditanyain atau mau dibantu apa?";
+  }
+
+  if (isLowDetailChat(text)) {
+    return naturalQuestionFromText(text, mode);
+  }
+
+  return [
+    "Pak RW paham maksudnya, nak.",
+    naturalQuestionFromText(text, mode)
+  ].join("\n");
+}
+
+function removeTemplateNoise(reply = "", userText = "", mode = "normal") {
+  const text = compactReply(reply);
+  if (!text) return makeChattyUnknownAnswer(userText, mode);
+
+  const badSignals = [
+    /Pak RW tangkap inti pesannya/i,
+    /Pak RW belum dapat detail yang cukup/i,
+    /Biar jelas, jawabannya bakal dibuat begini/i,
+    /Supaya jawabannya tepat, kirim salah satu dari ini/i,
+    /Nanti Pak RW jawab langsung ke solusi, bukan template kosong/i,
+    /Pak RW tangkap ini sebagai/i,
+    /Pak RW paham nak, ini sedang membahas:/i,
+    /Jawaban Juragan akan dibuat lebih premium/i,
+    /Topik nak:/i,
+    /Yang nak bahas:/i,
+    /Soal\/topik nak:/i,
+    /Tema yang nak minta:/i
+  ];
+
+  if (badSignals.some((rx) => rx.test(text))) {
+    return makeChattyUnknownAnswer(userText, mode);
+  }
+
+  return text;
+}
+
 function contextSummaryLine(userText = "", mode = "normal") {
   const intent = detectPakRwIntent(userText, mode);
   const map = {
-    curhat: "Pak RW tangkap ini sebagai curhat atau perasaan yang sedang berat.",
-    conflict: "Pak RW tangkap ini sebagai laporan warga yang sedang ribut dan perlu ditenangkan dengan alur yang adil.",
-    coding: "Pak RW tangkap ini sebagai masalah teknis/coding yang perlu dibaca dari error dan alurnya.",
-    discord: "Pak RW tangkap ini sebagai pengaturan Discord/server yang perlu dicek dari channel, role, permission, dan bot.",
-    dashboard: "Pak RW tangkap ini sebagai kebutuhan dashboard supaya editnya rapi, jelas, dan sinkron dengan Discord.",
-    embed: "Pak RW tangkap ini sebagai urusan embed/placeholder/mention yang harus sama antara dashboard dan Discord.",
-    writing: "Pak RW tangkap ini sebagai kebutuhan teks yang harus siap pakai dan enak dibaca.",
-    question: "Pak RW tangkap ini sebagai pertanyaan yang butuh jawaban langsung dan runtut.",
-    sunda: "Pak RW tangkap user meminta Basa Sunda formal.",
-    normal: "Pak RW tangkap inti pesannya dan akan jawab langsung ke kebutuhan utamanya."
+    curhat: "Pak RW dengerin dulu ya, nak.",
+    conflict: "Kalau ada warga ribut, kita tenangin dulu, jangan ikut panas.",
+    coding: "Ini kelihatan seperti masalah teknis. Kita cek dari error dan alurnya.",
+    discord: "Ini soal pengaturan server. Kita cek dari channel, role, permission, dan botnya.",
+    dashboard: "Ini soal dashboard. Kita rapikan bagian yang bikin bingung.",
+    embed: "Ini soal embed. Kita samakan isi, preview, dan hasil Discord-nya.",
+    writing: "Bisa, Pak RW bantu susun kalimatnya biar enak dibaca.",
+    question: "Pak RW jawab langsung dari intinya ya, nak.",
+    sunda: "Mangga, Pak RW bantos ku basa anu sopan.",
+    normal: "Pak RW paham, nak."
   };
   return map[intent] || map.normal;
 }
-
 
 function makeDashboardAnswer(userText) {
   const text = cleanText(userText);
@@ -679,7 +739,7 @@ function makeDashboardAnswer(userText) {
   return [
     pickPakRwOpener(text, "dashboard"),
     "",
-    `Pak RW tangkap ini soal **dashboard DESA TULUS**: ${text || "atur fitur bot"}`,
+    `Ini soal **dashboard DESA TULUS**: ${text || "atur fitur bot"}`,
     "",
     "**Alur dashboard yang benar:**",
     list([
@@ -756,29 +816,12 @@ function makeHelpfulAnswer(userText, mode = "normal") {
   if (isConflictReport(text)) return makeConflictAnswer(text);
 
   if (mode === "juragan") {
-    return [
-      "💎 **Halo Juragan, Pak RW Premium siap bantu.**",
-      "",
-      `Pak RW paham nak, ini sedang membahas: **${text || "sesuatu yang ingin ditanyakan"}**`,
-      "",
-      "Jawaban Juragan akan dibuat lebih premium: rapi, detail, ada langkah, contoh, alasan, dan tips kalau dibutuhkan.",
-      "",
-      `Kirim detailnya nak, nanti Pak RW bantu sampai rapi.`
-    ].join("\n");
+    if (isLowDetailChat(text)) return "Siap Juragan. Mau dibantu bagian apa dulu, nak?";
+    return makeChattyUnknownAnswer(text, mode);
   }
 
   if (!msg || isGreetingText(msg)) {
-    return [
-      pickPakRwOpener(text, mode),
-      "",
-      `Halo, ${tone.me} **Pak RW DESA TULUS** 🤍`,
-      "",
-      `Pak RW siap bantu warga **${config.serverName || "DESA TULUS"}** dengan jawaban yang jelas, sopan, rapi, dan sesuai bahasa yang diminta.`,
-      "",
-      "Bisa tanya pelajaran, coding, Discord, bot error, GitHub, Railway, Roblox, Blender, desain, ide konten, terjemahan, curhat, atau pertanyaan umum.",
-      "",
-      `Tulis saja pertanyaannya nak, nanti Pak RW jawab sebaik mungkin.`
-    ].join("\n");
+    return "Iya nak, Pak RW di sini. Mau tanya apa?";
   }
 
   if (hasAny(msg, ["papan aktif", "leaderboard aktif", "top aktif", "motm", "member of the month", "100.000", "100000", "rank", "reset poin"])) return makeLeaderboardAnswer(userText);
@@ -796,23 +839,7 @@ function makeHelpfulAnswer(userText, mode = "normal") {
   if (hasAny(msg, ["tugas", "soal", "pr", "matematika", "math", "ipa", "ips", "sejarah", "bahasa", "inggris", "rumus", "jawab", "fisika", "kimia", "biologi", "ekonomi", "aljabar", "geometri", "cerpen", "puisi"])) return makeHomeworkAnswer(userText);
   if (hasAny(msg, ["buat kata", "kata kata", "caption", "pengumuman", "announcement", "ucapan", "teks", "template", "deskripsi", "bio"])) return makeWritingAnswer(userText);
 
-  return [
-    pickPakRwOpener(text, mode),
-    "",
-    `${contextSummaryLine(text, mode)}`,
-    "",
-    `Pak RW belum dapat detail yang cukup untuk menjawab sampai tuntas, nak. Tapi intinya Pak RW sudah menangkap pesan: **${text || "belum ada isi pesan"}**`,
-    "",
-    "Supaya jawabannya tepat, kirim salah satu dari ini:",
-    bullet([
-      "apa masalah utamanya",
-      "di channel mana kejadiannya kalau ini soal server",
-      "siapa/fitur apa yang terlibat",
-      "screenshot atau log kalau ada error"
-    ]),
-    "",
-    "Nanti Pak RW jawab langsung ke solusi, bukan template kosong."
-  ].join("\n");
+  return makeChattyUnknownAnswer(text, mode);
 }
 
 function localFallback(text = "", mode = "normal") {
@@ -839,6 +866,9 @@ function buildSystemPrompt(userText, mode = "normal", context = {}) {
     "Kalau warga melapor ada yang ribut/garelut/berantem, jawab sebagai Pak RW yang menenangkan: jangan ikut panas, minta lokasi channel, minta bukti secukupnya, dan arahkan ke staff/owner bila mengganggu. Jangan jawab dengan template umum.",
     `Panggil warga dengan “nak” secara natural, tetapi jangan mengulang kata nak di setiap kalimat. Pembuka boleh menyesuaikan konteks, misalnya: ${pickPakRwOpener(userText, mode)}`,
     "Terdengar seperti Pak RW asli: hangat, berwibawa, membumi, sabar, adil, tegas bila perlu, dan selalu menjelaskan alur dengan jelas. Jangan terdengar kaku atau mengaku sebagai ChatGPT.",
+    "Jawab seperti chat manusia biasa: natural, singkat kalau pesannya singkat, dan langsung nyambung ke kalimat user. Jangan terdengar seperti format prompt atau template bot.",
+    "DILARANG memakai kalimat template seperti: 'Pak RW tangkap inti pesannya', 'Pak RW belum dapat detail yang cukup', 'Biar jelas, jawabannya bakal dibuat begini', 'Supaya jawabannya tepat, kirim salah satu dari ini', atau 'Nanti Pak RW jawab langsung ke solusi'.",
+    "Jangan selalu membuat heading, daftar panjang, atau format alur kalau user hanya ngobrol singkat. Untuk chat singkat, balas pendek dan natural. Untuk masalah serius, baru beri langkah jelas.",
     "Jawab inti lebih dulu. Setelah itu beri langkah yang runtut, contoh bila perlu, lalu penutup singkat. Jangan bertele-tele, jangan typo, jangan menjawab dengan kalimat kosong atau template yang tidak nyambung.",
     "Boleh membantu pertanyaan umum, belajar, coding, Discord, bot, penulisan, perencanaan, desain, dan diskusi sehari-hari. Untuk fakta yang perlu data terbaru, jangan mengarang; jelaskan bahwa datanya perlu dicek dari sumber terbaru.",
     "Untuk masalah server, gunakan direktori channel/role yang diberikan. Jangan mengarang nama, ID, atau fungsi channel yang tidak tercantum.",
@@ -956,7 +986,7 @@ function buildRequestPayload(model, userText, mode, context) {
 }
 
 async function finalizeReply(userText, mode, context, reply, source = "unknown") {
-  const finalReply = compactReply(reply || localFallback(userText, mode));
+  const finalReply = removeTemplateNoise(reply || localFallback(userText, mode), userText, mode);
   setCachedAiReply(userText, mode, finalReply, context);
   persistUserTurn(context, userText, finalReply, mode);
   console.log(`AI PAK RW: jawaban ${source} tersimpan ke memori user ${normalizeAiContext(context).userId}.`);
@@ -1043,6 +1073,8 @@ module.exports = {
     isSundaneseRequested,
     isGreetingText,
     isConflictReport,
+    isLowDetailChat,
+    removeTemplateNoise,
     localFallback
   }
 };
