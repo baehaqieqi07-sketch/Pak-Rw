@@ -339,3 +339,17 @@ Renderer KTP mendaftarkan DejaVu Sans dari dependency `dejavu-fonts-ttf` melalui
 ## Pak RW v10.10.96 — AI Natural Chat
 
 Pak RW sekarang menjawab lebih natural seperti chat orang asli. Chat singkat dibalas singkat, masalah serius baru diberi alur. Gaya template lama seperti “Pak RW tangkap inti pesannya”, “Pak RW belum dapat detail”, dan “Supaya jawabannya tepat” sudah diblokir dari fallback lokal serta disaring dari jawaban AI.
+
+
+## Pak RW v10.10.97 — AI Limit Auto Recovery
+
+Update ini menambahkan token budget sebelum AI dipanggil, klasifikasi error AI, recovery otomatis setelah rate limit/provider cooldown, credit/auth lock yang tidak spam retry, fallback lokal natural, dan panel dashboard **AI Limit & Recovery**. Prompt Pak RW dibuat lebih ringkas: memory dikirim sebagai ringkasan pendek, history dibatasi, dan server context hanya dikirim saat benar-benar dibutuhkan.
+
+Owner command tambahan:
+- `rwailimit` / `pakailimit` melihat status AI limit/recovery.
+- `rwaireset` / `pakaireset` memaksa AI state kembali normal.
+- `rwaitest` / `pakaitest` mengetes AI dengan prompt pendek.
+- `rwaimode` / `pakaimode` melihat mode AI saat ini.
+- `rwaifallback` / `pakaifallback` mengetes gaya fallback natural.
+
+Data member, memory lama, level, role, welcome, curhat, saran, voting, KTP, AFK Voice, dan dashboard lama tidak direset.

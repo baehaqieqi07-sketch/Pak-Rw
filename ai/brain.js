@@ -23,6 +23,309 @@ let aiDailyState = { day: "", count: 0 };
 const aiResponseCache = new Map();
 let volatileMemoryRoot = { users: {} };
 
+let volatileAiLimitState = { status: "normal", failCount: 0, updatedAt: Date.now() };
+const aiUserCooldown = new Map();
+const aiChannelCooldown = new Map();
+const aiSpamWindows = new Map();
+const aiDailyUserState = new Map();
+
+const DEFAULT_AI_LIMITS = Object.freeze({
+  autoRecovery: true,
+  rateLimitCooldownSeconds: 300,
+  providerErrorCooldownSeconds: 120,
+  creditRecheckSeconds: 1800,
+  authRecheckSeconds: 3600,
+  tokenBudget: 3000,
+  maxPromptChars: 8500,
+  maxSystemChars: 1800,
+  maxMemoryChars: 900,
+  maxHistoryTurns: 2,
+  maxUserMessageChars: 1500,
+  maxReplyTokens: 500,
+  safeReplyTokens: 350,
+  curhatSystemChars: 1000,
+  curhatMemoryChars: 700,
+  curhatHistoryTurns: 2,
+  curhatMaxReplyTokens: 450,
+  cooldownUserSeconds: 10,
+  cooldownChannelSeconds: 3,
+  dailyLimitPerUser: 30,
+  dailyLimitOwner: 999,
+  spamWindowSeconds: 30,
+  spamMaxMessages: 5,
+  fallbackMaxCharsMember: 350,
+  fallbackMaxCharsOwner: 700,
+  tokenLimitRetryMax: 1,
+  providerRetryMax: 1,
+  storeLimitFallbackMemory: false,
+  memorySummaryOnly: true,
+  showResetTime: true
+});
+
+function envOrConfigNumber(configKey, envKey, fallback, min = 0, max = Number.MAX_SAFE_INTEGER) {
+  const raw = config.ai?.[configKey] ?? process.env[envKey];
+  const n = Number(raw);
+  const value = Number.isFinite(n) ? n : fallback;
+  return Math.max(min, Math.min(max, value));
+}
+
+function envOrConfigBool(configKey, envKey, fallback) {
+  const raw = config.ai?.[configKey] ?? process.env[envKey];
+  if (raw === undefined || raw === null || raw === "") return fallback;
+  return ["1", "true", "yes", "on", "aktif", "nyala"].includes(String(raw).toLowerCase().trim());
+}
+
+function aiBudgetConfig() {
+  return {
+    autoRecovery: envOrConfigBool("autoRecovery", "AI_AUTO_RECOVERY", DEFAULT_AI_LIMITS.autoRecovery),
+    rateLimitCooldownSeconds: envOrConfigNumber("rateLimitCooldownSeconds", "AI_RATE_LIMIT_COOLDOWN_SECONDS", DEFAULT_AI_LIMITS.rateLimitCooldownSeconds, 10, 86400),
+    providerErrorCooldownSeconds: envOrConfigNumber("providerErrorCooldownSeconds", "AI_PROVIDER_ERROR_COOLDOWN_SECONDS", DEFAULT_AI_LIMITS.providerErrorCooldownSeconds, 10, 86400),
+    creditRecheckSeconds: envOrConfigNumber("creditRecheckSeconds", "AI_CREDIT_RECHECK_SECONDS", DEFAULT_AI_LIMITS.creditRecheckSeconds, 60, 86400),
+    authRecheckSeconds: envOrConfigNumber("authRecheckSeconds", "AI_AUTH_RECHECK_SECONDS", DEFAULT_AI_LIMITS.authRecheckSeconds, 60, 86400),
+    tokenBudget: envOrConfigNumber("tokenBudget", "AI_TOKEN_BUDGET", DEFAULT_AI_LIMITS.tokenBudget, 600, 12000),
+    maxPromptChars: envOrConfigNumber("maxPromptChars", "AI_MAX_PROMPT_CHARS", DEFAULT_AI_LIMITS.maxPromptChars, 1200, 40000),
+    maxSystemChars: envOrConfigNumber("maxSystemChars", "AI_MAX_SYSTEM_CHARS", DEFAULT_AI_LIMITS.maxSystemChars, 400, 12000),
+    maxMemoryChars: envOrConfigNumber("maxMemoryChars", "AI_MAX_MEMORY_CHARS", DEFAULT_AI_LIMITS.maxMemoryChars, 0, 6000),
+    maxHistoryTurns: envOrConfigNumber("maxHistoryTurns", "AI_MAX_HISTORY_TURNS", DEFAULT_AI_LIMITS.maxHistoryTurns, 0, 10),
+    maxUserMessageChars: envOrConfigNumber("maxUserMessageChars", "AI_MAX_USER_MESSAGE_CHARS", DEFAULT_AI_LIMITS.maxUserMessageChars, 120, 8000),
+    maxReplyTokens: envOrConfigNumber("maxReplyTokens", "AI_MAX_REPLY_TOKENS", DEFAULT_AI_LIMITS.maxReplyTokens, 80, 2000),
+    safeReplyTokens: envOrConfigNumber("safeReplyTokens", "AI_SAFE_REPLY_TOKENS", DEFAULT_AI_LIMITS.safeReplyTokens, 80, 1500),
+    curhatSystemChars: envOrConfigNumber("curhatSystemChars", "AI_CURHAT_SYSTEM_CHARS", DEFAULT_AI_LIMITS.curhatSystemChars, 300, 8000),
+    curhatMemoryChars: envOrConfigNumber("curhatMemoryChars", "AI_CURHAT_MEMORY_CHARS", DEFAULT_AI_LIMITS.curhatMemoryChars, 0, 5000),
+    curhatHistoryTurns: envOrConfigNumber("curhatHistoryTurns", "AI_CURHAT_HISTORY_TURNS", DEFAULT_AI_LIMITS.curhatHistoryTurns, 0, 6),
+    curhatMaxReplyTokens: envOrConfigNumber("curhatMaxReplyTokens", "AI_CURHAT_MAX_REPLY_TOKENS", DEFAULT_AI_LIMITS.curhatMaxReplyTokens, 80, 1200),
+    cooldownUserSeconds: envOrConfigNumber("cooldownUserSeconds", "AI_COOLDOWN_USER", DEFAULT_AI_LIMITS.cooldownUserSeconds, 0, 3600),
+    cooldownChannelSeconds: envOrConfigNumber("cooldownChannelSeconds", "AI_COOLDOWN_CHANNEL", DEFAULT_AI_LIMITS.cooldownChannelSeconds, 0, 3600),
+    dailyLimitPerUser: envOrConfigNumber("dailyLimitPerUser", "AI_DAILY_LIMIT_PER_USER", DEFAULT_AI_LIMITS.dailyLimitPerUser, 0, 9999),
+    dailyLimitOwner: envOrConfigNumber("dailyLimitOwner", "AI_DAILY_LIMIT_OWNER", DEFAULT_AI_LIMITS.dailyLimitOwner, 0, 99999),
+    spamWindowSeconds: envOrConfigNumber("spamWindowSeconds", "AI_SPAM_WINDOW_SECONDS", DEFAULT_AI_LIMITS.spamWindowSeconds, 5, 600),
+    spamMaxMessages: envOrConfigNumber("spamMaxMessages", "AI_SPAM_MAX_MESSAGES", DEFAULT_AI_LIMITS.spamMaxMessages, 1, 100),
+    fallbackMaxCharsMember: envOrConfigNumber("fallbackMaxCharsMember", "AI_FALLBACK_MAX_CHARS_MEMBER", DEFAULT_AI_LIMITS.fallbackMaxCharsMember, 120, 1200),
+    fallbackMaxCharsOwner: envOrConfigNumber("fallbackMaxCharsOwner", "AI_FALLBACK_MAX_CHARS_OWNER", DEFAULT_AI_LIMITS.fallbackMaxCharsOwner, 200, 2000),
+    tokenLimitRetryMax: envOrConfigNumber("tokenLimitRetryMax", "AI_TOKEN_LIMIT_RETRY_MAX", DEFAULT_AI_LIMITS.tokenLimitRetryMax, 0, 2),
+    providerRetryMax: envOrConfigNumber("providerRetryMax", "AI_PROVIDER_RETRY_MAX", DEFAULT_AI_LIMITS.providerRetryMax, 0, 2),
+    storeLimitFallbackMemory: envOrConfigBool("storeLimitFallbackMemory", "AI_STORE_LIMIT_FALLBACK_MEMORY", DEFAULT_AI_LIMITS.storeLimitFallbackMemory),
+    memorySummaryOnly: envOrConfigBool("memorySummaryOnly", "AI_MEMORY_SUMMARY_ONLY", DEFAULT_AI_LIMITS.memorySummaryOnly),
+    showResetTime: envOrConfigBool("showResetTime", "AI_SHOW_RESET_TIME", DEFAULT_AI_LIMITS.showResetTime)
+  };
+}
+
+function estimateTokens(text = "") {
+  return Math.ceil(String(text || "").length / 4);
+}
+
+function truncateText(text = "", max = 1000) {
+  const clean = cleanText(text);
+  if (!max || clean.length <= max) return clean;
+  return `${clean.slice(0, Math.max(0, max - 3)).trim()}...`;
+}
+
+function formatWibTime(ts) {
+  if (!ts) return "-";
+  try {
+    return new Intl.DateTimeFormat("id-ID", {
+      timeZone: "Asia/Jakarta",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    }).format(new Date(ts)).replace(/\./g, ":") + " WIB";
+  } catch {
+    return `${new Date(ts).toISOString()} WIB`;
+  }
+}
+
+function getAiLimitState() {
+  const stored = readStore("aiLimitState", null);
+  const state = stored && typeof stored === "object" ? stored : volatileAiLimitState;
+  return {
+    status: state.status || "normal",
+    reason: state.reason || "",
+    model: state.model || "",
+    provider: state.provider || "openrouter",
+    lastError: state.lastError || "",
+    retryAfterAt: Number(state.retryAfterAt || 0),
+    lastCheckedAt: Number(state.lastCheckedAt || 0),
+    failCount: Number(state.failCount || 0),
+    updatedAt: Number(state.updatedAt || Date.now())
+  };
+}
+
+function setAiLimitState(patch = {}) {
+  const next = {
+    ...getAiLimitState(),
+    ...patch,
+    updatedAt: Date.now(),
+    provider: patch.provider || "openrouter"
+  };
+  volatileAiLimitState = next;
+  writeStore("aiLimitState", next);
+  return next;
+}
+
+function resetAiLimitState(reason = "manual_reset") {
+  return setAiLimitState({
+    status: "normal",
+    reason,
+    model: "",
+    lastError: "",
+    retryAfterAt: 0,
+    lastCheckedAt: Date.now(),
+    failCount: 0
+  });
+}
+
+function getRetryAfterMs(err, fallbackSeconds) {
+  const header = err?.response?.headers?.["retry-after"] || err?.response?.headers?.["Retry-After"];
+  if (header) {
+    const n = Number(header);
+    if (Number.isFinite(n)) return Math.max(1000, Math.min(n * 1000, 24 * 60 * 60 * 1000));
+    const date = Date.parse(header);
+    if (Number.isFinite(date)) return Math.max(1000, date - Date.now());
+  }
+  return Math.max(1000, Number(fallbackSeconds || 60) * 1000);
+}
+
+function classifyAiError(err = {}) {
+  const status = Number(err?.response?.status || err?.status || 0);
+  const raw = typeof err === "string" ? err : JSON.stringify(err?.response?.data || err?.message || err || "");
+  const msg = raw.toLowerCase();
+  if (status === 401 || msg.includes("invalid api key") || msg.includes("missing authentication") || msg.includes("unauthorized")) return { type: "auth_error", status, raw };
+  if (status === 402 || msg.includes("insufficient credits") || msg.includes("credit limit") || msg.includes("payment required") || msg.includes("paid account")) return { type: "credit_limit", status, raw };
+  if (msg.includes("prompt tokens limit exceeded") || msg.includes("context length exceeded") || msg.includes("maximum context length") || /\d+\s*>\s*\d+/.test(msg)) return { type: "token_limit", status, raw };
+  if (status === 429 || msg.includes("rate limit") || msg.includes("too many requests") || msg.includes("quota") || msg.includes("temporarily unavailable") || msg.includes("overloaded")) return { type: "rate_limit", status, raw };
+  if ([500, 502, 503, 504].includes(status) || msg.includes("timeout") || msg.includes("model unavailable") || msg.includes("provider") || msg.includes("network")) return { type: "provider_error", status, raw };
+  return { type: "unknown", status, raw };
+}
+
+function applyAiErrorState(err, model = "") {
+  const cfg = aiBudgetConfig();
+  const info = classifyAiError(err);
+  const now = Date.now();
+  const failCount = getAiLimitState().failCount + 1;
+  const lastError = truncateText(info.raw, 360);
+  console.log(`AI ERROR CLASSIFIED: ${info.type}`);
+
+  if (info.type === "rate_limit") {
+    const ms = getRetryAfterMs(err, cfg.rateLimitCooldownSeconds);
+    const retryAfterAt = now + ms;
+    console.log(`AI COOLDOWN SET: retryAfterAt=${formatWibTime(retryAfterAt)}`);
+    setAiLimitState({ status: "rate_limited", reason: info.type, model, lastError, retryAfterAt, lastCheckedAt: now, failCount });
+  } else if (info.type === "credit_limit") {
+    const retryAfterAt = now + cfg.creditRecheckSeconds * 1000;
+    console.log(`AI CREDIT LOCK: recheckAt=${formatWibTime(retryAfterAt)}`);
+    setAiLimitState({ status: "credit_locked", reason: info.type, model, lastError, retryAfterAt, lastCheckedAt: now, failCount });
+  } else if (info.type === "auth_error") {
+    const retryAfterAt = now + cfg.authRecheckSeconds * 1000;
+    console.log("AI AUTH LOCK: check env/api key");
+    setAiLimitState({ status: "auth_locked", reason: info.type, model, lastError, retryAfterAt, lastCheckedAt: now, failCount });
+  } else if (info.type === "provider_error") {
+    const retryAfterAt = now + cfg.providerErrorCooldownSeconds * 1000;
+    console.log(`AI PROVIDER COOLDOWN: retryAfterAt=${formatWibTime(retryAfterAt)}`);
+    setAiLimitState({ status: "provider_cooldown", reason: info.type, model, lastError, retryAfterAt, lastCheckedAt: now, failCount });
+  }
+  return info;
+}
+
+function canAttemptAiFromState(context = {}) {
+  const cfg = aiBudgetConfig();
+  if (!cfg.autoRecovery) return { allowed: true, state: getAiLimitState(), reason: "auto_recovery_off" };
+  const state = getAiLimitState();
+  const now = Date.now();
+  if (!state.status || state.status === "normal") return { allowed: true, state, reason: "normal" };
+  if (state.retryAfterAt && now >= state.retryAfterAt) {
+    console.log("AI RECOVERY CHECK: cooldown expired, trying normal AI again");
+    setAiLimitState({ ...state, lastCheckedAt: now });
+    return { allowed: true, state: getAiLimitState(), reason: "cooldown_expired" };
+  }
+  return { allowed: false, state, reason: state.status };
+}
+
+function summarizeAiLimitStatus() {
+  const state = getAiLimitState();
+  return {
+    ...state,
+    retryAfterText: state.retryAfterAt ? formatWibTime(state.retryAfterAt) : "-",
+    modelActive: getEconomyModel(),
+    smartModel: getSmartModel(),
+    tokenBudget: aiBudgetConfig().tokenBudget
+  };
+}
+
+function localLimitFallback(userText = "", mode = "normal", context = {}, reason = "limit", state = null) {
+  const ctx = normalizeAiContext(context);
+  const owner = Boolean(ctx.isOwner);
+  const cfg = aiBudgetConfig();
+  const reset = state?.retryAfterAt ? formatWibTime(state.retryAfterAt).split(" ").slice(-2).join(" ") : "sebentar lagi";
+  const text = cleanText(userText).toLowerCase();
+  let reply = "";
+
+  if (mode === "curhat" || hasAny(text, ["kangen", "sedih", "capek", "cape", "takut", "bingung", "marah", "kecewa"])) {
+    reply = reason === "token_limit"
+      ? "Konteksnya kepanjangan tadi, jadi Pak RW ringkas dulu ya. Yang paling kerasa di hati sekarang bagian mana?"
+      : "Pak RW lagi jawab singkat dulu ya, tapi tetap Pak RW baca. Yang kamu rasain sekarang berat banget kah?";
+  } else if (reason === "rate_limited") {
+    reply = owner ? `AI Pak RW lagi kena rate limit. Coba normal lagi sekitar ${reset}. Sementara Pak RW jawab lokal dulu.` : "Pak RW lagi jawab singkat dulu ya. AI-nya lagi istirahat bentar, tapi Pak RW tetap bantu kok.";
+  } else if (reason === "provider_cooldown") {
+    reply = owner ? `Provider AI lagi penuh/timeout. Coba lagi sekitar ${reset}.` : "Lagi agak penuh sistemnya, jadi Pak RW jawab pelan-pelan dulu ya. Ceritain intinya dulu.";
+  } else if (reason === "credit_locked") {
+    reply = owner ? `AI Pak RW kena batas credit/saldo. Recheck sekitar ${reset}. Cek saldo atau model AI-nya dulu.` : "Pak RW lagi jawab singkat dulu ya. Kalau butuh jawaban panjang, tunggu AI-nya normal lagi sebentar.";
+  } else if (reason === "auth_locked") {
+    reply = owner ? "AI Pak RW belum bisa jalan karena API key/env bermasalah. Cek AI_KEY atau OPENROUTER_API_KEY di Railway." : "Pak RW lagi jawab lokal dulu ya. Sistem AI-nya perlu dicek owner sebentar.";
+  } else if (reason === "spam" || reason === "cooldown") {
+    reply = "Pelan-pelan dulu ya, biar Pak RW nggak kena limit. Tunggu sebentar, nanti lanjut lagi.";
+  } else {
+    reply = "Pak RW lagi mode hemat dulu ya. Tulis intinya aja, nanti Pak RW bantu arahkan pelan-pelan.";
+  }
+
+  const max = owner ? cfg.fallbackMaxCharsOwner : cfg.fallbackMaxCharsMember;
+  return truncateText(removeTemplateNoise(reply, userText, mode), max);
+}
+
+function checkAiUserRate(context = {}) {
+  const ctx = normalizeAiContext(context);
+  const cfg = aiBudgetConfig();
+  const now = Date.now();
+  const key = scopedUserKey(ctx);
+  const day = todayKey();
+  const dailyLimit = ctx.isOwner ? cfg.dailyLimitOwner : cfg.dailyLimitPerUser;
+
+  const daily = aiDailyUserState.get(key) || { day, count: 0 };
+  if (daily.day !== day) daily.count = 0, daily.day = day;
+  if (dailyLimit > 0 && daily.count >= dailyLimit) return { allowed: false, reason: "daily_limit" };
+
+  const lastUser = aiUserCooldown.get(key) || 0;
+  if (cfg.cooldownUserSeconds > 0 && now - lastUser < cfg.cooldownUserSeconds * 1000) return { allowed: false, reason: "cooldown", waitMs: cfg.cooldownUserSeconds * 1000 - (now - lastUser) };
+  const channelKey = `${ctx.guildId}:${ctx.channelId || "no-channel"}`;
+  const lastChannel = aiChannelCooldown.get(channelKey) || 0;
+  if (cfg.cooldownChannelSeconds > 0 && now - lastChannel < cfg.cooldownChannelSeconds * 1000) return { allowed: false, reason: "cooldown", waitMs: cfg.cooldownChannelSeconds * 1000 - (now - lastChannel) };
+
+  const spam = aiSpamWindows.get(key) || [];
+  const active = spam.filter((ts) => now - ts < cfg.spamWindowSeconds * 1000);
+  if (active.length >= cfg.spamMaxMessages) return { allowed: false, reason: "spam" };
+
+  return { allowed: true };
+}
+
+function markAiUserRate(context = {}) {
+  const ctx = normalizeAiContext(context);
+  const cfg = aiBudgetConfig();
+  const now = Date.now();
+  const key = scopedUserKey(ctx);
+  aiUserCooldown.set(key, now);
+  aiChannelCooldown.set(`${ctx.guildId}:${ctx.channelId || "no-channel"}`, now);
+  const spam = (aiSpamWindows.get(key) || []).filter((ts) => now - ts < cfg.spamWindowSeconds * 1000);
+  spam.push(now);
+  aiSpamWindows.set(key, spam);
+  const day = todayKey();
+  const daily = aiDailyUserState.get(key) || { day, count: 0 };
+  if (daily.day !== day) daily.count = 0, daily.day = day;
+  daily.count += 1;
+  aiDailyUserState.set(key, daily);
+}
+
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -232,8 +535,8 @@ function normalizeAiContext(context = {}) {
     username: cleanText(context.username || "warga") || "warga",
     channelId: cleanText(context.channelId || ""),
     channelName: cleanText(context.channelName || ""),
-    channelDirectory: String(context.channelDirectory || "").slice(0, 6500),
-    roleDirectory: String(context.roleDirectory || "").slice(0, 2500),
+    channelDirectory: String(context.channelDirectory || "").slice(0, 2200),
+    roleDirectory: String(context.roleDirectory || "").slice(0, 1200),
     isOwner: Boolean(context.isOwner),
     ownerName: cleanText(context.ownerName || config.ownerName || "BEKIW") || "BEKIW"
   };
@@ -324,23 +627,25 @@ function persistUserTurn(context = {}, userText = "", assistantText = "", mode =
 
 function buildMemoryPrompt(context = {}) {
   const ctx = normalizeAiContext(context);
+  const cfg = aiBudgetConfig();
   const memory = getUserMemory(ctx);
-  if (!memory) {
-    return `Belum ada memori percakapan untuk warga ini. Ini percakapan khusus ${ctx.displayName}; jangan memakai atau menebak memori warga lain.`;
+  const maxChars = ctx.channelName?.toLowerCase().includes("curhat") ? cfg.curhatMemoryChars : cfg.maxMemoryChars;
+  if (!memory || maxChars <= 0) {
+    return `Memory: belum ada ringkasan khusus untuk ${ctx.displayName}.`;
   }
 
-  const topics = memory.topics?.length ? memory.topics.join(" | ") : "belum ada topik tersimpan";
-  const recent = (memory.recent || [])
-    .slice(-6)
-    .map((item) => `${item.role === "assistant" ? "Pak RW" : ctx.displayName}: ${scrubMemoryText(item.content)}`)
-    .join("\n");
-
-  return [
-    `Memori khusus warga ${ctx.displayName} (${ctx.userId}). Memori ini TERPISAH dari warga lain.`,
-    `Topik terakhir: ${topics}.`,
-    recent ? `Percakapan terakhir:\n${recent}` : "Belum ada percakapan terakhir.",
-    "Gunakan memori hanya bila relevan. Jangan mengarang fakta yang tidak pernah disebut warga. Jangan membocorkan memori ini kepada warga lain."
-  ].join("\n");
+  const recent = (memory.recent || []).slice(-Math.max(1, cfg.maxHistoryTurns * 2));
+  const lastUser = [...recent].reverse().find((item) => item.role === "user")?.content || "";
+  const lastAssistant = [...recent].reverse().find((item) => item.role === "assistant")?.content || "";
+  const topics = Array.isArray(memory.topics) ? memory.topics.slice(-2).join(" | ") : "";
+  const mood = memory.lastMode === "curhat" ? "sedang curhat" : memory.lastMode === "juragan" ? "butuh bantuan detail" : "bertanya biasa";
+  const lines = [
+    `Memory warga ini saja: ${ctx.displayName} (${ctx.userId}).`,
+    `User mood: ${mood}.`,
+    `Last topic: ${truncateText(topics || lastUser || "percakapan umum", 200)}.`,
+    lastAssistant ? `Important note: ${truncateText(lastAssistant, 180)}.` : "Important note: belum ada."
+  ];
+  return truncateText(lines.join("\n"), maxChars);
 }
 
 function getAiCacheTtlMs() {
@@ -469,44 +774,33 @@ function getOwnerName(context = {}) {
   return configured;
 }
 
-function serverContext(context = {}) {
-  const ctx = normalizeAiContext(context);
-  const top = config.topActive || {};
-  const modules = [
-    "AI Pak RW", "Welcome Warga", "Curhat", "Curhat Anonim", "Kotak Saran",
-    "Level & Cek Poin", "Top Aktif Bulanan", "Papan Aktif Lifetime", "MOTM",
-    "Donatur Desa", "Juragan Desa", "Cari Mabar", "Boost Poin", "Embed Manager", "Discord Manager", "KTP Warga", "AFK Voice 24/7"
-  ];
-  const dynamicChannels = ctx.channelDirectory
-    ? `Direktori channel Discord yang dibaca langsung dari server saat ini:
-${ctx.channelDirectory}`
-    : "Direktori channel dinamis belum tersedia pada request ini; jangan mengarang nama atau ID channel.";
-  const dynamicRoles = ctx.roleDirectory
-    ? `Role penting yang dibaca langsung dari server:
-${ctx.roleDirectory}`
-    : "Direktori role dinamis belum tersedia; jangan mengarang role.";
+function needsServerContext(userText = "", mode = "normal") {
+  const msg = cleanText(userText).toLowerCase();
+  if (mode === "curhat") return false;
+  return hasAny(msg, ["channel", "role", "dashboard", "fitur", "command", "server", "welcome", "curhat", "saran", "voting", "panel", "permission", "ktp", "level"]);
+}
 
-  return [
-    `Nama server: ${ctx.guildName || config.serverName || "DESA TULUS"}.`,
-    "Nama dan identitasmu adalah Pak RW. Kamu memahami bahwa dirimu adalah bot Pak RW untuk balai warga digital DESA TULUS.",
-    `Owner server adalah ${getOwnerName(ctx)}. Jangan menyebut orang lain sebagai owner.`,
-    `Warga yang sedang berbicara: ${ctx.displayName} (@${ctx.username}, ID ${ctx.userId}). Panggil dia “nak” secara natural.`,
-    `Channel percakapan saat ini: ${ctx.channelName ? `#${ctx.channelName}` : "tidak diketahui"}${ctx.channelId ? ` (${ctx.channelId})` : ""}.`,
-    `Prefix command publik: ${config.prefix || "rw"}. Jangan tampilkan prefix lama.`,
-    `AI channel utama: ${channelMention(config.aiChannelId, "channel AI")}.`,
-    `Curhat channel: ${channelMention(config.curhatChannelId, "channel curhat")}.`,
-    `Curhat anonim channel: ${channelMention(config.anonymousCurhatChannelId, "channel curhat anonim")}.`,
-    `Saran channel: ${channelMention(config.suggestionChannelId, "channel kritik & saran")}.`,
-    `Ticket channel: ${channelMention(config.ticketChannelId, "channel ticket")}.`,
-    `Top Aktif bulanan channel: ${channelMention(top.channelId, "channel Top Aktif bulanan")}.`,
-    `Papan Aktif lifetime channel: ${channelMention(top.leaderboardActiveChannelId || top.papanAktifChannelId, "channel leaderboard aktif")}.`,
-    `MOTM target: ${top.pointsThreshold || 100000} poin siklus; lifetime tidak reset.`,
-    `Dashboard modules: ${modules.join(", ")}.`,
-    dynamicChannels,
-    dynamicRoles,
-    "Gunakan hanya channel/role yang ada pada direktori atau config. Jika tidak ditemukan, katakan belum menemukan dan minta owner mengecek dashboard; jangan membuat nama channel palsu.",
-    "Alur dashboard: pilih fitur, klik Manage, edit channel/role/embed, preview, simpan, lalu kirim/test."
-  ].join(" ");
+function filterDirectory(directory = "", userText = "", maxLines = 10) {
+  const lines = String(directory || "").split(/\n+/).map((x) => x.trim()).filter(Boolean);
+  if (!lines.length) return "";
+  const msg = cleanText(userText).toLowerCase();
+  const words = msg.split(/\s+/).filter((w) => w.length >= 3).slice(0, 12);
+  const matched = lines.filter((line) => words.some((word) => line.toLowerCase().includes(word)));
+  return (matched.length ? matched : lines.slice(0, maxLines)).slice(0, maxLines).join("\n");
+}
+
+function serverContext(context = {}, userText = "", mode = "normal") {
+  const ctx = normalizeAiContext(context);
+  if (!needsServerContext(userText, mode)) return "Server context: tidak dikirim karena chat ini tidak butuh daftar server.";
+  const channels = filterDirectory(ctx.channelDirectory, userText, 12);
+  const roles = filterDirectory(ctx.roleDirectory, userText, 8);
+  return truncateText([
+    `Server: ${ctx.guildName || config.serverName || "DESA TULUS"}. Owner: ${getOwnerName(ctx)}. Prefix: ${config.prefix || "rw"}.`,
+    `Channel sekarang: ${ctx.channelName ? `#${ctx.channelName}` : "tidak diketahui"}${ctx.channelId ? ` (${ctx.channelId})` : ""}.`,
+    channels ? `Channel relevan:\n${channels}` : "Channel relevan: belum tersedia; jangan mengarang channel.",
+    roles ? `Role relevan:\n${roles}` : "Role relevan: belum tersedia; jangan mengarang role.",
+    "Pakai hanya data di atas. Kalau tidak ada, minta owner cek dashboard."
+  ].join("\n"), 1800);
 }
 
 function makeDiscordAnswer(userText) {
@@ -592,45 +886,20 @@ function makeWritingAnswer(userText) {
 
 function makeCurhatAnswer(userText) {
   const text = cleanText(userText);
-  const tone = localPrefix(text);
-  if (tone.lang === "su") {
-    return [
-      pickPakRwOpener(text, "curhat"),
-      "",
-      "Mangga, Pak RW ngadangu heula. Anjeun teu kedah buru-buru nyaritakeun sadayana 🤍",
-      "",
-      "Hatur nuhun parantos percanten nyarios ka Pak RW. Rarasaan anjeun penting, sareng Pak RW moal ngahakiman.",
-      "",
-      `Di **${config.serverName || "DESA TULUS"}**, Pak RW nangkep inti caritana ngeunaan: **${text || "rarasaan anu keur beurat"}**.`,
-      "",
-      "Hayu urang runtuykeun lalaunan:",
-      bullet([
-        "bagian mana anu paling ngabeuratkeun ayeuna?",
-        "ieu kakara kajadian atanapi parantos lami kapendem?",
-        "ayeuna anjeun langkung peryogi didangukeun heula atanapi hoyong milarian jalan kaluar babarengan?"
-      ]),
-      "",
-      "Caritakeun sakedik-sakedik ogé teu nanaon. Pak RW bakal ngabantosan kalayan tenang sareng sopan."
-    ].join("\n");
+  const msg = text.toLowerCase();
+  if (isSundaneseRequested(text)) {
+    if (hasAny(msg, ["kangen", "sono", "rindu"])) return "Aduh… sono kitu nya? Pak RW ngadangu heula. Nu paling karasa ayeuna naon?";
+    if (hasAny(msg, ["sedih", "cape", "capek", "takut"])) return "Sini heula, Pak RW ngadangu. Sigana keur beurat pisan nya?";
+    return "Mangga, Pak RW ngadangu heula. Caritakeun pelan-pelan bagian anu paling karasa.";
   }
-  return [
-    pickPakRwOpener(text, "curhat"),
-    "",
-    "Pak RW dengarkan dulu ya. Kamu tidak harus cerita semuanya sekaligus 🤍",
-    "",
-    "Terima kasih sudah percaya buat cerita. Perasaan kamu valid, dan Pak RW tidak akan menghakimi.",
-    "",
-    `Sebagai Pak RW di **${config.serverName || "DESA TULUS"}**, Pak RW menangkap inti ceritanya tentang: **${text || "perasaan yang sedang berat"}**.`,
-    "",
-    "Kita urutkan pelan-pelan:",
-    bullet([
-      "bagian mana yang paling berat sekarang?",
-      "ini baru terjadi atau sudah lama dipendam?",
-      "sekarang kamu lebih butuh didengarkan dulu atau ingin cari solusi bareng?"
-    ]),
-    "",
-    "Cerita sedikit demi sedikit juga boleh. Pak RW akan bantu dengan tenang, sopan, dan aman."
-  ].join("\n");
+  if (hasAny(msg, ["kangen bapak", "kangen ayah", "kangen ibu", "kangen mama", "kangen papa", "rindu bapak", "rindu ayah"])) {
+    return "Ya ampun… kangen orang tua tuh rasanya beda, ya. Lagi kepikiran beliau banget sekarang?";
+  }
+  if (hasAny(msg, ["sedih", "nangis", "pengen nangis"])) return "Aduh, sini dulu. Kayaknya lagi berat banget ya? Cerita pelan-pelan aja, Pak RW dengerin.";
+  if (hasAny(msg, ["capek", "cape", "lelah", "muak"])) return "Capek banget ya, nak? Tarik napas dulu bentar. Bagian yang paling bikin penuh di kepala yang mana?";
+  if (hasAny(msg, ["marah", "kesel", "emosi"])) return "Wajar kalau kamu kesel. Tarik napas dulu bentar, terus cerita ke Pak RW bagian yang bikin paling panas.";
+  if (hasAny(msg, ["bingung", "pusing", "takut", "cemas"])) return "Hmm, coba kita pelan-pelan ya. Yang paling bikin kepikiran bagian mana?";
+  return "Pak RW dengerin, nak. Cerita pelan-pelan aja, mulai dari yang paling kerasa dulu.";
 }
 
 function makeFeatureAnswer(userText) {
@@ -850,61 +1119,26 @@ function localFallback(text = "", mode = "normal") {
 function buildSystemPrompt(userText, mode = "normal", context = {}) {
   const ctx = normalizeAiContext(context);
   const ownerName = getOwnerName(ctx);
-  const identityRules = [
-    `IDENTITAS WAJIB: Nama kamu Pak RW. Kamu adalah bot Pak RW milik DESA TULUS, bukan asisten tanpa nama. Owner server adalah ${ownerName}.`,
-    `WARGA SAAT INI: ${ctx.displayName} (@${ctx.username}, ID ${ctx.userId}). Panggil warga ini “nak” secara natural. Jangan memanggil dengan nama warga lain.`,
-    "Setiap warga memiliki memori sendiri berdasarkan guildId + userId. Jangan pernah mencampur pembahasan, nama, masalah, atau curhat antarwarga.",
-    buildMemoryPrompt(ctx)
-  ];
-
-  const sharedRules = [
-    ...identityRules,
+  const cfg = aiBudgetConfig();
+  const systemCap = mode === "curhat" ? cfg.curhatSystemChars : cfg.maxSystemChars;
+  const modeRule = mode === "curhat"
+    ? "MODE CURHAT KHUSUS: jangan mengubah curhat menjadi tutorial bot. Jawab 1-4 kalimat dulu kecuali user minta solusi panjang."
+    : mode === "juragan"
+      ? "MODE JURAGAN/DONATUR: boleh lebih detail, tetap hemat token dan langsung ke inti."
+      : "MODE WARGA UMUM: bantu sebaik mungkin, ringkas jika chat pendek, runtut jika masalah teknis.";
+  const base = [
+    `Kamu adalah Pak RW, bot warga DESA TULUS. Owner server adalah ${ownerName}.`,
+    `Warga saat ini: ${ctx.displayName} (@${ctx.username}, ID ${ctx.userId}). Panggil warga ini “nak” secara natural.`,
+    modeRule,
+    "Jawab seperti chat orang asli: jelas, natural, sopan, hangat, tidak kaku, tidak template kosong. Ikuti gaya bahasa user.",
+    "Kalau user curhat, dengarkan dulu. Kalau user minta solusi, jawab langsung ke langkah yang bisa dilakukan. Jangan terlalu panjang kecuali diminta.",
+    "Jangan mengarang data server. Jangan membocorkan token, API key, atau memory warga lain.",
     languageRule(userText),
-    styleRule(userText),
-    "Bahasa harus konsisten: jika warga meminta Bahasa Indonesia, jangan campur Basa Sunda; jika meminta Basa Sunda, gunakan Basa Sunda formal; jika tidak jelas, pakai Bahasa Indonesia yang sopan dan mudah dipahami.",
-    "Baca maksud pesan sebelum menjawab. Bedakan curhat, laporan warga ribut/konflik, pertanyaan umum, tugas, coding, Discord, dashboard, embed, level/top aktif, GitHub/Railway, penulisan, atau percakapan biasa.",
-    "Kalau warga melapor ada yang ribut/garelut/berantem, jawab sebagai Pak RW yang menenangkan: jangan ikut panas, minta lokasi channel, minta bukti secukupnya, dan arahkan ke staff/owner bila mengganggu. Jangan jawab dengan template umum.",
-    `Panggil warga dengan “nak” secara natural, tetapi jangan mengulang kata nak di setiap kalimat. Pembuka boleh menyesuaikan konteks, misalnya: ${pickPakRwOpener(userText, mode)}`,
-    "Terdengar seperti Pak RW asli: hangat, berwibawa, membumi, sabar, adil, tegas bila perlu, dan selalu menjelaskan alur dengan jelas. Jangan terdengar kaku atau mengaku sebagai ChatGPT.",
-    "Jawab seperti chat manusia biasa: natural, singkat kalau pesannya singkat, dan langsung nyambung ke kalimat user. Jangan terdengar seperti format prompt atau template bot.",
-    "DILARANG memakai kalimat template seperti: 'Pak RW tangkap inti pesannya', 'Pak RW belum dapat detail yang cukup', 'Biar jelas, jawabannya bakal dibuat begini', 'Supaya jawabannya tepat, kirim salah satu dari ini', atau 'Nanti Pak RW jawab langsung ke solusi'.",
-    "Jangan selalu membuat heading, daftar panjang, atau format alur kalau user hanya ngobrol singkat. Untuk chat singkat, balas pendek dan natural. Untuk masalah serius, baru beri langkah jelas.",
-    "Jawab inti lebih dulu. Setelah itu beri langkah yang runtut, contoh bila perlu, lalu penutup singkat. Jangan bertele-tele, jangan typo, jangan menjawab dengan kalimat kosong atau template yang tidak nyambung.",
-    "Boleh membantu pertanyaan umum, belajar, coding, Discord, bot, penulisan, perencanaan, desain, dan diskusi sehari-hari. Untuk fakta yang perlu data terbaru, jangan mengarang; jelaskan bahwa datanya perlu dicek dari sumber terbaru.",
-    "Untuk masalah server, gunakan direktori channel/role yang diberikan. Jangan mengarang nama, ID, atau fungsi channel yang tidak tercantum.",
-    "Kalau menyebut channel Discord, prioritaskan mention <#ID> dari direktori. Jangan memakai @everyone atau @here.",
-    "Untuk konflik warga, jangan memihak buta. Tenangkan keadaan, rangkum inti masalah, tawarkan jalan tengah yang adil, dan jaga privasi.",
-    "Jawaban harus nyaman dibaca di Discord: paragraf pendek, heading seperlunya, maksimal beberapa poin penting, tanpa spam emoji.",
-    "Jangan membocorkan token, kunci API, data rahasia, atau memori warga lain. Jangan menyimpan atau mengulang rahasia yang terlihat seperti token/kunci.",
-    "Tolak dengan sopan permintaan berbahaya, ilegal, eksplisit, penipuan, pencurian akun/token, malware, spam, atau bypass keamanan. Berikan alternatif aman.",
-    serverContext(ctx)
+    truncateText(styleRule(userText), 420),
+    buildMemoryPrompt(ctx),
+    serverContext(ctx, userText, mode)
   ];
-
-  if (mode === "curhat") {
-    return [
-      ...sharedRules,
-      "MODE CURHAT KHUSUS: fokus mendengarkan isi hati warga. Jangan mengubah curhat menjadi tutorial bot, promosi fitur, atau daftar solusi panjang kecuali warga memang meminta solusi.",
-      "Validasi perasaan tanpa menghakimi dan tanpa menganggap diagnosis. Tanyakan satu pertanyaan lembut yang relevan agar warga bisa melanjutkan cerita.",
-      "Jangan membandingkan curhat warga ini dengan warga lain. Jangan menyebut isi curhat di channel lain.",
-      "Jika ada tanda bahaya atau kondisi darurat, arahkan warga untuk segera menghubungi orang dewasa tepercaya atau layanan darurat setempat dengan bahasa singkat dan aman.",
-      "Panjang jawaban curhat biasanya 3 sampai 7 paragraf pendek, hangat, natural, dan tidak berlebihan."
-    ].join(" ");
-  }
-
-  if (mode === "juragan") {
-    return [
-      ...sharedRules,
-      "MODE JURAGAN/DONATUR: kualitas jawaban lebih mendalam, tetapi tetap hemat token. Berikan penyebab, langkah, contoh, dan pengecekan akhir bila memang dibutuhkan.",
-      "Jangan memberi klaim premium kosong. Tetap jawab masalah nyata warga secara langsung."
-    ].join(" ");
-  }
-
-  return [
-    ...sharedRules,
-    "MODE WARGA UMUM: bantu sebaik mungkin untuk pertanyaan apa pun yang aman dan masuk akal.",
-    "Jika pertanyaan sederhana, jawab ringkas. Jika masalah kompleks, jelaskan tahap demi tahap. Jangan memaksa semua jawaban menjadi panjang.",
-    "Jika warga bertanya siapa dirimu, jawab bahwa kamu Pak RW DESA TULUS yang membantu dan mengayomi warga. Jika ditanya owner, jawab BEKIW."
-  ].join(" ");
+  return truncateText(base.join("\n"), systemCap);
 }
 
 function getApiKey() {
@@ -953,25 +1187,33 @@ function getFallbackModels() {
 function getModelQueue(text = "", mode = "normal") {
   const smart = getSmartModel();
   const economy = getEconomyModel();
-  const complex = isComplexRequest(text, mode);
-  const primary = complex ? smart : economy;
-  const secondary = complex ? economy : smart;
-  return [...new Set([primary, secondary, ...getFallbackModels()])].filter(Boolean).slice(0, 2);
+  const primary = isComplexRequest(text, mode) ? smart : economy;
+  const fallbacks = getFallbackModels().filter((model) => model && model !== primary && model !== smart).slice(0, 1);
+  return [...new Set([primary, ...fallbacks])].filter(Boolean).slice(0, 2);
 }
 
 function getMaxOutputTokens(text = "", mode = "normal") {
-  const configured = Number(config.ai?.maxTokens || process.env.AI_MAX_TOKENS || 560);
-  const hardCap = mode === "curhat" ? 720 : isComplexRequest(text, mode) ? 780 : 520;
-  return Math.max(180, Math.min(configured, hardCap));
+  const cfg = aiBudgetConfig();
+  if (mode === "curhat") return Math.min(cfg.curhatMaxReplyTokens, cfg.maxReplyTokens);
+  const desired = isComplexRequest(text, mode) ? cfg.maxReplyTokens : cfg.safeReplyTokens;
+  return Math.max(80, Math.min(desired, cfg.maxReplyTokens));
 }
 
-function buildRequestPayload(model, userText, mode, context) {
+function makeMessagesForPayload(userText, mode, context, budgetMode = "normal") {
+  const cfg = aiBudgetConfig();
+  const maxUser = budgetMode === "trimmed" ? Math.floor(cfg.maxUserMessageChars * 0.65) : cfg.maxUserMessageChars;
+  const safeUser = truncateText(userText, maxUser);
+  const system = buildSystemPrompt(safeUser, mode, context);
+  return [
+    { role: "system", content: system },
+    { role: "user", content: safeUser }
+  ];
+}
+
+function buildRequestPayload(model, userText, mode, context, budgetMode = "normal") {
   const payload = {
     model,
-    messages: [
-      { role: "system", content: buildSystemPrompt(userText, mode, context) },
-      { role: "user", content: userText }
-    ],
+    messages: makeMessagesForPayload(userText, mode, context, budgetMode),
     max_tokens: getMaxOutputTokens(userText, mode)
   };
 
@@ -985,82 +1227,172 @@ function buildRequestPayload(model, userText, mode, context) {
   return payload;
 }
 
-async function finalizeReply(userText, mode, context, reply, source = "unknown") {
+function promptTokenEstimateFromPayload(payload) {
+  return estimateTokens(JSON.stringify(payload.messages || []));
+}
+
+function trimAiPayloadToBudget(model, userText, mode, context) {
+  const cfg = aiBudgetConfig();
+  let payload = buildRequestPayload(model, userText, mode, context, "normal");
+  let tokens = promptTokenEstimateFromPayload(payload);
+  const before = tokens;
+  let trimmed = false;
+
+  if (tokens > cfg.tokenBudget || JSON.stringify(payload.messages || []).length > cfg.maxPromptChars) {
+    console.log(`AI BUDGET CUT: prompt≈${tokens} > ${cfg.tokenBudget}, trimming memory/history/serverContext`);
+    trimmed = true;
+    payload = buildRequestPayload(model, truncateText(userText, Math.floor(cfg.maxUserMessageChars * 0.65)), mode, { ...context, channelDirectory: "", roleDirectory: "" }, "trimmed");
+    tokens = promptTokenEstimateFromPayload(payload);
+  }
+
+  if (tokens <= cfg.tokenBudget && JSON.stringify(payload.messages || []).length <= cfg.maxPromptChars) {
+    if (trimmed) console.log(`AI BUDGET SAFE: prompt≈${tokens}/${cfg.tokenBudget}`);
+    return { allowed: true, payload, tokens, before, after: tokens, trimmed };
+  }
+
+  console.log(`AI BUDGET BLOCKED: prompt≈${tokens} > ${cfg.tokenBudget}, using local fallback, no AI request spent`);
+  return { allowed: false, payload, tokens, before, after: tokens, trimmed };
+}
+
+async function finalizeReply(userText, mode, context, reply, source = "unknown", options = {}) {
   const finalReply = removeTemplateNoise(reply || localFallback(userText, mode), userText, mode);
   setCachedAiReply(userText, mode, finalReply, context);
-  persistUserTurn(context, userText, finalReply, mode);
-  console.log(`AI PAK RW: jawaban ${source} tersimpan ke memori user ${normalizeAiContext(context).userId}.`);
+  if (options.storeMemory !== false) {
+    const assistantForMemory = options.summaryOnly ? truncateText(finalReply, 150) : finalReply;
+    persistUserTurn(context, userText, assistantForMemory, mode);
+    console.log(`AI PAK RW: jawaban ${source} tersimpan ke memori user ${normalizeAiContext(context).userId}.`);
+  } else {
+    console.log("AI FALLBACK MEMORY: saved=false / summary_only=true");
+  }
   return finalReply;
 }
 
+async function callOpenRouter(model, payload, apiKey, userText, mode) {
+  return axios.post(
+    "https://openrouter.ai/api/v1/chat/completions",
+    payload,
+    {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://github.com/baehaqieqi07-sketch/Pak-Rw",
+        "X-Title": "Pak RW Smart AI DESA TULUS"
+      },
+      timeout: isComplexRequest(userText, mode) ? 45000 : 30000
+    }
+  );
+}
+
 async function askAI(text, mode = "normal", context = {}) {
-  const userText = cleanText(text);
+  const originalText = cleanText(text);
   const ctx = normalizeAiContext(context);
+  const cfg = aiBudgetConfig();
+  const userText = truncateText(originalText, cfg.maxUserMessageChars);
   const apiKey = getApiKey();
 
-  if (!userText) return finalizeReply("halo", mode, ctx, localFallback("halo", mode), "lokal-kosong");
+  if (!userText) return finalizeReply("halo", mode, ctx, localFallback("halo", mode), "lokal-kosong", { summaryOnly: true });
 
   if (config.ai?.fastLocalForGreeting !== false && isSimpleLocalQuestion(userText, mode)) {
     console.log("AI HEMAT LIMIT: pertanyaan sederhana dijawab lokal tanpa OpenRouter.");
-    return finalizeReply(userText, mode, ctx, localFallback(userText, mode), "lokal-sederhana");
+    return finalizeReply(userText, mode, ctx, localFallback(userText, mode), "lokal-sederhana", { summaryOnly: true });
   }
 
   const cachedReply = getCachedAiReply(userText, mode, ctx);
   if (cachedReply) {
     console.log(`AI HEMAT LIMIT: cache khusus user ${ctx.userId} dipakai, tidak panggil OpenRouter.`);
-    persistUserTurn(ctx, userText, cachedReply, mode);
+    persistUserTurn(ctx, userText, truncateText(cachedReply, 150), mode);
     return cachedReply;
   }
 
   if (!apiKey) {
-    return finalizeReply(userText, mode, ctx, localFallback(userText, mode), "lokal-tanpa-api-key");
+    const state = setAiLimitState({ status: "auth_locked", reason: "missing_api_key", lastError: "API key kosong", retryAfterAt: Date.now() + cfg.authRecheckSeconds * 1000, lastCheckedAt: Date.now() });
+    return finalizeReply(userText, mode, ctx, localLimitFallback(userText, mode, ctx, "auth_locked", state), "lokal-tanpa-api-key", { storeMemory: false });
   }
 
-  const budgetReason = shouldUseLocalByBudget();
-  if (budgetReason) {
-    console.log(`AI HEMAT LIMIT: pakai fallback lokal (${budgetReason}).`);
-    return finalizeReply(userText, mode, ctx, localFallback(userText, mode), `lokal-${budgetReason}`);
+  const rate = checkAiUserRate(ctx);
+  if (!rate.allowed && !ctx.isOwner) {
+    console.log(`AI LOCAL FALLBACK: ${rate.reason}, requestSpent=false, natural=true`);
+    return finalizeReply(userText, mode, ctx, localLimitFallback(userText, mode, ctx, rate.reason), `lokal-${rate.reason}`, { storeMemory: false });
   }
-  markAiRequestUsed();
+
+  const stateCheck = canAttemptAiFromState(ctx);
+  console.log(`AI STATUS: ${stateCheck.state.status}`);
+  if (!stateCheck.allowed) {
+    console.log(`AI LOCAL FALLBACK: until reset, requestSpent=false, natural=true`);
+    return finalizeReply(userText, mode, ctx, localLimitFallback(userText, mode, ctx, stateCheck.state.status, stateCheck.state), `lokal-${stateCheck.state.status}`, { storeMemory: false });
+  }
+
+  const oldBudgetReason = shouldUseLocalByBudget();
+  if (oldBudgetReason && !ctx.isOwner) {
+    console.log(`AI HEMAT LIMIT: pakai fallback lokal (${oldBudgetReason}).`);
+    return finalizeReply(userText, mode, ctx, localLimitFallback(userText, mode, ctx, oldBudgetReason), `lokal-${oldBudgetReason}`, { storeMemory: false });
+  }
 
   const queue = getModelQueue(userText, mode);
   console.log(`AI ROUTER: mode=${mode} • user=${ctx.userId} • model=${queue.join(" -> ")} • memory=${getUserMemory(ctx)?.recent?.length || 0} turn.`);
 
-  for (const model of queue) {
-    try {
-      const res = await axios.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        buildRequestPayload(model, userText, mode, ctx),
-        {
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://github.com/baehaqieqi07-sketch/Pak-Rw",
-            "X-Title": "Pak RW Smart AI DESA TULUS"
-          },
-          timeout: isComplexRequest(userText, mode) ? 45000 : 30000
-        }
-      );
+  for (let i = 0; i < queue.length; i++) {
+    const model = queue[i];
+    let prepared = trimAiPayloadToBudget(model, userText, mode, ctx);
+    if (!prepared.allowed) {
+      return finalizeReply(userText, mode, ctx, localLimitFallback(userText, mode, ctx, "token_limit"), "lokal-token-budget", { storeMemory: false });
+    }
 
-      const reply = compactReply(res.data?.choices?.[0]?.message?.content);
-      if (reply) return finalizeReply(userText, mode, ctx, reply, model);
-    } catch (err) {
-      const status = err.response?.status;
-      const detail = err.response?.data || err.message;
-      console.log(`AI ERROR (${model}):`, detail);
-      const textDetail = JSON.stringify(detail).toLowerCase();
-      if ([401, 402, 429].includes(Number(status)) || textDetail.includes("insufficient") || textDetail.includes("credit") || textDetail.includes("rate limit") || textDetail.includes("quota")) {
-        console.log("AI HEMAT LIMIT: limit/auth/credit kena, langsung fallback lokal tanpa menghabiskan request lain.");
-        return finalizeReply(userText, mode, ctx, localFallback(userText, mode), "lokal-limit");
+    console.log(`AI BUDGET: prompt≈${prepared.tokens}/${cfg.tokenBudget} tokens • replyMax=${prepared.payload.max_tokens}`);
+    markAiRequestUsed();
+    markAiUserRate(ctx);
+
+    let tokenRetry = 0;
+    let providerRetry = 0;
+    while (true) {
+      try {
+        const res = await callOpenRouter(model, prepared.payload, apiKey, userText, mode);
+        const reply = compactReply(res.data?.choices?.[0]?.message?.content);
+        if (reply) {
+          resetAiLimitState("ai_ok");
+          console.log("AI OK: status tetap normal");
+          return finalizeReply(userText, mode, ctx, reply, model);
+        }
+        throw new Error("AI_EMPTY_REPLY");
+      } catch (err) {
+        const info = classifyAiError(err);
+        console.log(`AI ERROR (${model}):`, err.response?.data || err.message || err);
+
+        if (info.type === "token_limit" && tokenRetry < cfg.tokenLimitRetryMax) {
+          tokenRetry += 1;
+          const before = prepared.tokens;
+          prepared = trimAiPayloadToBudget(model, truncateText(userText, Math.floor(cfg.maxUserMessageChars * 0.45)), mode, { ...ctx, channelDirectory: "", roleDirectory: "" });
+          console.log(`AI ERROR CLASSIFIED: token_limit`);
+          console.log(`AI TOKEN TRIM: before≈${before} after≈${prepared.tokens}`);
+          console.log(`AI RETRY: token_limit_retry=${tokenRetry}`);
+          if (!prepared.allowed) return finalizeReply(userText, mode, ctx, localLimitFallback(userText, mode, ctx, "token_limit"), "lokal-token-limit", { storeMemory: false });
+          continue;
+        }
+
+        if (info.type === "provider_error" && providerRetry < cfg.providerRetryMax && i + 1 < queue.length) {
+          providerRetry += 1;
+          console.log(`AI PROVIDER RETRY: fallback_model=${queue[i + 1]}`);
+          break;
+        }
+
+        const stateInfo = applyAiErrorState(err, model);
+        const state = getAiLimitState();
+        if (stateInfo.type === "provider_error" && i + 1 < queue.length) break;
+        return finalizeReply(userText, mode, ctx, localLimitFallback(userText, mode, ctx, state.status || stateInfo.type, state), `lokal-${stateInfo.type}`, { storeMemory: cfg.storeLimitFallbackMemory, summaryOnly: true });
       }
     }
   }
 
-  return finalizeReply(userText, mode, ctx, localFallback(userText, mode), "lokal-semua-model-gagal");
+  const state = setAiLimitState({ status: "provider_cooldown", reason: "all_models_failed", lastError: "Semua model gagal", retryAfterAt: Date.now() + cfg.providerErrorCooldownSeconds * 1000, failCount: getAiLimitState().failCount + 1 });
+  return finalizeReply(userText, mode, ctx, localLimitFallback(userText, mode, ctx, "provider_cooldown", state), "lokal-semua-model-gagal", { storeMemory: false });
 }
 
 module.exports = {
   askAI,
+  getAiLimitState: summarizeAiLimitStatus,
+  resetAiLimitState,
+  classifyAiError,
+  estimateTokens,
   __test: {
     normalizeAiContext,
     scopedUserKey,
@@ -1075,6 +1407,13 @@ module.exports = {
     isConflictReport,
     isLowDetailChat,
     removeTemplateNoise,
-    localFallback
+    localFallback,
+    estimateTokens,
+    aiBudgetConfig,
+    classifyAiError,
+    getAiLimitState: summarizeAiLimitStatus,
+    resetAiLimitState,
+    trimAiPayloadToBudget,
+    localLimitFallback
   }
 };

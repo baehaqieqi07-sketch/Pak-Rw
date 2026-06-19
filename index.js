@@ -134,7 +134,7 @@ const {
   initializeAfkVoiceManager, connectAfkVoice, disconnectAfkVoice, reconnectAfkVoice,
   getAfkVoiceStatus, validateAfkVoiceChannel, shutdownAfkVoice, checkActionRateLimit
 } = require("./services/afkVoiceManager");
-const { askAI } = require("./ai/brain");
+const { askAI, getAiLimitState, resetAiLimitState, classifyAiError, estimateTokens } = require("./ai/brain");
 const { isCooldown, getRemaining } = require("./utils/cooldown");
 const {
   initMongoStore,
@@ -6453,9 +6453,26 @@ function applyMaxtonControlPost(body = {}) {
   cfg.prefix = body.prefix || cfg.prefix || "rw";
   cfg.embedColor = body.embedColor || cfg.embedColor || "#FFFFFF";
   cfg.activityText = body.activityText || cfg.activityText || "DESA TULUS 🌾 • Pak RW Menjaga Warga";
-  cfg.ai.openRouterModel = body.openRouterModel || cfg.ai.openRouterModel || "openai/gpt-4o-mini";
+  cfg.ai.openRouterModel = body.openRouterModel || cfg.ai.openRouterModel || "openai/gpt-5.4-mini";
+  cfg.ai.smartModel = body.aiSmartModel || cfg.ai.smartModel || "openai/gpt-5.4";
+  cfg.ai.economyModel = body.aiEconomyModel || cfg.ai.economyModel || "openai/gpt-5.4-mini";
   cfg.ai.cooldownMs = num(body.aiCooldownMs, cfg.ai.cooldownMs ?? 4500, 0);
   cfg.ai.maxMessageLength = num(body.aiMaxMessageLength, cfg.ai.maxMessageLength ?? 1900, 300, 4000);
+  cfg.ai.autoRecovery = body.aiAutoRecovery === "on";
+  cfg.ai.showResetTime = body.aiShowResetTime === "on";
+  cfg.ai.tokenBudget = num(body.aiTokenBudget, cfg.ai.tokenBudget ?? 3000, 600, 12000);
+  cfg.ai.maxReplyTokens = num(body.aiMaxReplyTokens, cfg.ai.maxReplyTokens ?? 500, 80, 2000);
+  cfg.ai.maxHistoryTurns = num(body.aiMaxHistoryTurns, cfg.ai.maxHistoryTurns ?? 2, 0, 10);
+  cfg.ai.maxMemoryChars = num(body.aiMaxMemoryChars, cfg.ai.maxMemoryChars ?? 900, 0, 6000);
+  cfg.ai.maxUserMessageChars = num(body.aiMaxUserMessageChars, cfg.ai.maxUserMessageChars ?? 1500, 120, 8000);
+  cfg.ai.rateLimitCooldownSeconds = num(body.aiRateLimitCooldownSeconds, cfg.ai.rateLimitCooldownSeconds ?? 300, 10, 86400);
+  cfg.ai.providerErrorCooldownSeconds = num(body.aiProviderErrorCooldownSeconds, cfg.ai.providerErrorCooldownSeconds ?? 120, 10, 86400);
+  cfg.ai.creditRecheckSeconds = num(body.aiCreditRecheckSeconds, cfg.ai.creditRecheckSeconds ?? 1800, 60, 86400);
+  cfg.ai.authRecheckSeconds = num(body.aiAuthRecheckSeconds, cfg.ai.authRecheckSeconds ?? 3600, 60, 86400);
+  cfg.ai.fallbackMaxCharsMember = num(body.aiFallbackMaxCharsMember, cfg.ai.fallbackMaxCharsMember ?? 350, 120, 1200);
+  cfg.ai.fallbackMaxCharsOwner = num(body.aiFallbackMaxCharsOwner, cfg.ai.fallbackMaxCharsOwner ?? 700, 200, 2000);
+  cfg.ai.dailyLimitPerUser = num(body.aiDailyLimitPerUser, cfg.ai.dailyLimitPerUser ?? 30, 0, 9999);
+  cfg.ai.dailyLimitOwner = num(body.aiDailyLimitOwner, cfg.ai.dailyLimitOwner ?? 999, 0, 99999);
 
   cfg.aiChannelId = body.aiChannelId || cfg.aiChannelId || "";
   cfg.curhatChannelId = body.curhatChannelId || cfg.curhatChannelId || "";
@@ -8607,12 +8624,40 @@ function renderModulesPage(req, saved = false, error = "") {
 
       <h3 style="margin-top:28px">🤖 AI Settings</h3>
       <div class="formgrid">
-        ${configInput("openRouterModel", "OpenRouter Model", cfg.ai?.openRouterModel || "openai/gpt-4o-mini")}
+        ${configInput("openRouterModel", "OpenRouter Model", cfg.ai?.openRouterModel || "openai/gpt-5.4-mini")}
+        ${configInput("aiSmartModel", "Model Pintar", cfg.ai?.smartModel || "openai/gpt-5.4")}
+        ${configInput("aiEconomyModel", "Model Hemat", cfg.ai?.economyModel || "openai/gpt-5.4-mini")}
         ${configInput("aiCooldownMs", "AI Cooldown Ms", cfg.ai?.cooldownMs ?? 4500, "number")}
         ${configInput("aiMaxMessageLength", "AI Max Message Length", cfg.ai?.maxMessageLength ?? 1900, "number")}
         ${configInput("aiChannelId", "AI Channel ID", cfg.aiChannelId || "")}
         ${configInput("curhatChannelId", "Curhat Channel ID", cfg.curhatChannelId || "")}
         ${configInput("anonymousCurhatChannelId", "Anonymous Curhat Channel ID", cfg.anonymousCurhatChannelId || "")}
+      </div>
+
+      <div class="panel bbo-ai-box" style="margin-top:18px" id="ai-limit-recovery">
+        <h3>🛟 AI Limit & Recovery</h3>
+        <p class="section-note">Panel ini menjaga Pak RW tetap hidup saat OpenRouter/AI kena rate limit, credit limit, provider penuh, atau prompt kepanjangan. Kalau cooldown lewat, Pak RW otomatis coba AI normal lagi tanpa restart.</p>
+        <div class="formgrid">
+          ${checkboxInput("aiAutoRecovery", "Auto Recovery ON", cfg.ai?.autoRecovery !== false)}
+          ${checkboxInput("aiShowResetTime", "Tampilkan waktu reset ke owner", cfg.ai?.showResetTime !== false)}
+          ${configInput("aiTokenBudget", "AI Token Budget", cfg.ai?.tokenBudget ?? 3000, "number")}
+          ${configInput("aiMaxReplyTokens", "Max Reply Tokens", cfg.ai?.maxReplyTokens ?? 500, "number")}
+          ${configInput("aiMaxHistoryTurns", "Max History Turns", cfg.ai?.maxHistoryTurns ?? 2, "number")}
+          ${configInput("aiMaxMemoryChars", "Max Memory Chars", cfg.ai?.maxMemoryChars ?? 900, "number")}
+          ${configInput("aiMaxUserMessageChars", "Max User Message Chars", cfg.ai?.maxUserMessageChars ?? 1500, "number")}
+          ${configInput("aiRateLimitCooldownSeconds", "Rate Limit Cooldown Detik", cfg.ai?.rateLimitCooldownSeconds ?? 300, "number")}
+          ${configInput("aiProviderErrorCooldownSeconds", "Provider Error Cooldown Detik", cfg.ai?.providerErrorCooldownSeconds ?? 120, "number")}
+          ${configInput("aiCreditRecheckSeconds", "Credit Recheck Detik", cfg.ai?.creditRecheckSeconds ?? 1800, "number")}
+          ${configInput("aiAuthRecheckSeconds", "Auth Recheck Detik", cfg.ai?.authRecheckSeconds ?? 3600, "number")}
+          ${configInput("aiFallbackMaxCharsMember", "Max Fallback Chars Member", cfg.ai?.fallbackMaxCharsMember ?? 350, "number")}
+          ${configInput("aiFallbackMaxCharsOwner", "Max Fallback Chars Owner", cfg.ai?.fallbackMaxCharsOwner ?? 700, "number")}
+          ${configInput("aiDailyLimitPerUser", "Daily Limit Per User", cfg.ai?.dailyLimitPerUser ?? 30, "number")}
+          ${configInput("aiDailyLimitOwner", "Daily Limit Owner", cfg.ai?.dailyLimitOwner ?? 999, "number")}
+        </div>
+        <div class="ai-style-preview">
+          <b>Preview prompt budget:</b><br>
+          System maksimal ${escapeHtml(String(cfg.ai?.maxSystemChars ?? 1800))} karakter • memory maksimal ${escapeHtml(String(cfg.ai?.maxMemoryChars ?? 900))} karakter • history maksimal ${escapeHtml(String(cfg.ai?.maxHistoryTurns ?? 2))} turn • estimasi token ≈ karakter / 4.
+        </div>
       </div>
 
       <div class="panel bbo-ai-box" style="margin-top:18px">
@@ -19686,6 +19731,11 @@ function ownerHelpEmbed(message) {
       `\`${p}setprefix rw\` • ganti prefix publik`,
       `\`${p}setactivity DESA TULUS 🤍\` • ganti activity bot`,
       `\`${p}setai openai/gpt-4o-mini\` • ganti model AI`,
+      `\`${p}ailimit\` • lihat status AI limit/recovery`,
+      `\`${p}aireset\` • paksa AI balik normal`,
+      `\`${p}aitest\` • test AI pendek`,
+      `\`${p}aimode\` • lihat mode AI hemat`,
+      `\`${p}aifallback\` • test fallback lokal natural`,
       "",
       "**🏆 Top Aktif / Level / MOTM**",
       `\`${p}settopchannel #channel\` • ganti channel Top Aktif`,
@@ -19829,6 +19879,50 @@ async function handleOwnerPrefixCommand(message) {
     config.ai = config.ai || {};
     config.ai.openRouterModel = args[0];
     await saveLiveConfigFromOwner(message, `Model AI diganti jadi \`${config.ai.openRouterModel}\``);
+    return true;
+  }
+
+
+  if (["ailimit", "rwailimit"].includes(cmd)) {
+    const st = getAiLimitState();
+    await safeReply(message, [
+      "🧠 **AI Limit & Recovery Pak RW**",
+      `Status: **${st.status || "normal"}**`,
+      `Model hemat: \`${st.modelActive || config.ai?.economyModel || "-"}\``,
+      `Model pintar: \`${st.smartModel || config.ai?.smartModel || "-"}\``,
+      `Token budget: **${st.tokenBudget || config.ai?.tokenBudget || 3000}**`,
+      `Coba lagi: **${st.retryAfterText || "-"}**`,
+      st.lastError ? `Error terakhir: \`${String(st.lastError).slice(0, 450)}\`` : "Error terakhir: -"
+    ].join("\n"));
+    return true;
+  }
+
+  if (["aireset", "rwaireset"].includes(cmd)) {
+    resetAiLimitState("owner_command");
+    await safeReply(message, "✅ AI limit state dibersihkan. Pak RW akan coba AI normal lagi pada chat berikutnya.");
+    return true;
+  }
+
+  if (["aimode", "rwaimode"].includes(cmd)) {
+    const st = getAiLimitState();
+    await safeReply(message, `🧠 Mode AI sekarang: **${st.status || "normal"}** • budget **${st.tokenBudget || 3000}** token • reset/check: **${st.retryAfterText || "-"}**`);
+    return true;
+  }
+
+  if (["aitest", "rwaitest"].includes(cmd)) {
+    const reply = await askAI("tes singkat: jawab satu kalimat bahwa AI Pak RW aktif", "normal", buildPakRwAiContext(message, "tes ai", "normal"));
+    await safeReply(message, `✅ Test AI selesai:\n${trimReply(reply)}`);
+    return true;
+  }
+
+  if (["aifallback", "rwaifallback"].includes(cmd)) {
+    const simulated = await askAI("pak aku lagi sedih", "curhat", { ...buildPakRwAiContext(message, "pak aku lagi sedih", "curhat"), isOwner: false });
+    await safeReply(message, `✅ Contoh fallback/chat natural:\n${trimReply(simulated)}`);
+    return true;
+  }
+
+  if (["trimemory", "rwtrimemory"].includes(cmd)) {
+    await safeReply(message, "✅ Memory Pak RW sekarang otomatis diringkas saat dikirim ke AI. Penghapusan manual tidak dilakukan supaya data lama tetap aman.");
     return true;
   }
 

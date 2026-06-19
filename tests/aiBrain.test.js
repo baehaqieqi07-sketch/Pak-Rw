@@ -44,15 +44,15 @@ const complexQueue = __test.getModelQueue(
 assert.equal(complexQueue[0], "openai/gpt-5.4");
 
 const prompt = __test.buildSystemPrompt("channel curhat ada di mana?", "normal", userA);
-assert.match(prompt, /Nama kamu Pak RW/i);
+assert.match(prompt, /Pak RW/i);
 assert.match(prompt, /Owner server adalah BEKIW/i);
 assert.match(prompt, /Panggil warga ini “nak”/i);
 assert.match(prompt, /<#222>/);
-assert.match(prompt, /TERPISAH dari warga lain/i);
+assert.match(prompt, /Memory warga ini saja|memori/i);
 
 const curhatPrompt = __test.buildSystemPrompt("aku lagi sedih", "curhat", userA);
 assert.match(curhatPrompt, /MODE CURHAT KHUSUS/i);
-assert.match(curhatPrompt, /Jangan mengubah curhat menjadi tutorial bot/i);
+assert.match(curhatPrompt, /jangan mengubah curhat menjadi tutorial bot/i);
 
 assert.equal(__test.isSundaneseRequested("iye aya warga garelut"), false);
 assert.equal(__test.isConflictReport("iye aya warga garelut"), true);
@@ -75,6 +75,20 @@ const unknownReply = __test.localFallback("hmm", "normal");
 assert.doesNotMatch(unknownReply, /Biar jelas, jawabannya bakal dibuat begini/i);
 assert.doesNotMatch(unknownReply, /Pak RW tangkap inti pesannya/i);
 assert.ok(unknownReply.length < 180, `jawaban chat singkat terlalu panjang: ${unknownReply}`);
+
+
+assert.equal(__test.estimateTokens("12345678"), 2);
+assert.equal(__test.classifyAiError({ response: { status: 429, data: { error: "rate limit" } } }).type, "rate_limit");
+assert.equal(__test.classifyAiError({ response: { status: 402, data: { error: "insufficient credits" } } }).type, "credit_limit");
+assert.equal(__test.classifyAiError({ message: "Prompt tokens limit exceeded: 4266 > 3462" }).type, "token_limit");
+
+const budgeted = __test.trimAiPayloadToBudget("openai/gpt-5.4-mini", "halo ".repeat(1200), "normal", userA);
+assert.equal(budgeted.allowed, true);
+assert.ok(budgeted.tokens <= __test.aiBudgetConfig().tokenBudget, `prompt budget terlalu besar: ${budgeted.tokens}`);
+
+const limitFallback = __test.localLimitFallback("pak aku kangen bapak", "curhat", userA, "rate_limited", { status: "rate_limited", retryAfterAt: Date.now() + 300000 });
+assert.ok(limitFallback.length <= __test.aiBudgetConfig().fallbackMaxCharsMember);
+assert.doesNotMatch(limitFallback, /Prompt tokens|provider|OpenRouter/i);
 
 const sanitized = __test.removeTemplateNoise(
   "Siap nak, kita bereskan pelan-pelan biar jelas.\n\nPak RW tangkap inti pesannya dan akan jawab langsung ke kebutuhan utamanya.\n\nPak RW belum dapat detail yang cukup untuk menjawab sampai tuntas, nak.",
