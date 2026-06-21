@@ -1,6 +1,6 @@
 {
   "name": "pak-rw-desa-tulus",
-  "version": "10.10.106",
+  "version": "10.10.107",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",

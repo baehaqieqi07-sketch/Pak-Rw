@@ -119,6 +119,13 @@ export function ManagePage() {
   const [postHour, setPostHour] = useState(0);
   const [aiModel, setAiModel] = useState("openai/gpt-4o-mini");
   const [aiMaxTokens, setAiMaxTokens] = useState(460);
+  const [welcomeTitle, setWelcomeTitle] = useState("Wilujeung sumping, {displayName}!");
+  const [welcomeMessage, setWelcomeMessage] = useState("Wilujeung sumping, **{user}!** akhirnya mampir juga ke {server}. Di sini tempatnya ngobrol santai, saling kenal, curhat, bercanda, dan jadi bagian dari warga Desa Tulus. Jangan sungkan buat mulai ngobrol ya. Semoga betah di sini {memberTulusRole}");
+  const [welcomeContent, setWelcomeContent] = useState("");
+  const [suggestionTitle, setSuggestionTitle] = useState("📬 Kotak Saran DESA TULUS");
+  const [suggestionDescription, setSuggestionDescription] = useState("Klik tombol di bawah untuk mengirim kritik atau saran. Setelah terkirim, warga bisa memberi tanggapan lewat reaction dan thread.");
+  const [suggestionButtonText, setSuggestionButtonText] = useState("📬 Kirim Saran");
+  const [suggestionButtonOnResult, setSuggestionButtonOnResult] = useState(true);
   const [loketPanelTitle, setLoketPanelTitle] = useState("🏛️ Loket Bantuan DESA TULUS");
   const [loketButtonLabel, setLoketButtonLabel] = useState("Buka Loket");
   const [loketSelectPlaceholder, setLoketSelectPlaceholder] = useState("Pilih jenis loket yang kamu butuhkan");
@@ -181,6 +188,13 @@ export function ManagePage() {
     setPostHour(Number(readPath(cfg, slug === "papan-aktif" ? "leaderboardAktif.autoPostHourWIB" : "topActive.dailyPostHourWIB") ?? 0));
     setAiModel(String(readPath(cfg, "ai.openRouterModel") || "openai/gpt-4o-mini"));
     setAiMaxTokens(Number(readPath(cfg, "ai.maxTokens") || 460));
+    setWelcomeTitle(String(readPath(cfg, "welcome.title") || "Wilujeung sumping, {displayName}!"));
+    setWelcomeMessage(String(readPath(cfg, "welcome.message") || "Wilujeung sumping, **{user}!** akhirnya mampir juga ke {server}. Di sini tempatnya ngobrol santai, saling kenal, curhat, bercanda, dan jadi bagian dari warga Desa Tulus. Jangan sungkan buat mulai ngobrol ya. Semoga betah di sini {memberTulusRole}"));
+    setWelcomeContent(String(readPath(cfg, "welcome.content") || ""));
+    setSuggestionTitle(String(readPath(cfg, "suggestion.title") || "📬 Kotak Saran DESA TULUS"));
+    setSuggestionDescription(String(readPath(cfg, "suggestion.description") || "Klik tombol di bawah untuk mengirim kritik atau saran. Setelah terkirim, warga bisa memberi tanggapan lewat reaction dan thread."));
+    setSuggestionButtonText(String(readPath(cfg, "suggestion.buttonText") || "📬 Kirim Saran"));
+    setSuggestionButtonOnResult(readPath(cfg, "suggestion.buttonOnResult") !== false);
     setLoketPanelTitle(String(readPath(cfg, "loket.panelTitle") || "🏛️ Loket Bantuan DESA TULUS"));
     setLoketButtonLabel(String(readPath(cfg, "loket.buttonLabel") || "Buka Loket"));
     setLoketSelectPlaceholder(String(readPath(cfg, "loket.selectPlaceholder") || "Pilih jenis loket yang kamu butuhkan"));
@@ -247,6 +261,22 @@ export function ManagePage() {
       if (slug === "ai") {
         patches.push({ path: "ai.openRouterModel", value: aiModel });
         patches.push({ path: "ai.maxTokens", value: aiMaxTokens });
+      }
+      if (slug === "welcome") {
+        patches.push({ path: "welcome.title", value: welcomeTitle });
+        patches.push({ path: "welcome.message", value: welcomeMessage });
+        patches.push({ path: "welcome.content", value: welcomeContent });
+        patches.push({ path: "embeds.welcome.title", value: welcomeTitle });
+        patches.push({ path: "embeds.welcome.description", value: welcomeMessage });
+        patches.push({ path: "embeds.welcome.content", value: welcomeContent });
+      }
+      if (slug === "saran") {
+        patches.push({ path: "suggestion.title", value: suggestionTitle });
+        patches.push({ path: "suggestion.description", value: suggestionDescription });
+        patches.push({ path: "suggestion.buttonText", value: suggestionButtonText });
+        patches.push({ path: "suggestion.buttonOnResult", value: suggestionButtonOnResult });
+        patches.push({ path: "embeds.suggestionResult.title", value: "📬 Kritik & Saran Baru" });
+        patches.push({ path: "embeds.suggestionResult.description", value: "**👤 Pengirim:**\n{user}\n\n**💬 Isi Saran:**\n{content}" });
       }
       if (slug === "loket") {
         patches.push({ path: "loket.panelTitle", value: loketPanelTitle });
@@ -414,6 +444,28 @@ export function ManagePage() {
               <div><span className="summary-dot is-ok" /><div><strong>Template embed</strong><small>{embedKey || "Tidak menggunakan template"}</small></div></div>
             </div>
           </Card>
+          {slug === "welcome" ? <Card className="full-span-card"><CardHeader title="Welcome DESA TULUS" description="Ini yang akan tampil di Discord. Simpan dari sini supaya config lama tidak menang lagi." />
+            <div className="form-grid-two">
+              <div className="form-field"><label>Judul Welcome</label><input value={welcomeTitle} onChange={(event) => { setWelcomeTitle(event.target.value); setDirty(true); }} /></div>
+              <div className="form-field"><label>Content di luar embed</label><input value={welcomeContent} placeholder="Kosongkan agar tidak dobel mention" onChange={(event) => { setWelcomeContent(event.target.value); setDirty(true); }} /></div>
+            </div>
+            <div className="form-field"><label>Pesan Welcome</label><textarea rows={5} value={welcomeMessage} onChange={(event) => { setWelcomeMessage(event.target.value); setDirty(true); }} /></div>
+            <div className="info-panel"><Info size={19} /><p>Placeholder yang dipakai: {"{user}"}, {"{server}"}, dan {"{memberTulusRole}"}. Role Warga dipilih di tab Channel & Role.</p></div>
+          </Card> : null}
+          {slug === "saran" ? <Card className="full-span-card"><CardHeader title="Kotak Saran + Tombol Ikut Terus" description="Tombol Kirim Saran muncul di panel dan ikut lagi di setiap saran baru." />
+            <div className="form-grid-two">
+              <div className="form-field"><label>Judul Panel Saran</label><input value={suggestionTitle} onChange={(event) => { setSuggestionTitle(event.target.value); setDirty(true); }} /></div>
+              <div className="form-field"><label>Teks Tombol</label><input value={suggestionButtonText} onChange={(event) => { setSuggestionButtonText(event.target.value); setDirty(true); }} /></div>
+            </div>
+            <div className="form-field"><label>Deskripsi Panel</label><textarea rows={4} value={suggestionDescription} onChange={(event) => { setSuggestionDescription(event.target.value); setDirty(true); }} /></div>
+            <div className="setting-row setting-row-large"><div><strong>Tombol ikut di hasil saran</strong><span>Setiap warga mengirim saran, pesan hasil saran tetap membawa tombol kirim saran lagi.</span></div><Toggle checked={suggestionButtonOnResult} onChange={(next) => { setSuggestionButtonOnResult(next); setDirty(true); }} /></div>
+            <div className="suggestion-live-preview"><button type="button">📬 Kirim Saran</button><span>Reaction otomatis: ✅ ❌ · Thread: 💬 Berikan Tanggapan</span></div>
+          </Card> : null}
+          {slug === "level" ? <Card className="full-span-card"><CardHeader title="Role Level Otomatis" description="Role dibuat saat ada warga yang mencapai tier, no color, di atas Warga, dan nama role memakai format level." />
+            <div className="setting-row setting-row-large"><div><strong>Auto Level Role</strong><span>Jangan buat 1000 role sekaligus. Pak RW hanya buat role saat ada yang mendapatkannya.</span></div><Toggle checked={autoLevelRole} onChange={(next) => { setAutoLevelRole(next); setDirty(true); }} /></div>
+            <div className="level-role-tier-list">{(data.levelRoleTiers || []).slice(0, 14).map((tier) => <div key={`${tier.level}-${tier.roleName}`}><strong>{tier.roleName || `${tier.name} (Lvl. ${tier.level})`}</strong><span>Mulai Level {tier.level}</span></div>)}</div>
+            <div className="info-panel"><Info size={19} /><p>Contoh nama role: Warga Anyar (Lvl. 1), Penggerak Desa (Lvl. 100), Karuhun Desa (Lvl. Max). Warna role dibuat default/no color agar warna nama tetap ikut role Warga.</p></div>
+          </Card> : null}
           {slug === "level" ? <Card className="full-span-card"><CardHeader title="Auto Level Role" description="Role dibuat otomatis saat ada warga yang mendapat tier. Tidak perlu pilih role manual." action={<StatusBadge label={autoLevelRole ? "Aktif" : "Nonaktif"} tone={autoLevelRole ? "success" : "neutral"} />} /><div className="boost-option-list"><div className="boost-option-row"><div><strong>Role level otomatis</strong><small>Ketika level berubah, Pak RW membuat role yang dibutuhkan saja, memberi warna default/no color, mencabut role lama, dan menghapus role kosong.</small></div><Toggle checked={autoLevelRole} onChange={(value) => { setAutoLevelRole(value); setDirty(true); }} label="Auto Level Role" /></div></div><div className="info-panel"><ShieldCheck size={19} /><p>Level maksimal dikunci di <strong>1000</strong>. Role <strong>Karuhun Desa (Lvl. Max)</strong> hanya dibuat saat ada warga mencapai Level 1000. Role otomatis diletakkan di atas Warga agar warna nama tetap mengikuti role Warga.</p></div></Card> : null}
           {slug === "ai" ? <Card><CardHeader title="AI hemat OpenRouter" description="Pengaturan aman yang sudah didukung core bot." /><div className="form-grid two-columns"><div className="form-field"><label>Model utama</label><input value={aiModel} onChange={(event) => { setAiModel(event.target.value); setDirty(true); }} /><small className="field-helper">Gunakan openai/gpt-4o-mini untuk mode hemat.</small></div><div className="form-field"><label>Max token</label><input type="number" min={100} max={1000} value={aiMaxTokens} onChange={(event) => { setAiMaxTokens(Number(event.target.value)); setDirty(true); }} /><small className="field-helper">Batas aman rekomendasi: 300–600.</small></div></div></Card> : null}
 

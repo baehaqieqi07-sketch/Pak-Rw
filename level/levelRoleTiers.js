@@ -27,7 +27,15 @@ function clampLevel(level) {
 }
 
 function getLevelRoleName(tier = {}) {
-  return String(tier.roleName || tier.name || "Warga Anyar").trim();
+  const baseName = String(tier.name || "Warga Anyar").trim();
+  const rawLevel = Number(tier.level || 1);
+  if (tier.roleName) return String(tier.roleName).trim();
+  if (rawLevel >= MAX_LEVEL) return `${baseName} (Lvl. Max)`;
+  return `${baseName} (Lvl. ${Math.max(1, Math.floor(rawLevel || 1))})`;
+}
+
+function getLevelRoleBaseName(tier = {}) {
+  return String(tier.name || "Warga Anyar").trim();
 }
 
 function normalizeRoleId(value) {
@@ -88,5 +96,6 @@ module.exports = {
   getLevelRoleTiers,
   getLevelTier,
   getLevelRoleName,
+  getLevelRoleBaseName,
   getConfiguredLevelRoleIds
 };

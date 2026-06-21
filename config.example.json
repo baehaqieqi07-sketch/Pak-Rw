@@ -281,16 +281,17 @@
   },
   "suggestion": {
     "enabled": true,
-    "title": "💡 DESA TULUS • Kotak Saran Warga",
-    "description": "Ada kritik, saran, atau masukan buat DESA TULUS? Klik tombol di bawah, isi dengan sopan, nanti warga bisa kasih tanggapan di thread.",
+    "title": "📬 Kotak Saran DESA TULUS",
+    "description": "Klik tombol di bawah untuk mengirim kritik atau saran. Setelah terkirim, warga bisa memberi tanggapan lewat reaction dan thread.",
     "allowCustomSenderName": true,
     "emptySenderNameAsAnonymous": true,
     "senderNameHelp": "Pengirim saran bisa mengisi nama sendiri. Kalau dikosongkan, saran tampil sebagai Anonim.",
-    "buttonText": "Kirim Saran",
+    "buttonText": "📬 Kirim Saran",
     "successMessage": "✅ Saran kamu sudah diterima Pak RW. Terima kasih, masukannya akan dibaca dengan baik.",
     "votingMode": "one_user_one_vote",
     "dashboardHelp": "Saran warga masuk ke Pak RW dengan bahasa sopan dan rapi. Kalau nama dikosongkan, tampil sebagai Anonim.",
-    "color": "#7DBD77"
+    "color": "#7DBD77",
+    "buttonOnResult": true
   },
   "levelChannelId": "1511737744978743367",
   "level100RoleId": "1505183243362767019",
@@ -1252,7 +1253,7 @@
       "Discord Manager"
     ]
   },
-  "version": "10.10.105",
+  "version": "10.10.107",
   "bigBot": {
     "releaseName": "Pak RW KTP Warga dan AFK Voice Stabil"
   },

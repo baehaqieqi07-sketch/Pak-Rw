@@ -38,7 +38,9 @@ const {
   LEVEL_ROLE_TIER_DEFINITIONS,
   getLevelSystemConfig,
   getLevelRoleTiers,
-  getLevelTier
+  getLevelTier,
+  getLevelRoleName,
+  getLevelRoleBaseName
 } = require("./level/levelRoleTiers");
 
 const DESA_TULUS_EMBED_COLOR_HEX = "#7DBD77";
@@ -358,16 +360,28 @@ function applySafeEmbedDisplayMigrations(data = {}) {
   next.welcome.enabled = next.welcome.enabled !== false;
   next.welcome.memberRoleId = String(next.welcome.memberRoleId || next.welcome.memberTulusRoleId || next.memberTulusRoleId || DESA_TULUS_WARGA_ROLE_ID).trim();
   next.welcome.memberRoleName = next.welcome.memberRoleName || "Warga";
-  if (isLegacyWelcomeText(next.welcome.message)) next.welcome.message = DESA_TULUS_WELCOME_MESSAGE;
-  if (!String(next.welcome.title || "").trim() || /Wilujeung Sumping Warga Anyar|🏡/i.test(String(next.welcome.title || ""))) next.welcome.title = DESA_TULUS_WELCOME_TITLE;
+  // v10.10.107: paksa format welcome DESA TULUS supaya config lama/dashboard lama tidak menang lagi.
+  next.welcome.message = DESA_TULUS_WELCOME_MESSAGE;
+  next.welcome.title = DESA_TULUS_WELCOME_TITLE;
   if (!String(next.welcome.content || "").trim() || String(next.welcome.content || "").trim() === "{memberTulusRole}") next.welcome.content = "";
   next.memberTulusRoleId = String(next.memberTulusRoleId || next.welcome.memberRoleId || DESA_TULUS_WARGA_ROLE_ID).trim();
   next.wargaRoleId = String(next.wargaRoleId || next.welcome.memberRoleId || DESA_TULUS_WARGA_ROLE_ID).trim();
 
   const welcomeEmbed = next.embeds.welcome = next.embeds.welcome && typeof next.embeds.welcome === "object" ? next.embeds.welcome : {};
-  if (isLegacyWelcomeText(welcomeEmbed.description)) welcomeEmbed.description = DESA_TULUS_WELCOME_MESSAGE;
+  welcomeEmbed.description = DESA_TULUS_WELCOME_MESSAGE;
   if (!String(welcomeEmbed.title || "").trim() || /Wilujeung Sumping Warga Anyar|🏡/i.test(String(welcomeEmbed.title || ""))) welcomeEmbed.title = DESA_TULUS_WELCOME_TITLE;
   if (!String(welcomeEmbed.content || "").trim() || String(welcomeEmbed.content || "").trim() === "{memberTulusRole}") welcomeEmbed.content = "";
+
+  next.suggestion = next.suggestion && typeof next.suggestion === "object" ? next.suggestion : {};
+  next.suggestion.enabled = next.suggestion.enabled !== false;
+  next.suggestion.buttonText = String(next.suggestion.buttonText || "📬 Kirim Saran").trim() || "📬 Kirim Saran";
+  next.suggestion.buttonOnResult = next.suggestion.buttonOnResult !== false;
+  next.suggestion.title = String(next.suggestion.title || "📬 Kotak Saran DESA TULUS").trim();
+  next.suggestion.description = String(next.suggestion.description || "Klik tombol di bawah untuk mengirim kritik atau saran. Setelah terkirim, warga bisa memberi tanggapan lewat reaction dan thread.").trim();
+  const suggestionEmbed = next.embeds.suggestionResult = next.embeds.suggestionResult && typeof next.embeds.suggestionResult === "object" ? next.embeds.suggestionResult : {};
+  suggestionEmbed.title = "📬 Kritik & Saran Baru";
+  suggestionEmbed.description = "**👤 Pengirim:**\n{user}\n\n**💬 Isi Saran:**\n{content}";
+  suggestionEmbed.footer = suggestionEmbed.footer || "DESA TULUS • Kritik & Saran Warga";
 
   const profile = next.embeds.levelProfile = next.embeds.levelProfile && typeof next.embeds.levelProfile === "object"
     ? next.embeds.levelProfile
@@ -11492,7 +11506,7 @@ app.put("/api/dashboard/settings", requireDashboardAuth, (req, res) => {
       if (!isSafeDashboardPath(pathText)) return res.status(400).json({ ok: false, error: `Path config tidak diizinkan: ${pathText}` });
       setDashboardPath(cfg, pathText, patch.value);
     }
-    cfg.version = "10.10.94";
+    cfg.version = "10.10.107";
     writeConfigFile(cfg);
     appendDashboardActivity("settings", "Setting dashboard disimpan", `${patches.length} field diperbarui melalui adapter aman.`);
     if (levelRoleConfigChanged) {
@@ -11512,7 +11526,7 @@ app.put("/api/dashboard/embed/:key", requireDashboardAuth, (req, res) => {
     const cfg = readConfigFile();
     cfg.embeds = cfg.embeds || {};
     cfg.embeds[key] = mergeDashboardEmbed(cfg.embeds[key] || {}, req.body?.embed || {});
-    cfg.version = "10.10.94";
+    cfg.version = "10.10.107";
     writeConfigFile(cfg);
     appendDashboardActivity("embed", "Template embed disimpan", `Template ${key} diperbarui dari Embed Builder.`);
     return res.json({ ok: true, embed: cfg.embeds[key] });
@@ -11599,7 +11613,7 @@ app.put("/api/afk-voice/config", requireDashboardAuth, async (req, res) => {
       if (!valid.ok) return res.status(400).json({ success: false, message: valid.message, errorCode: valid.errorCode });
     }
     cfg.afkVoice = next;
-    cfg.version = "10.10.94";
+    cfg.version = "10.10.107";
     writeConfigFile(cfg);
     appendDashboardActivity("afk-voice", "AFK Voice diperbarui", next.enabled ? `Channel voice ${next.channelId} diterapkan.` : "Fitur dinonaktifkan.");
 
@@ -11641,7 +11655,7 @@ app.post("/api/afk-voice/disconnect", requireDashboardAuth, async (req, res) => 
   if (!checkActionRateLimit()) return res.status(429).json({ success: false, message: "Tunggu sebentar sebelum memutus koneksi.", errorCode: "RATE_LIMITED" });
   const cfg = readConfigFile();
   cfg.afkVoice = { ...(cfg.afkVoice || {}), enabled: false, updatedAt: new Date().toISOString(), updatedBy: "dashboard" };
-  cfg.version = "10.10.94";
+  cfg.version = "10.10.107";
   writeConfigFile(cfg);
   const result = await disconnectAfkVoice({ disable: true });
   return res.json(result);
@@ -14169,7 +14183,12 @@ function getPakRwLevelSystemConfig() {
 
 function getPakRwLevelRoleName(level = 1) {
   const tier = getPakRwLevelRoleTier(level);
-  return String(tier?.roleName || tier?.name || "Warga Anyar").trim();
+  return getLevelRoleName(tier);
+}
+
+function getPakRwLevelRoleBaseName(level = 1) {
+  const tier = getPakRwLevelRoleTier(level);
+  return typeof getLevelRoleBaseName === "function" ? getLevelRoleBaseName(tier) : String(tier?.name || "Warga Anyar").trim();
 }
 
 function getLevelRoleByName(guild, level = 1) {
@@ -14185,7 +14204,7 @@ function getLevelRoleMention(level = 1, guild = null) {
 }
 
 function getDynamicLevelRoleNames() {
-  return new Set(getPakRwLevelRoleTiers().map((tier) => String(tier.roleName || tier.name || "").trim()).filter(Boolean));
+  return new Set(getPakRwLevelRoleTiers().map((tier) => String(tier.roleName || getLevelRoleName(tier) || "").trim()).filter(Boolean));
 }
 
 function getMemberConfiguredLevelRoleIds(member) {
@@ -14262,7 +14281,7 @@ async function positionLevelRoleAboveWarga(guild, role, options = {}) {
 
 async function ensureDynamicLevelRole(guild, tier, options = {}) {
   if (!guild || !tier) return null;
-  const roleName = String(tier.roleName || tier.name || "Warga Anyar").trim();
+  const roleName = getLevelRoleName(tier);
   let role = guild.roles.cache.find((item) => item.name === roleName && !item.managed)
     || await guild.roles.fetch().then((roles) => roles.find((item) => item.name === roleName && !item.managed)).catch(() => null);
   const botMember = guild.members.me || await guild.members.fetchMe().catch(() => null);
@@ -22085,7 +22104,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const suggestionChannel = getTextChannel(interaction.guild, config.suggestionChannelId) || interaction.channel;
       const sent = await safeSend(suggestionChannel, {
-        embeds: [embed]
+        embeds: [embed],
+        components: config.suggestion?.buttonOnResult !== false ? [suggestionPanelRow()] : []
       });
 
       if (sent) await setupSuggestionDiscussion(sent);
