@@ -313,7 +313,7 @@ Renderer KTP mendaftarkan DejaVu Sans dari dependency `dejavu-fonts-ttf` melalui
 - Overlay keterbacaan dibuat sangat tipis; bingkai, teks, avatar, tanggal, dan footer tetap rapi di dalam kartu.
 - AI v10.10.90, font Railway v10.10.89, AFK Voice v10.10.87, MongoDB, level, poin, role, dashboard, dan data lama tetap dipertahankan.
 
-## Pak RW v10.10.90 — AI GPT-5.4, Memori Per Warga, dan Pengetahuan Server Live
+## Pak RW v10.10.90 — AI GPT-4o mini, Memori Per Warga, dan Pengetahuan Server Live
 
 - Pak RW mengenal dirinya sebagai **Pak RW DESA TULUS** dan mengenal owner server sebagai **BEKIW**.
 - Pak RW memanggil warga dengan sebutan **nak** secara natural tanpa mengulanginya di setiap kalimat.
@@ -321,7 +321,7 @@ Renderer KTP mendaftarkan DejaVu Sans dari dependency `dejavu-fonts-ttf` melalui
 - Memori dibatasi hingga 10 turn per warga, maksimal 600 warga, dan pola token/kunci API disensor sebelum disimpan.
 - Direktori channel dibaca langsung dari guild sesuai permission warga. Pak RW tidak mengarang channel atau role yang tidak ditemukan.
 - Mode curhat dipisahkan dari mode tanya umum: Pak RW mendengarkan lebih dulu dan tidak mengubah curhat menjadi tutorial bot kecuali diminta.
-- Router hemat memakai `openai/gpt-5.4-mini` untuk pertanyaan rutin dan `openai/gpt-5.4` untuk pertanyaan kompleks.
+- Router hemat memakai `openai/gpt-4o-mini` untuk pertanyaan rutin dan `openai/gpt-4o-mini` untuk pertanyaan kompleks.
 - Cache AI sekarang terpisah per warga agar jawaban atau konteks tidak tertukar.
 - KTP v10.10.89, AFK Voice v10.10.87, MongoDB, level, poin, role, dashboard, serta data lama tetap dipertahankan.
 
@@ -353,3 +353,31 @@ Owner command tambahan:
 - `rwaifallback` / `pakaifallback` mengetes gaya fallback natural.
 
 Data member, memory lama, level, role, welcome, curhat, saran, voting, KTP, AFK Voice, dan dashboard lama tidak direset.
+
+## Update v10.10.100
+
+- Background KTP diganti memakai asset baru dari user tanpa membuat gambar baru.
+- Format Kritik & Saran menjadi `📬 Kritik & Saran Baru` dengan bagian `👤 Pengirim` dan `💬 Isi Saran`.
+- Warna embed default dan warna tiap template embed dapat diedit dari dashboard.
+- Fitur lain tetap aman tanpa reset data.
+
+## Pak RW v10.10.100 — Label Top Chat dan Top Voice Lebih Singkat
+
+- Label field board Top Aktif yang sebelumnya `Top Voice Bulanan` diganti menjadi `Top Voice:`.
+- Label field board Top Aktif yang sebelumnya `Top Chat Bulanan` diganti menjadi `Top Chat:`.
+- Config lama yang masih menyimpan label `Top Voice Bulanan` atau `Top Chat Bulanan` otomatis dinormalisasi saat render, tanpa mereset config/data.
+- Command `rwtopchat` dan `rwtopvoice` juga memakai judul singkat `Top Chat:` dan `Top Voice:`.
+- Fitur lain tetap tidak diubah.
+
+
+## Update v10.10.101
+
+- Welcome default diganti menjadi teks Wilujeung sumping yang diminta, dengan mention role warga lewat `{memberTulusRole}`.
+- Kritik & Saran tidak lagi memakai tombol Setuju/Tidak Setuju; pesan saran otomatis diberi reaction ✅ dan ❌.
+- Setiap saran baru otomatis dibuat thread `💬 Berikan Tanggapan`.
+- Embed Papan Aktif lifetime dibuat lebih ringkas: title TOP AKTIF WARGA SEPANJANG WAKTU, update 00.00 WIB, dan daftar peringkat warga saja.
+- Fitur lain tidak diubah dan data lama tidak direset.
+
+## v10.10.102 — Auto Level Role On-Demand
+
+Role level sekarang dibuat otomatis hanya ketika ada warga yang mendapat tier tersebut. Tidak perlu membuat role manual dari dashboard. Role otomatis memakai warna default/no color, dicoba diposisikan di atas role Warga, dan role kosong dibersihkan otomatis. Level maksimal tetap 1000 dengan role `Karuhun Desa (Lvl. Max)`. Data level, poin, dan member tidak direset.

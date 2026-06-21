@@ -93,7 +93,7 @@ const {
   const backgroundHash = crypto.createHash("sha256").update(backgroundBytes).digest("hex");
   assert.strictEqual(
     backgroundHash,
-    "318a72adcb8d2857c50877699b89122000a75d604b0256d446c74e74aa86c59a",
+    "e8149cf87ddf8f522c5ddc5f278342add67383d2f9679144200312457224e36d",
     "File background harus sama persis dengan PNG yang diberikan owner"
   );
 

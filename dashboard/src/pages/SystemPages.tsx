@@ -17,7 +17,7 @@ export function ActivityPage() {
 }
 
 const channelBindings = [
-  ["welcome.channelId", "Welcome", "Channel sambutan warga baru"], ["rulesChannelId", "Aturan Desa", "Channel aturan"], ["chatWargaChannelId", "Chat Warga", "Channel percakapan utama"], ["ticketChannelId", "Ticket", "Channel bantuan"], ["aiChannelId", "AI Pak RW", "Channel tanya Pak RW"], ["curhatChannelId", "Curhat", "Channel curhat warga"], ["anonymousCurhatChannelId", "Curhat Anonim", "Channel curhat anonim"], ["suggestionChannelId", "Saran", "Channel kotak saran"], ["levelChannelId", "Level", "Channel level warga"], ["cekPoinChannelId", "Cek Poin", "Channel cek poin"], ["topActive.channelId", "Top Aktif", "Channel leaderboard bulanan"], ["leaderboardAktif.channelId", "Papan Aktif", "Channel leaderboard lifetime"], ["mabar.channelId", "Cari Mabar", "Channel panel mabar"], ["ktpSystem.channelId", "KTP Warga", "Channel privat pembuatan KTP"], ["afkVoice.channelId", "AFK Voice 24/7", "Voice channel tempat Pak RW berjaga"], ["boostPoin.channelId", "Boost Poin", "Channel event boost poin"]
+  ["welcome.channelId", "Welcome", "Channel sambutan warga baru"], ["rulesChannelId", "Aturan Desa", "Channel aturan"], ["chatWargaChannelId", "Chat Warga", "Channel percakapan utama"], ["ticketChannelId", "Ticket", "Channel bantuan"], ["loket.panelChannelId", "Loket Panel", "Channel panel loket bantuan"], ["loket.categoryId", "Kategori Loket", "Kategori ruang loket"], ["loket.logChannelId", "Log Loket", "Channel log loket"], ["aiChannelId", "AI Pak RW", "Channel tanya Pak RW"], ["curhatChannelId", "Curhat", "Channel curhat warga"], ["anonymousCurhatChannelId", "Curhat Anonim", "Channel curhat anonim"], ["suggestionChannelId", "Saran", "Channel kotak saran"], ["levelChannelId", "Level", "Channel level warga"], ["cekPoinChannelId", "Cek Poin", "Channel cek poin"], ["topActive.channelId", "Top Aktif", "Channel leaderboard bulanan"], ["leaderboardAktif.channelId", "Papan Aktif", "Channel leaderboard lifetime"], ["mabar.channelId", "Cari Mabar", "Channel panel mabar"], ["ktpSystem.channelId", "KTP Warga", "Channel privat pembuatan KTP"], ["afkVoice.channelId", "AFK Voice 24/7", "Voice channel tempat Pak RW berjaga"], ["boostPoin.channelId", "Boost Poin", "Channel event boost poin"]
 ] as const;
 
 const roleBindings = [
@@ -77,14 +77,45 @@ export function BackupPage() {
 
 export function SettingsPage() {
   const { data, refresh, notify } = useDashboard();
-  const initial = useMemo(() => ({ serverName: data.config.serverName || "DESA TULUS", ownerName: data.config.ownerName || "Pak RW", embedColor: data.config.embedColor || "#7DBD77" }), [data]);
+  const embedEntries = useMemo(() => Object.entries(data.embeds || {}).filter(([key]) => key !== "dashboard"), [data.embeds]);
+  const buildColorMap = () => Object.fromEntries(embedEntries.map(([key, value]: any) => [key, String((value as any)?.color || data.config.embedColor || "#7DBD77")]));
+  const initial = useMemo(() => ({
+    serverName: data.config.serverName || "DESA TULUS",
+    ownerName: data.config.ownerName || "Pak RW",
+    embedColor: data.config.embedColor || "#7DBD77",
+    suggestionDescription: data.config.embeds?.suggestionResult?.description || "👤 Pengirim:\n{user} atau anonim\n\n💬 Isi Saran:\n{content}",
+    suggestionTitle: data.config.embeds?.suggestionResult?.title || "📬 Kritik & Saran Baru"
+  }), [data]);
   const [values, setValues] = useState(initial);
+  const [embedColors, setEmbedColors] = useState<Record<string, string>>({});
+  const [initialEmbedColors, setInitialEmbedColors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   useEffect(() => setValues(initial), [initial]);
-  const dirty = values.serverName !== initial.serverName || values.ownerName !== initial.ownerName || values.embedColor !== initial.embedColor;
-  const cancel = () => { setValues(initial); notify("Perubahan settings dibatalkan.", "info"); };
-  const save = async () => { setSaving(true); try { await api.savePatches([{ path: "serverName", value: values.serverName }, { path: "ownerName", value: values.ownerName }, { path: "embedColor", value: values.embedColor }]); await refresh(); notify("Settings berhasil disimpan."); } catch (error) { notify(error instanceof Error ? error.message : String(error), "error"); } finally { setSaving(false); } };
-  return <div className="page-stack page-enter"><PageHeader icon={Settings} kicker="System" title="Settings" description="Identitas dashboard dan nilai tampilan yang aman diubah." /><Card><CardHeader title="Identitas" description="Prefix publik tetap rw dan tidak diubah dari halaman ini." /><div className="form-grid two-columns"><div className="form-field"><label>Nama server</label><input value={values.serverName} onChange={(event) => setValues((current) => ({ ...current, serverName: event.target.value }))} /></div><div className="form-field"><label>Nama owner</label><input value={values.ownerName} onChange={(event) => setValues((current) => ({ ...current, ownerName: event.target.value }))} /></div><div className="form-field"><label>Warna embed default</label><div className="color-field"><input type="color" value={values.embedColor} onChange={(event) => setValues((current) => ({ ...current, embedColor: event.target.value }))} /><input value={values.embedColor} onChange={(event) => setValues((current) => ({ ...current, embedColor: event.target.value }))} /></div></div><div className="form-field"><label>Prefix publik</label><input value={data.status.prefix} disabled /></div></div></Card>{dirty ? <div className="page-save-bar page-save-bar-dirty"><div><strong>Perubahan settings belum disimpan</strong><span>Simpan untuk menerapkan identitas baru, atau Batal untuk mengembalikan nilai awal.</span></div><div><Button variant="secondary" icon={<RefreshCcw size={16} />} onClick={cancel} disabled={saving}>Batal</Button><Button icon={<Save size={16} />} onClick={save} disabled={saving}>{saving ? "Menyimpan" : "Simpan"}</Button></div></div> : null}</div>;
+  useEffect(() => { const next = buildColorMap(); setEmbedColors(next); setInitialEmbedColors(next); }, [data, embedEntries.length]);
+  const dirty = values.serverName !== initial.serverName || values.ownerName !== initial.ownerName || values.embedColor !== initial.embedColor || values.suggestionDescription !== initial.suggestionDescription || values.suggestionTitle !== initial.suggestionTitle || JSON.stringify(embedColors) !== JSON.stringify(initialEmbedColors);
+  const cancel = () => { setValues(initial); setEmbedColors(initialEmbedColors); notify("Perubahan settings dibatalkan.", "info"); };
+  const save = async () => {
+    setSaving(true);
+    try {
+      const patches: Array<{ path: string; value: unknown }> = [
+        { path: "serverName", value: values.serverName },
+        { path: "ownerName", value: values.ownerName },
+        { path: "embedColor", value: values.embedColor },
+        { path: "embeds.suggestionResult.title", value: values.suggestionTitle },
+        { path: "embeds.suggestionResult.description", value: values.suggestionDescription },
+        { path: "embeds.suggestionResult.footer", value: "DESA TULUS • Kritik & Saran Warga" }
+      ];
+      Object.entries(embedColors).forEach(([key, value]) => patches.push({ path: `embeds.${key}.color`, value }));
+      await api.savePatches(patches);
+      await refresh();
+      notify("Settings berhasil disimpan.");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : String(error), "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+  return <div className="page-stack page-enter"><PageHeader icon={Settings} kicker="System" title="Settings" description="Identitas dashboard, format kritik & saran, dan warna semua embed yang aman diubah." /><Card><CardHeader title="Identitas" description="Prefix publik tetap rw dan tidak diubah dari halaman ini." /><div className="form-grid two-columns"><div className="form-field"><label>Nama server</label><input value={values.serverName} onChange={(event) => setValues((current) => ({ ...current, serverName: event.target.value }))} /></div><div className="form-field"><label>Nama owner</label><input value={values.ownerName} onChange={(event) => setValues((current) => ({ ...current, ownerName: event.target.value }))} /></div><div className="form-field"><label>Warna embed default</label><div className="color-field"><input type="color" value={values.embedColor} onChange={(event) => setValues((current) => ({ ...current, embedColor: event.target.value }))} /><input value={values.embedColor} onChange={(event) => setValues((current) => ({ ...current, embedColor: event.target.value }))} /></div></div><div className="form-field"><label>Prefix publik</label><input value={data.status.prefix} disabled /></div></div></Card><Card><CardHeader title="Format Kritik & Saran" description="Tampilan embed saran warga bisa dirapikan langsung dari dashboard." /><div className="form-grid"><div className="form-field"><label>Judul embed saran</label><input value={values.suggestionTitle} onChange={(event) => setValues((current) => ({ ...current, suggestionTitle: event.target.value }))} /></div><div className="form-field"><label>Isi embed saran</label><textarea rows={7} value={values.suggestionDescription} onChange={(event) => setValues((current) => ({ ...current, suggestionDescription: event.target.value }))} /><small className="muted-copy">Placeholder aman: {'{user}'}, {'{content}'}, {'{title}'}. Format default: Pengirim lalu Isi Saran.</small></div></div></Card><Card><CardHeader title="Warna Semua Embed" description="Semua warna embed yang ada di config bisa diedit langsung dari dashboard tanpa buka code." /><div className="form-grid two-columns">{embedEntries.map(([key]) => <div className="form-field" key={key}><label>{key}</label><div className="color-field"><input type="color" value={embedColors[key] || "#7DBD77"} onChange={(event) => setEmbedColors((current) => ({ ...current, [key]: event.target.value }))} /><input value={embedColors[key] || "#7DBD77"} onChange={(event) => setEmbedColors((current) => ({ ...current, [key]: event.target.value }))} /></div></div>)}</div></Card>{dirty ? <div className="page-save-bar page-save-bar-dirty"><div><strong>Perubahan settings belum disimpan</strong><span>Simpan untuk menerapkan format saran dan warna embed baru, atau Batal untuk mengembalikan nilai awal.</span></div><div><Button variant="secondary" icon={<RefreshCcw size={16} />} onClick={cancel} disabled={saving}>Batal</Button><Button icon={<Save size={16} />} onClick={save} disabled={saving}>{saving ? "Menyimpan" : "Simpan"}</Button></div></div> : null}</div>;
 }
 
 export function BannerManagerPage() {

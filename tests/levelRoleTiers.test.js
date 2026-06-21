@@ -9,10 +9,7 @@ const {
   getLevelRoleTiers
 } = require("../level/levelRoleTiers");
 
-const roles = Object.fromEntries(
-  LEVEL_ROLE_TIER_DEFINITIONS.map((tier, index) => [String(tier.level), String(100000000000000000n + BigInt(index))])
-);
-const config = { levelSystem: { enabled: true, autoLevelRole: true, roles } };
+const config = { levelSystem: { enabled: true, autoLevelRole: true, roles: {}, autoRoleMode: "dynamic_on_demand" } };
 
 const cases = [
   [1, "Warga Anyar"], [4, "Warga Anyar"],
@@ -40,5 +37,7 @@ assert.equal(clampLevel(0), 1);
 assert.equal(clampLevel(5000), 1000);
 assert.equal(getLevelRoleTiers(config).length, 14);
 assert.equal(new Set(getLevelRoleTiers(config).map((tier) => tier.name)).size, 14);
+assert.equal(getLevelTier(1000, config).roleName, "Karuhun Desa (Lvl. Max)");
+assert.equal(getLevelRoleTiers(config).every((tier) => tier.roleId === ""), true);
 
-console.log("✅ Auto Level Role tier tests: 28 boundary cases passed.");
+console.log("✅ Auto Level Role dynamic tier tests: 28 boundary cases passed, role manual tidak dipakai, Lvl Max benar.");

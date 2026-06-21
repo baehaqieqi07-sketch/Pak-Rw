@@ -8,12 +8,13 @@ try {
   config = require("../config.example.json");
 }
 
-const DEFAULT_SMART_MODEL = "openai/gpt-5.4";
-const DEFAULT_ECONOMY_MODEL = "openai/gpt-5.4-mini";
+const DEFAULT_SMART_MODEL = "openai/gpt-4o-mini";
+const DEFAULT_ECONOMY_MODEL = "openai/gpt-4o-mini";
 const LEGACY_MODELS = new Set([
-  "openai/gpt-4o-mini",
   "openai/gpt-5-mini",
-  "openai/gpt-5.2-pro"
+  "openai/gpt-5.2-pro",
+  "openai/gpt-5.4",
+  "openai/gpt-5.4-mini"
 ]);
 const MAX_MEMORY_USERS = 600;
 const MAX_MEMORY_TURNS = 10;
@@ -537,6 +538,8 @@ function normalizeAiContext(context = {}) {
     channelName: cleanText(context.channelName || ""),
     channelDirectory: String(context.channelDirectory || "").slice(0, 2200),
     roleDirectory: String(context.roleDirectory || "").slice(0, 1200),
+    memberDirectory: String(context.memberDirectory || "").slice(0, 2200),
+    channelMode: cleanText(context.channelMode || detectChannelMode(context.channelName || "", context.mode || "normal")),
     isOwner: Boolean(context.isOwner),
     ownerName: cleanText(context.ownerName || config.ownerName || "BEKIW") || "BEKIW"
   };
@@ -774,10 +777,26 @@ function getOwnerName(context = {}) {
   return configured;
 }
 
+function detectChannelMode(channelName = "", mode = "normal") {
+  const name = cleanText(channelName).toLowerCase();
+  if (mode === "curhat" || hasAny(name, ["curhat", "keluh", "cerita", "ruang-hati", "hati"])) return "curhat";
+  if (hasAny(name, ["nanya", "tanya", "pertanyaan", "pak-rw", "ai", "bantuan"])) return "pertanyaan";
+  if (hasAny(name, ["saran", "voting", "vote", "usul"])) return "saran_voting";
+  if (hasAny(name, ["lapor", "ticket", "report", "mod", "staff"])) return "laporan";
+  if (hasAny(name, ["ktp", "warga", "balai", "umum", "chat"])) return "warga_umum";
+  return mode === "juragan" ? "juragan" : "umum";
+}
+
 function needsServerContext(userText = "", mode = "normal") {
   const msg = cleanText(userText).toLowerCase();
   if (mode === "curhat") return false;
-  return hasAny(msg, ["channel", "role", "dashboard", "fitur", "command", "server", "welcome", "curhat", "saran", "voting", "panel", "permission", "ktp", "level"]);
+  return hasAny(msg, ["channel", "role", "dashboard", "fitur", "command", "server", "welcome", "curhat", "saran", "voting", "panel", "permission", "ktp", "level", "tag", "mention", "sebut", "panggil", "user", "member", "orang"]);
+}
+
+function needsMemberContext(userText = "", mode = "normal") {
+  const msg = cleanText(userText).toLowerCase();
+  if (mode === "curhat") return false;
+  return hasAny(msg, ["tag user", "tag member", "mention user", "mention member", "tag orang", "panggil", "sebut", "user", "member", "orang", "siapa"]);
 }
 
 function filterDirectory(directory = "", userText = "", maxLines = 10) {
@@ -791,18 +810,30 @@ function filterDirectory(directory = "", userText = "", maxLines = 10) {
 
 function serverContext(context = {}, userText = "", mode = "normal") {
   const ctx = normalizeAiContext(context);
-  if (!needsServerContext(userText, mode)) return "Server context: tidak dikirim karena chat ini tidak butuh daftar server.";
-  const channels = filterDirectory(ctx.channelDirectory, userText, 12);
-  const roles = filterDirectory(ctx.roleDirectory, userText, 8);
-  return truncateText([
+  const channelMode = ctx.channelMode || detectChannelMode(ctx.channelName, mode);
+  const lines = [
     `Server: ${ctx.guildName || config.serverName || "DESA TULUS"}. Owner: ${getOwnerName(ctx)}. Prefix: ${config.prefix || "rw"}.`,
-    `Channel sekarang: ${ctx.channelName ? `#${ctx.channelName}` : "tidak diketahui"}${ctx.channelId ? ` (${ctx.channelId})` : ""}.`,
-    channels ? `Channel relevan:\n${channels}` : "Channel relevan: belum tersedia; jangan mengarang channel.",
-    roles ? `Role relevan:\n${roles}` : "Role relevan: belum tersedia; jangan mengarang role.",
-    "Pakai hanya data di atas. Kalau tidak ada, minta owner cek dashboard."
-  ].join("\n"), 1800);
-}
+    `Channel sekarang: ${ctx.channelName ? `#${ctx.channelName}` : "tidak diketahui"}${ctx.channelId ? ` (<#${ctx.channelId}>)` : ""}.`,
+    `Mode channel: ${channelMode}. Jawaban harus menyesuaikan channel: pertanyaan untuk tanya-jawab, curhat untuk mendengarkan, saran/voting untuk usulan, laporan untuk masalah warga.`
+  ];
 
+  if (needsServerContext(userText, mode)) {
+    const channels = filterDirectory(ctx.channelDirectory, userText, 16);
+    const roles = filterDirectory(ctx.roleDirectory, userText, 10);
+    lines.push(channels ? `Channel relevan yang boleh ditag pakai format aslinya:\n${channels}` : "Channel relevan: belum tersedia; jangan mengarang channel.");
+    lines.push(roles ? `Role relevan yang boleh ditag pakai format aslinya:\n${roles}` : "Role relevan: belum tersedia; jangan mengarang role.");
+  } else {
+    lines.push("Daftar channel/role penuh tidak dikirim supaya hemat token. Kalau user minta tag channel/role, pakai context relevan yang tersedia atau minta nama yang dicari.");
+  }
+
+  if (needsMemberContext(userText, mode)) {
+    const members = filterDirectory(ctx.memberDirectory, userText, 16);
+    lines.push(members ? `Member relevan yang boleh ditag pakai format aslinya:\n${members}` : "Member relevan: belum tersedia; kalau user minta tag user tertentu, minta nama/ID yang lebih jelas.");
+  }
+
+  lines.push("Jika user minta tag channel, gunakan <#channelId>. Jika user minta tag user, gunakan <@userId>. Jangan tulis ID polos kalau mention tersedia.");
+  return truncateText(lines.join("\n"), 2200);
+}
 function makeDiscordAnswer(userText) {
   const text = cleanText(userText);
   const tone = localPrefix(text);
@@ -1128,15 +1159,17 @@ function buildSystemPrompt(userText, mode = "normal", context = {}) {
       : "MODE WARGA UMUM: bantu sebaik mungkin, ringkas jika chat pendek, runtut jika masalah teknis.";
   const base = [
     `Kamu adalah Pak RW, bot warga DESA TULUS. Owner server adalah ${ownerName}.`,
-    `Warga saat ini: ${ctx.displayName} (@${ctx.username}, ID ${ctx.userId}). Panggil warga ini “nak” secara natural.`,
+    `Warga saat ini: ${ctx.displayName} (@${ctx.username}, ID ${ctx.userId}). Panggil warga ini “nak” secara natural, tidak berlebihan.`,
+    `Mode channel: ${ctx.channelMode || detectChannelMode(ctx.channelName, mode)}. Sesuaikan bahasan dengan channel ini.`,
     modeRule,
-    "Jawab seperti chat orang asli: jelas, natural, sopan, hangat, tidak kaku, tidak template kosong. Ikuti gaya bahasa user.",
-    "Kalau user curhat, dengarkan dulu. Kalau user minta solusi, jawab langsung ke langkah yang bisa dilakukan. Jangan terlalu panjang kecuali diminta.",
-    "Jangan mengarang data server. Jangan membocorkan token, API key, atau memory warga lain.",
-    languageRule(userText),
-    truncateText(styleRule(userText), 420),
+    "Jawab seperti chat orang asli: hidup, nyambung, rapi, tidak kaku, tidak alay, tidak lebay, dan jangan terasa seperti AI/bot.",
+    "Gunakan GPT-4o-mini secara hemat: tetap pintar, tapi prompt jangan boros. Jawaban boleh berisi dan cukup panjang kalau user memang butuh penjelasan, bukan pendek kosong.",
+    "Kalau user bertanya, jawab langsung. Kalau user curhat, dengarkan dan balas manusiawi. Kalau user minta tag channel/user, pakai mention <#id> atau <@id> dari context yang tersedia.",
+    "Jangan mengarang data server. Jangan membocorkan token, API key, atau memory warga lain. Jangan memakai template pembuka yang sama berulang.",
+    serverContext(ctx, userText, mode),
     buildMemoryPrompt(ctx),
-    serverContext(ctx, userText, mode)
+    languageRule(userText),
+    truncateText(styleRule(userText), 360)
   ];
   return truncateText(base.join("\n"), systemCap);
 }
@@ -1414,6 +1447,8 @@ module.exports = {
     getAiLimitState: summarizeAiLimitStatus,
     resetAiLimitState,
     trimAiPayloadToBudget,
-    localLimitFallback
+    localLimitFallback,
+    detectChannelMode,
+    needsMemberContext
   }
 };

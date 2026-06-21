@@ -11,6 +11,8 @@ const userA = {
   channelName: "nanya-pak-rw",
   channelDirectory: "<#111> • nanya-pak-rw • text • kategori: BALAI WARGA\n<#222> • curhat-warga • text • kategori: RUANG WARGA",
   roleDirectory: "<@&333> • Warga Tetap",
+  memberDirectory: "<@1111> • Asep • @asep\n<@2222> • Dede • @dede",
+  channelMode: "pertanyaan",
   ownerName: "BEKIW"
 };
 
@@ -35,19 +37,21 @@ assert.match(memoryB, /desain banner/i);
 assert.doesNotMatch(memoryB, /belajar JavaScript/i);
 
 const simpleQueue = __test.getModelQueue("halo pak rw", "normal");
-assert.equal(simpleQueue[0], "openai/gpt-5.4-mini");
+assert.equal(simpleQueue[0], "openai/gpt-4o-mini");
 
 const complexQueue = __test.getModelQueue(
   "Tolong audit arsitektur database MongoDB dan refactor bug Discord.js langkah demi langkah dari nol",
   "normal"
 );
-assert.equal(complexQueue[0], "openai/gpt-5.4");
+assert.equal(complexQueue[0], "openai/gpt-4o-mini");
 
-const prompt = __test.buildSystemPrompt("channel curhat ada di mana?", "normal", userA);
+const prompt = __test.buildSystemPrompt("tag user Asep dan channel curhat ada di mana?", "normal", userA);
 assert.match(prompt, /Pak RW/i);
 assert.match(prompt, /Owner server adalah BEKIW/i);
 assert.match(prompt, /Panggil warga ini “nak”/i);
 assert.match(prompt, /<#222>/);
+assert.match(prompt, /Mode channel: pertanyaan/i);
+assert.match(prompt, /<@1111>|<@2222>/);
 assert.match(prompt, /Memory warga ini saja|memori/i);
 
 const curhatPrompt = __test.buildSystemPrompt("aku lagi sedih", "curhat", userA);
@@ -82,7 +86,7 @@ assert.equal(__test.classifyAiError({ response: { status: 429, data: { error: "r
 assert.equal(__test.classifyAiError({ response: { status: 402, data: { error: "insufficient credits" } } }).type, "credit_limit");
 assert.equal(__test.classifyAiError({ message: "Prompt tokens limit exceeded: 4266 > 3462" }).type, "token_limit");
 
-const budgeted = __test.trimAiPayloadToBudget("openai/gpt-5.4-mini", "halo ".repeat(1200), "normal", userA);
+const budgeted = __test.trimAiPayloadToBudget("openai/gpt-4o-mini", "halo ".repeat(1200), "normal", userA);
 assert.equal(budgeted.allowed, true);
 assert.ok(budgeted.tokens <= __test.aiBudgetConfig().tokenBudget, `prompt budget terlalu besar: ${budgeted.tokens}`);
 
@@ -99,4 +103,8 @@ assert.doesNotMatch(sanitized, /Pak RW tangkap inti pesannya/i);
 assert.doesNotMatch(sanitized, /belum dapat detail/i);
 assert.match(sanitized, /Pak RW di sini|Mau tanya apa/i);
 
-console.log("✅ AI Pak RW tests berhasil: identitas, memori per user, router, konflik, dan gaya chat natural tanpa template kosong lulus.");
+assert.equal(__test.detectChannelMode("nanya-pak-rw", "normal"), "pertanyaan");
+assert.equal(__test.detectChannelMode("curhat-warga", "normal"), "curhat");
+assert.equal(__test.needsMemberContext("tag user Asep dong", "normal"), true);
+
+console.log("✅ AI Pak RW tests berhasil: GPT-4o mini hemat, identitas, memori per user, channel mode, mention user/channel, konflik, dan gaya chat natural lulus.");

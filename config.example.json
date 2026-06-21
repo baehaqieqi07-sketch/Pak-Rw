@@ -28,21 +28,21 @@
   "welcome": {
     "enabled": true,
     "sendToChatWarga": true,
-    "title": "🏡 Wilujeung Sumping Warga Anyar! {displayName}",
-    "message": "Sambut warga anyar barudak {memberTulusRole}\n\nPak RW menyambut {user} sebagai bagian dari DESA TULUS. Semoga betah, rukun, dan saling menghargai.\n\n📌 Baca aturan desa: {rulesChannel}\n💬 Kenalan di chat warga: {chatWargaChannel}\n🎫 Butuh bantuan? Buka ticket: {ticketChannel}\n\nKamu warga ke-{memberCount} di desa ini. Wilujeung sumping, semoga betah di lembur urang 🤍",
+    "title": "Wilujeung sumping, {displayName}!",
+    "message": "Wilujeung sumping, **{user}!**\nakhirnya mampir juga ke {server}.\nDi sini tempatnya ngobrol santai, saling kenal, curhat, bercanda, dan jadi bagian dari warga Desa Tulus.\n\nJangan sungkan buat mulai ngobrol ya. Semoga betah di sini",
     "style": "desa_tulus_indonesia_jelas_wilujeung_sumping",
     "dashboardHelp": "Welcome sinkron dashboard baru: channel welcome, role Member Tulus, rules, chat warga, ticket, content, embed, image, preview, dan test send.",
-    "content": "🤍 Sambut warga anyar barudak {user} {memberTulusRole}",
+    "content": "{memberTulusRole}",
     "memberRoleId": "",
-    "memberRoleName": "Member Tulus",
+    "memberRoleName": "Warga",
     "imageUrl": "",
     "thumbnailMode": "user",
     "channelId": "1504495053224284400"
   },
   "ai": {
     "cooldownMs": 12000,
-    "maxMessageLength": 1300,
-    "openRouterModel": "openai/gpt-5.4-mini",
+    "maxMessageLength": 1800,
+    "openRouterModel": "openai/gpt-4o-mini",
     "styleMode": "pak_rw_natural_nak_contextual_hemat_dashboard_rebuild_v10_10_63",
     "pronounMode": "auto",
     "allowMildProfanity": false,
@@ -54,10 +54,10 @@
     "featureGuideEnabled": true,
     "followUserPronoun": true,
     "fallbackModels": [
-      "openai/gpt-5.4-mini"
+      "openai/gpt-4o-mini"
     ],
     "proModeEnabled": true,
-    "proModeNote": "Router AI memakai OpenAI GPT-5.4 untuk pertanyaan kompleks dan GPT-5.4 mini untuk pertanyaan rutin melalui OpenRouter.",
+    "proModeNote": "Pak RW kembali memakai OpenAI GPT-4o mini melalui OpenRouter agar hemat seperti Bekiw OT lama, tetap channel-aware, memory per warga, dan natural.",
     "toxicityMode": "formal_sopan_tegas_aman",
     "profanityLevel": "none",
     "toxicReplyWhenUserHarsh": false,
@@ -72,7 +72,7 @@
     "premiumPersonality": "pak_rw_besar_desa_tulus_indonesia_jelas_ngayomi_solutif",
     "comedyModeEnabled": true,
     "usefulFeatureMode": true,
-    "responseQuality": "pak_rw_gpt_5_4_contextual_memory_per_user_clear_hemat_v10_10_90",
+    "responseQuality": "pak_rw_gpt_4o_mini_bekiw_ot_style_natural_channel_aware_v10_10_98",
     "premiumRules": [
       "Jawaban harus rapi, sopan, formal-natural, ringkas tapi jelas, dan terasa seperti Pak RW DESA TULUS.",
       "Default Bahasa Indonesia. Jangan campur Basa Sunda kecuali user meminta Bahasa Sunda atau hanya frasa khas welcome.",
@@ -221,10 +221,10 @@
     "contextSync": "Pak RW membaca direktori channel dan role langsung dari guild saat menjawab, memakai memori MongoDB yang terpisah per guildId:userId, mengenal owner BEKIW, serta memahami fitur DESA TULUS tanpa mengarang channel atau role.",
     "intentRouterEnabled": true,
     "dashboardContextMode": "pak_rw_dashboard_level_embed_discord_deploy_contextual",
-    "smartModel": "openai/gpt-5.4",
-    "economyModel": "openai/gpt-5.4-mini",
+    "smartModel": "openai/gpt-4o-mini",
+    "economyModel": "openai/gpt-4o-mini",
     "modelRouterEnabled": true,
-    "modelRouterRule": "Pertanyaan rutin memakai GPT-5.4 mini; pertanyaan kompleks, coding, audit, dan Juragan memakai GPT-5.4.",
+    "modelRouterRule": "Semua mode default memakai GPT-4o mini. Pertanyaan kompleks tetap diberi prompt lebih rapi, bukan dialihkan ke model mahal.",
     "memoryEnabled": true,
     "memoryScope": "guildId:userId",
     "memoryMaxTurns": 10,
@@ -254,8 +254,8 @@
     "maxMemoryChars": 900,
     "maxHistoryTurns": 2,
     "maxUserMessageChars": 1500,
-    "maxReplyTokens": 500,
-    "safeReplyTokens": 350,
+    "maxReplyTokens": 750,
+    "safeReplyTokens": 500,
     "fallbackTemporary": true,
     "localFallbackOnlyThisMessage": true,
     "storeLimitFallbackMemory": false,
@@ -271,7 +271,10 @@
     "curhatHistoryTurns": 2,
     "curhatMaxReplyTokens": 450,
     "fallbackMaxCharsMember": 350,
-    "fallbackMaxCharsOwner": 700
+    "fallbackMaxCharsOwner": 700,
+    "dynamicMemberKnowledge": true,
+    "channelModeAware": true,
+    "mentionPolicy": "Jika user minta tag channel/user, gunakan mention asli dari direktori guild: <#channelId> atau <@userId>. Jangan mengarang mention."
   },
   "panels": {
     "sendSuggestionPanelOnReady": false
@@ -466,9 +469,9 @@
     },
     "suggestionResult": {
       "color": "#7DBD77",
-      "title": "💡 Saran Warga",
-      "description": "{user} mengirim saran:\n\n{content}",
-      "footer": "DESA TULUS • Kotak Saran Pak RW",
+      "title": "📬 Kritik & Saran Baru",
+      "description": "👤 Pengirim:\n{user} atau anonim\n\n💬 Isi Saran:\n{content}",
+      "footer": "DESA TULUS • Kritik & Saran Warga",
       "image": "",
       "thumbnail": "avatar",
       "content": "",
@@ -542,11 +545,11 @@
     },
     "welcome": {
       "color": "#7DBD77",
-      "content": "🤍 Sambut warga anyar barudak {user} {memberTulusRole}",
+      "content": "{memberTulusRole}",
       "authorName": "DESA TULUS • Warga Baru",
       "authorIcon": "",
-      "title": "🏡 Wilujeung Sumping Warga Anyar! {displayName}",
-      "description": "Sambut warga anyar barudak {memberTulusRole}\n\nPak RW menyambut {user} sebagai bagian dari DESA TULUS. Semoga betah, rukun, dan saling menghargai.\n\n📌 Baca aturan desa: {rulesChannel}\n💬 Kenalan di chat warga: {chatWargaChannel}\n🎫 Butuh bantuan? Buka ticket: {ticketChannel}\n\nKamu warga ke-{memberCount} di desa ini. Wilujeung sumping, semoga betah di lembur urang 🤍",
+      "title": "Wilujeung sumping, {displayName}!",
+      "description": "Wilujeung sumping, **{user}!**\nakhirnya mampir juga ke {server}.\nDi sini tempatnya ngobrol santai, saling kenal, curhat, bercanda, dan jadi bagian dari warga Desa Tulus.\n\nJangan sungkan buat mulai ngobrol ya. Semoga betah di sini",
       "thumbnail": "avatar",
       "image": "",
       "footer": "DESA TULUS • Tempat warga baik berkumpul",
@@ -560,8 +563,8 @@
       "color": "#7DBD77",
       "content": "",
       "authorName": "",
-      "title": "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU",
-      "description": "Papan ini mencatat total poin warga dari awal bergabung sampai seterusnya. Data ini tidak di-reset meskipun siklus level kembali dari awal setelah 100.000 poin.\n\nAlur jelas: poin chat/voice masuk ke siklus level. Saat warga mencapai 100.000 poin, Pak RW memberi role Member Of The Month, lalu poin siklus level kembali dari awal. Poin di Papan Aktif ini tetap lanjut dan tidak di-reset.",
+      "title": "🏆 TOP AKTIF WARGA SEPANJANG WAKTU",
+      "description": "Update otomatis setiap hari pukul 00.00 WIB",
       "thumbnail": "",
       "image": "",
       "footer": "DESA TULUS • Leaderboard Aktif Warga",
@@ -615,6 +618,28 @@
       "dashboardGroup": "AI Pak RW",
       "dashboardEditable": true,
       "previewMustMatchDiscord": true
+    },
+    "loketPanel": {
+      "color": "#7DBD77",
+      "title": "🏛️ Loket Bantuan DESA TULUS",
+      "description": "Butuh bantuan staff atau Pak RW? Klik tombol **Buka Loket**. Isi alasan dengan jelas, nanti Pak RW siapkan ruang bantuan khusus untuk kamu.",
+      "footer": "DESA TULUS • Loket Pak RW",
+      "image": "",
+      "thumbnail": "",
+      "content": "",
+      "authorName": "DESA TULUS • Balai Warga Digital",
+      "fields": []
+    },
+    "loketOpened": {
+      "color": "#7DBD77",
+      "title": "🏛️ Loket Dibuka",
+      "description": "Wilujeung sumping di loket bantuan, {user}.\n\nCeritakan masalahnya dengan jelas. Pengurus akan bantu urutkan pelan-pelan.",
+      "footer": "DESA TULUS • Loket Bantuan",
+      "image": "",
+      "thumbnail": "",
+      "content": "",
+      "authorName": "Pak RW • DESA TULUS",
+      "fields": []
     }
   },
   "topActive": {
@@ -647,8 +672,8 @@
     "boardTitleTemplate": "🏆 TOP AKTIF WARGA BULAN {month} {server}",
     "boardUpdateText": "Update otomatis setiap hari pukul 00.00 WIB",
     "topActiveFieldTitle": "🏆 Top Aktif Bulanan",
-    "topVoiceFieldTitle": "🎙️ Top Voice Bulanan",
-    "topChatFieldTitle": "💬 Top Chat Bulanan",
+    "topVoiceFieldTitle": "Top Voice:",
+    "topChatFieldTitle": "Top Chat:",
     "motmReactionEmojis": "🔥,👏,🏆,🎉,🥳",
     "motmThreadArchiveMinutes": 1440,
     "bannerBgStart": "#080704",
@@ -695,8 +720,8 @@
     "manualMotmDashboardEnabled": true,
     "leaderboardActiveChannelId": "1516167288066281672",
     "leaderboardActiveTopLimit": 10,
-    "leaderboardActiveTitleTemplate": "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU",
-    "leaderboardActiveSubtitle": "Papan ini mencatat total poin warga dari awal bergabung sampai seterusnya. Data ini tidak di-reset meskipun siklus level kembali dari awal setelah 100.000 poin.",
+    "leaderboardActiveTitleTemplate": "🏆 TOP AKTIF WARGA SEPANJANG WAKTU",
+    "leaderboardActiveSubtitle": "Update otomatis setiap hari pukul 00.00 WIB",
     "leaderboardActiveFooter": "DESA TULUS • Leaderboard Aktif Warga",
     "leaderboardActiveImageUrl": "",
     "dashboardEditable": true,
@@ -758,7 +783,7 @@
     "easyEditMode": true,
     "showFeatureFlow": true,
     "showAiStylePanel": true,
-    "releaseVersion": "10.10.93",
+    "releaseVersion": "10.10.100",
     "releaseName": "KTP Warga dan AFK Voice Stabil",
     "premiumMode": true,
     "comfortMode": true,
@@ -784,11 +809,11 @@
     "placeholderSelectionMode": "channel_role_user_server_bot_live_from_discord",
     "discordPickerMode": "live_api",
     "discordPickerAutoRefresh": true,
-    "uiVersion": "10.10.93",
+    "uiVersion": "10.10.100",
     "architecture": "react_vite_static_dashboard_only",
     "backgroundStyle": "2d-village-premium",
-    "embedColorLocked": "#7DBD77",
-    "embedColorPolicy": "Semua embed Discord Pak RW memakai warna #7DBD77 agar konsisten.",
+    "embedColorLocked": "false",
+    "embedColorPolicy": "Warna embed Pak RW bisa diedit dari dashboard. Default tetap hijau DESA TULUS.",
     "ktpWargaEnabled": true
   },
   "featureFlow": {
@@ -799,7 +824,7 @@
     "step5": "Backup config setelah cocok supaya update berikutnya tetap aman dan tidak reset."
   },
   "featureSuite": {
-    "version": "10.10.78",
+    "version": "10.10.101",
     "layout": "premium_big_bot_clear_flow_safe_locked_level",
     "modules": [
       {
@@ -1074,7 +1099,8 @@
     "logsHealth": true,
     "backupCenter": true,
     "serverIdExporter": true,
-    "ktpWarga": true
+    "ktpWarga": true,
+    "loket": true
   },
   "dashboardRoleDisplay": {
     "enabled": true,
@@ -1226,7 +1252,7 @@
       "Discord Manager"
     ]
   },
-  "version": "10.10.97",
+  "version": "10.10.101",
   "bigBot": {
     "releaseName": "Pak RW KTP Warga dan AFK Voice Stabil"
   },
@@ -1383,8 +1409,8 @@
   "papanAktif": {
     "enabled": true,
     "channelId": "1516167288066281672",
-    "title": "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU",
-    "description": "Papan ini mencatat total poin warga dari awal bergabung sampai seterusnya. Data ini tidak di-reset meskipun siklus level kembali dari awal setelah 100.000 poin.",
+    "title": "🏆 TOP AKTIF WARGA SEPANJANG WAKTU",
+    "description": "Update otomatis setiap hari pukul 00.00 WIB",
     "topLimit": 10,
     "autoPost": true,
     "autoPostHourWIB": 0,
@@ -1395,8 +1421,8 @@
   "leaderboardAktif": {
     "enabled": true,
     "channelId": "1516167288066281672",
-    "title": "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU",
-    "description": "Papan ini mencatat total poin warga dari awal bergabung sampai seterusnya. Data ini tidak di-reset meskipun siklus level kembali dari awal setelah 100.000 poin.",
+    "title": "🏆 TOP AKTIF WARGA SEPANJANG WAKTU",
+    "description": "Update otomatis setiap hari pukul 00.00 WIB",
     "topLimit": 10,
     "autoPost": true,
     "autoPostHourWIB": 0,
@@ -1412,26 +1438,16 @@
     "maxLevel": 1000,
     "levelChannelId": "1511737744978743367",
     "autoLevelRole": true,
-    "roles": {
-      "1": "1516672180581175356",
-      "5": "1516672385812664371",
-      "10": "1516676547648426094",
-      "20": "1516672708967010355",
-      "30": "1516672886801436703",
-      "50": "1516673222568050829",
-      "100": "1516674802662899802",
-      "150": "1516675017151217694",
-      "200": "1516675200744161321",
-      "300": "1516675382953119845",
-      "400": "1516674202223120475",
-      "500": "1516675542382809218",
-      "750": "1516675824839819306",
-      "1000": "1516677132074614885"
-    },
-    "roleMode": "single_highest_tier",
+    "roles": {},
+    "roleMode": "single_highest_tier_dynamic",
     "syncBatchSize": 5,
     "syncDelayMs": 900,
-    "note": "Satu role level aktif. Nama tingkatan dihitung dari angka level melalui level/levelRoleTiers.js."
+    "note": "Role level dibuat otomatis hanya ketika ada warga yang mendapat tier tersebut, warna default/no color, diposisikan di atas role Warga, dan role kosong dibersihkan otomatis. Level 1000 memakai nama Karuhun Desa (Lvl. Max).",
+    "autoRoleMode": "dynamic_on_demand",
+    "autoRoleAboveWarga": true,
+    "autoRoleNoColor": true,
+    "autoDeleteEmptyRoles": true,
+    "maxRoleLevel": 1000
   },
   "serverIdExporter": {
     "enabled": true,
@@ -1493,5 +1509,28 @@
     "gatewayJoinTimeoutMs": 15000,
     "transportReadyTimeoutMs": 45000,
     "healthCheckIntervalMs": 30000
+  },
+  "loket": {
+    "enabled": true,
+    "panelChannelId": "",
+    "categoryId": "",
+    "staffRoleId": "",
+    "logChannelId": "",
+    "categoryName": "🏛️｜LOKET DESA TULUS",
+    "channelPrefix": "loket",
+    "panelTitle": "🏛️ Loket Bantuan DESA TULUS",
+    "panelDescription": "Butuh bantuan staff atau Pak RW? Buka loket dengan tombol di bawah. Jelaskan masalahnya dengan sopan dan jelas supaya pengurus bisa bantu dengan rapi.",
+    "buttonLabel": "Buka Loket",
+    "buttonEmoji": "🏛️",
+    "openedTitle": "🏛️ Loket Dibuka",
+    "openedDescription": "Wilujeung sumping di loket bantuan, {user}. Ceritakan masalahnya dengan jelas. Pengurus akan bantu urutkan pelan-pelan.",
+    "closeLabel": "Tutup Loket",
+    "claimLabel": "Ambil Loket",
+    "transcriptEnabled": true,
+    "autoThreadName": "💬 Catatan Loket",
+    "autoThreadEnabled": false,
+    "imageUrl": "",
+    "thumbnailUrl": "",
+    "color": "#7DBD77"
   }
 }

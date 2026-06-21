@@ -37,8 +37,7 @@ const {
   LEVEL_ROLE_TIER_DEFINITIONS,
   getLevelSystemConfig,
   getLevelRoleTiers,
-  getLevelTier,
-  getConfiguredLevelRoleIds
+  getLevelTier
 } = require("./level/levelRoleTiers");
 
 const DESA_TULUS_EMBED_COLOR_HEX = "#7DBD77";
@@ -213,6 +212,34 @@ function buildPakRwRoleDirectory(message) {
     .slice(0, 2500);
 }
 
+function buildPakRwMemberDirectory(message) {
+  const guild = message?.guild;
+  if (!guild?.members?.cache) return "";
+  const current = message?.member;
+  const isOwner = message.author?.id === guild.ownerId;
+  const members = [...guild.members.cache.values()]
+    .filter((member) => member?.user && !member.user.bot)
+    .filter((member) => {
+      if (isOwner || !current) return true;
+      // Pak RW hanya memberi direktori member guild yang ada di cache; mention tetap mengikuti permission Discord.
+      return Boolean(member.id);
+    })
+    .sort((a, b) => String(a.displayName || a.user.username).localeCompare(String(b.displayName || b.user.username), "id"))
+    .slice(0, 180)
+    .map((member) => `<@${member.id}> • ${member.displayName || member.user.username} • @${member.user.username}`);
+  return members.join("\n").slice(0, 6500);
+}
+
+function detectPakRwChannelMode(message, fallback = "normal") {
+  const name = String(message?.channel?.name || "").toLowerCase();
+  if (fallback === "curhat" || name.includes("curhat") || name.includes("cerita") || name.includes("hati")) return "curhat";
+  if (name.includes("nanya") || name.includes("tanya") || name.includes("pertanyaan") || name.includes("pak-rw") || name.includes("ai")) return "pertanyaan";
+  if (name.includes("saran") || name.includes("vote") || name.includes("voting") || name.includes("usul")) return "saran_voting";
+  if (name.includes("lapor") || name.includes("ticket") || name.includes("report") || name.includes("staff")) return "laporan";
+  if (name.includes("ktp") || name.includes("balai") || name.includes("umum") || name.includes("warga")) return "warga_umum";
+  return fallback === "juragan" ? "juragan" : "umum";
+}
+
 function buildPakRwAiContext(message, userText = "", mode = "normal") {
   const guild = message?.guild;
   const member = message?.member;
@@ -227,6 +254,8 @@ function buildPakRwAiContext(message, userText = "", mode = "normal") {
     channelName: message?.channel?.name || "",
     channelDirectory: buildPakRwChannelDirectory(message),
     roleDirectory: buildPakRwRoleDirectory(message),
+    memberDirectory: buildPakRwMemberDirectory(message),
+    channelMode: detectPakRwChannelMode(message, mode),
     isOwner: Boolean(guild && user && user.id === guild.ownerId),
     ownerName: getPakRwOwnerName(),
     mode,
@@ -5757,7 +5786,7 @@ function renderDashboard(req) {
     ["☁️", "Curhat", "/embeds#embed-curhatReply", "Empati", "Rapikan balasan curhat dan panel curhat anonim."],
     ["💡", "Saran & Voting", "/embeds#embed-suggestionResult", cfg.suggestion?.enabled !== false ? "Aktif" : "Nonaktif", "Edit panel saran, nama pengirim, dan voting."],
     ["👋", "Welcome", "/modules#welcome", cfg.welcome?.enabled !== false ? "Aktif" : "Nonaktif", "Edit pesan welcome dan channel chat warga."],
-    ["📊", "Level & Poin", "/modules#level", `${cfg.level?.pointsPerLevel || 500} poin/level`, "Atur channel level, cek poin, dan role level 100."],
+    ["📊", "Level & Poin", "/modules#level", `${cfg.level?.pointsPerLevel || 500} poin/level`, "Atur channel level, cek poin, dan role level otomatis on-demand."],
     ["🏆", "Top Aktif / MOTM", "/top-active", topCfg.dailyAutoPost ? "Auto 00.00 WIB" : "Manual", "Atur ranking, poin chat/voice, bonus, dan banner MOTM."],
     ["👑", "Manual MOTM", "/manual-motm", "Manual Only", "Pilih member, pasang image manual, lalu kirim/beri role MOTM dari dashboard."],
     ["💎", "Juragan / Booster", "/embeds#embed-juragan", cfg.juragan?.enabled !== false ? "Aktif" : "Nonaktif", "Edit embed boost, role, dan channel Juragan."],
@@ -6245,8 +6274,8 @@ function renderMaxtonMegaControl(req, saved = false, error = "") {
           ${configInput("topActiveBoardAuthor", "Author Board", topCfg.boardAuthor || "DESA TULUS • Papan peringkat warga paling aktif")}
           ${configInput("topActiveBoardTitleTemplate", "Template Judul Board", topCfg.boardTitleTemplate || "🏆 TOP AKTIF WARGA BULAN {month}")}
           ${configInput("topActiveTopActiveFieldTitle", "Judul Field Top Aktif", topCfg.topActiveFieldTitle || "🏆 Top Aktif")}
-          ${configInput("topActiveTopVoiceFieldTitle", "Judul Field Top Voice", topCfg.topVoiceFieldTitle || "🎙️ Top Voice")}
-          ${configInput("topActiveTopChatFieldTitle", "Judul Field Top Chat", topCfg.topChatFieldTitle || "💬 Top Chat")}
+          ${configInput("topActiveTopVoiceFieldTitle", "Judul Field Top Voice", topCfg.topVoiceFieldTitle || "Top Voice:")}
+          ${configInput("topActiveTopChatFieldTitle", "Judul Field Top Chat", topCfg.topChatFieldTitle || "Top Chat:")}
           ${configInput("topActiveRowArrowEmoji", "Emoji/Panah Baris Ranking", topCfg.rowArrowEmoji || "<a:Animated_Arrow_Bluelite:1512751559140839576>")}
           ${configInput("topActiveDailyPostHourWIB", "Jam Auto Post Harian WIB", topCfg.dailyPostHourWIB ?? 0, "number")}
         </div>
@@ -6453,9 +6482,9 @@ function applyMaxtonControlPost(body = {}) {
   cfg.prefix = body.prefix || cfg.prefix || "rw";
   cfg.embedColor = body.embedColor || cfg.embedColor || "#FFFFFF";
   cfg.activityText = body.activityText || cfg.activityText || "DESA TULUS 🌾 • Pak RW Menjaga Warga";
-  cfg.ai.openRouterModel = body.openRouterModel || cfg.ai.openRouterModel || "openai/gpt-5.4-mini";
-  cfg.ai.smartModel = body.aiSmartModel || cfg.ai.smartModel || "openai/gpt-5.4";
-  cfg.ai.economyModel = body.aiEconomyModel || cfg.ai.economyModel || "openai/gpt-5.4-mini";
+  cfg.ai.openRouterModel = body.openRouterModel || cfg.ai.openRouterModel || "openai/gpt-4o-mini";
+  cfg.ai.smartModel = body.aiSmartModel || cfg.ai.smartModel || "openai/gpt-4o-mini";
+  cfg.ai.economyModel = body.aiEconomyModel || cfg.ai.economyModel || "openai/gpt-4o-mini";
   cfg.ai.cooldownMs = num(body.aiCooldownMs, cfg.ai.cooldownMs ?? 4500, 0);
   cfg.ai.maxMessageLength = num(body.aiMaxMessageLength, cfg.ai.maxMessageLength ?? 1900, 300, 4000);
   cfg.ai.autoRecovery = body.aiAutoRecovery === "on";
@@ -6573,8 +6602,8 @@ function applyMaxtonControlPost(body = {}) {
   cfg.topActive.boardTitleTemplate = body.topActiveBoardTitleTemplate || cfg.topActive.boardTitleTemplate || "🏆 TOP AKTIF WARGA BULAN {month}";
   cfg.topActive.boardUpdateText = body.topActiveBoardUpdateText || cfg.topActive.boardUpdateText || "Update otomatis setiap hari pukul **00.00 WIB**";
   cfg.topActive.topActiveFieldTitle = body.topActiveTopActiveFieldTitle || cfg.topActive.topActiveFieldTitle || "🏆 Top Aktif";
-  cfg.topActive.topVoiceFieldTitle = body.topActiveTopVoiceFieldTitle || cfg.topActive.topVoiceFieldTitle || "🎙️ Top Voice";
-  cfg.topActive.topChatFieldTitle = body.topActiveTopChatFieldTitle || cfg.topActive.topChatFieldTitle || "💬 Top Chat";
+  cfg.topActive.topVoiceFieldTitle = body.topActiveTopVoiceFieldTitle || cfg.topActive.topVoiceFieldTitle || "Top Voice:";
+  cfg.topActive.topChatFieldTitle = body.topActiveTopChatFieldTitle || cfg.topActive.topChatFieldTitle || "Top Chat:";
   cfg.topActive.rowArrowEmoji = body.topActiveRowArrowEmoji || cfg.topActive.rowArrowEmoji || "<a:Animated_Arrow_Bluelite:1512751559140839576>";
   cfg.topActive.dailyPostHourWIB = num(body.topActiveDailyPostHourWIB, cfg.topActive.dailyPostHourWIB ?? 0, 0, 23);
   cfg.topActive.motmReactionEmojis = body.motmReactionEmojis || cfg.topActive.motmReactionEmojis || "🔥,👏,🏆,🎉,🥳";
@@ -6684,7 +6713,7 @@ function applyMaxtonControlPost(body = {}) {
   setString("serverName", (v) => { cfg.serverName = v || "DESA TULUS"; });
   setString("ownerName", (v) => { cfg.ownerName = v || "PAK RW"; });
   setString("prefix", (v) => { cfg.prefix = v || "rw"; });
-  setString("embedColor", (v) => { cfg.embedColor = DESA_TULUS_EMBED_COLOR_HEX; });
+  setString("embedColor", (v) => { cfg.embedColor = normalizeHexColor(v, cfg.embedColor || DESA_TULUS_EMBED_COLOR_HEX); });
   setString("activityText", (v) => { cfg.activityText = v || "DESA TULUS 🌾 • Pak RW Menjaga Warga"; });
   ["aiChannelId", "curhatChannelId", "anonymousCurhatChannelId", "suggestionChannelId", "ticketChannelId", "chatWargaChannelId", "levelChannelId", "cekPoinChannelId", "logChannelId", "rulesChannelId", "infoChannelId", "eventChannelId"].forEach((name) => {
     setString(name, (v) => { cfg[name] = v; });
@@ -7965,7 +7994,7 @@ function formToEmbedTemplate(body = {}) {
 function templateToEmbedBuilder(template = {}) {
   const embed = template.embed || {};
   const builder = new EmbedBuilder();
-  builder.setColor(DESA_TULUS_EMBED_COLOR_INT);
+  builder.setColor(defaultEmbedColorInt());
   if (embed.title) builder.setTitle(String(embed.title).slice(0, 256));
   if (embed.description) builder.setDescription(String(embed.description).slice(0, 4096));
   if (embed.url) builder.setURL(String(embed.url));
@@ -8624,9 +8653,9 @@ function renderModulesPage(req, saved = false, error = "") {
 
       <h3 style="margin-top:28px">🤖 AI Settings</h3>
       <div class="formgrid">
-        ${configInput("openRouterModel", "OpenRouter Model", cfg.ai?.openRouterModel || "openai/gpt-5.4-mini")}
-        ${configInput("aiSmartModel", "Model Pintar", cfg.ai?.smartModel || "openai/gpt-5.4")}
-        ${configInput("aiEconomyModel", "Model Hemat", cfg.ai?.economyModel || "openai/gpt-5.4-mini")}
+        ${configInput("openRouterModel", "OpenRouter Model", cfg.ai?.openRouterModel || "openai/gpt-4o-mini")}
+        ${configInput("aiSmartModel", "Model Pintar", cfg.ai?.smartModel || "openai/gpt-4o-mini")}
+        ${configInput("aiEconomyModel", "Model Hemat", cfg.ai?.economyModel || "openai/gpt-4o-mini")}
         ${configInput("aiCooldownMs", "AI Cooldown Ms", cfg.ai?.cooldownMs ?? 4500, "number")}
         ${configInput("aiMaxMessageLength", "AI Max Message Length", cfg.ai?.maxMessageLength ?? 1900, "number")}
         ${configInput("aiChannelId", "AI Channel ID", cfg.aiChannelId || "")}
@@ -10211,7 +10240,7 @@ function renderCommands() {
 
 /* ===================== PAK RW FULL PREMIUM DASHBOARD REBUILD v10.10.63 ===================== */
 const PAKRW_DASHBOARD_RELEASE = "10.10.79";
-const PAKRW_DASHBOARD_RELEASE_NAME = "Auto Level Role Terpusat";
+const PAKRW_DASHBOARD_RELEASE_NAME = "Auto Level Role Otomatis On-Demand";
 
 const PAKRW_PLACEHOLDER_GROUPS = [
   ["User", ["{user}", "{userId}", "{username}", "{displayName}", "{avatar}", "{joinedAt}"]],
@@ -10598,7 +10627,7 @@ function pakRwEmbedForFeature(cfg = readConfigFile(), meta = {}) {
       fields: []
     }};
   }
-  return { key: meta.embedKey || meta.slug || "custom", data: { color: DESA_TULUS_EMBED_COLOR_HEX, content: "", authorName: "DESA TULUS • Pak RW", title: meta.name || "Pak RW Embed", description: meta.desc || "Template embed bisa diedit dari dashboard.", footer: "DESA TULUS • Balai Warga Digital", fields: [] } };
+  return { key: meta.embedKey || meta.slug || "custom", data: { color: defaultEmbedColorHex(), content: "", authorName: "DESA TULUS • Pak RW", title: meta.name || "Pak RW Embed", description: meta.desc || "Template embed bisa diedit dari dashboard.", footer: "DESA TULUS • Balai Warga Digital", fields: [] } };
 }
 
 function pakRwPreviewRichText(text = "", guild = null) {
@@ -11319,8 +11348,7 @@ function mergeDashboardEmbed(previous = {}, draft = {}) {
 }
 
 function parseDashboardColor(input = DESA_TULUS_EMBED_COLOR_HEX) {
-  const value = String(DESA_TULUS_EMBED_COLOR_HEX).replace("#", "");
-  return /^[0-9a-fA-F]{6}$/.test(value) ? parseInt(value, 16) : 0x88a08c;
+  return hexColor(input || DESA_TULUS_EMBED_COLOR_HEX, 0x88a08c);
 }
 
 function dashboardSafeUrl(input = "") {
@@ -11431,7 +11459,7 @@ app.put("/api/dashboard/settings", requireDashboardAuth, (req, res) => {
     const patches = Array.isArray(req.body?.patches) ? req.body.patches.slice(0, 80) : [];
     if (!patches.length) return res.status(400).json({ ok: false, error: "Tidak ada perubahan yang dikirim." });
     const cfg = readConfigFile();
-    const levelRoleConfigChanged = patches.some((patch) => String(patch?.path || "").startsWith("levelSystem.roles.") || ["levelSystem.autoLevelRole", "levelSystem.enabled", "levelSystem.levelChannelId"].includes(String(patch?.path || "")));
+    const levelRoleConfigChanged = patches.some((patch) => ["levelSystem.autoLevelRole", "levelSystem.enabled", "levelSystem.levelChannelId", "levelSystem.autoRoleMode", "levelSystem.autoRoleAboveWarga", "levelSystem.autoDeleteEmptyRoles"].includes(String(patch?.path || "")));
     for (const patch of patches) {
       const pathText = String(patch?.path || "");
       if (!isSafeDashboardPath(pathText)) return res.status(400).json({ ok: false, error: `Path config tidak diizinkan: ${pathText}` });
@@ -11476,7 +11504,7 @@ app.post("/api/dashboard/test-embed", requireDashboardAuth, async (req, res) => 
     if (!channel || !channel.isTextBased?.()) return res.status(400).json({ ok: false, error: "Channel tujuan tidak valid atau bukan text channel." });
     const draft = normalizeDashboardEmbed(req.body?.embed || {});
     const builder = new EmbedBuilder()
-      .setColor(DESA_TULUS_EMBED_COLOR_INT)
+      .setColor(defaultEmbedColorInt())
       .setDescription(draft.description || "Pratinjau tes dari Pak RW Control Center.");
     if (draft.title) builder.setTitle(draft.title);
     if (draft.authorName) builder.setAuthor({ name: draft.authorName, iconURL: dashboardSafeUrl(draft.authorIcon) || undefined });
@@ -11740,7 +11768,7 @@ app.post("/config", requireDashboardAuth, (req, res) => {
     cfg.serverName = req.body.serverName || cfg.serverName;
     cfg.ownerName = req.body.ownerName || cfg.ownerName;
     cfg.prefix = req.body.prefix || cfg.prefix;
-    cfg.embedColor = DESA_TULUS_EMBED_COLOR_HEX;
+    cfg.embedColor = normalizeHexColor(req.body.embedColor || cfg.embedColor || DESA_TULUS_EMBED_COLOR_HEX);
     cfg.activityText = req.body.activityText || cfg.activityText;
 
     cfg.ai = cfg.ai || {};
@@ -12066,7 +12094,7 @@ app.post("/embeds", requireDashboardAuth, (req, res) => {
       const key = safeEmbedKey(req.body.newEmbedKey);
       if (key) {
         cfg.embeds[key] = cfg.embeds[key] || {};
-        cfg.embeds[key].color = cfg.embeds[key].color || DESA_TULUS_EMBED_COLOR_HEX;
+        cfg.embeds[key].color = cfg.embeds[key].color || cfg.embedColor || DESA_TULUS_EMBED_COLOR_HEX;
         cfg.embeds[key].title = clean(req.body.newEmbedTitle) || cfg.embeds[key].title || key;
         cfg.embeds[key].authorName = clean(req.body.newEmbedAuthorName) || cfg.embeds[key].authorName || "";
         cfg.embeds[key].description = cfg.embeds[key].description || "";
@@ -12424,7 +12452,7 @@ app.post("/quick-edit", requireDashboardAuth, (req, res) => {
 
     cfg.prefix = req.body.prefix || "rw";
     cfg.activityText = req.body.activityText || cfg.activityText || "DESA TULUS 🤍";
-    cfg.embedColor = DESA_TULUS_EMBED_COLOR_HEX;
+    cfg.embedColor = normalizeHexColor(req.body.embedColor || cfg.embedColor || DESA_TULUS_EMBED_COLOR_HEX);
 
     cfg.ai = cfg.ai || {};
     cfg.ai.openRouterModel = req.body.openRouterModel || cfg.ai.openRouterModel || "openai/gpt-4o-mini";
@@ -13007,7 +13035,7 @@ app.post("/cari-mabar", requireDashboardAuth, (req, res) => {
     cfg.mabar.defaultNote = req.body.defaultNote || "Ayo mabar bareng warga DESA TULUS 🤍";
     cfg.mabar.buttonText = req.body.buttonText || "🎮 Cari Mabar";
 
-    cfg.embeds.cariMabar.color = DESA_TULUS_EMBED_COLOR_HEX;
+    cfg.embeds.cariMabar.color = cfg.embeds.cariMabar.color || cfg.embedColor || DESA_TULUS_EMBED_COLOR_HEX;
     cfg.embeds.cariMabar.title = req.body.embedTitle || cfg.embeds.cariMabar.title || "🎮 CARI MABAR DESA TULUS";
     cfg.embeds.cariMabar.description = req.body.embedDescription || cfg.embeds.cariMabar.description || "Ada yang mau mabar? Isi data mabar dengan jelas biar warga gampang ikut.";
     cfg.embeds.cariMabar.footer = req.body.embedFooter || cfg.embeds.cariMabar.footer || "DESA TULUS • Cari Mabar";
@@ -13139,7 +13167,7 @@ app.post("/modules", requireDashboardAuth, (req, res) => {
     cfg.serverName = req.body.serverName || cfg.serverName || "";
     cfg.ownerName = req.body.ownerName || cfg.ownerName || "";
     cfg.prefix = req.body.prefix || cfg.prefix || "!";
-    cfg.embedColor = DESA_TULUS_EMBED_COLOR_HEX;
+    cfg.embedColor = normalizeHexColor(req.body.embedColor || cfg.embedColor || DESA_TULUS_EMBED_COLOR_HEX);
     cfg.activityText = req.body.activityText || cfg.activityText || "";
     cfg.ticketChannelId = req.body.ticketChannelId || cfg.ticketChannelId || "";
 
@@ -13235,7 +13263,7 @@ app.post("/control/send-message", requireDashboardAuth, async (req, res) => {
 
     if (title) {
       const embed = new EmbedBuilder()
-        .setColor(DESA_TULUS_EMBED_COLOR_INT)
+        .setColor(defaultEmbedColorInt())
         .setTitle(title)
         .setDescription(message || " ")
         .setFooter({ text: makeOTFooter(`${config.serverName} • Dashboard Message`) })
@@ -13714,7 +13742,7 @@ function buildDonaturOnlyEmbed(member) {
   };
 
   return new EmbedBuilder()
-    .setColor(DESA_TULUS_EMBED_COLOR_INT)
+    .setColor(defaultEmbedColorInt())
     .setTitle(applyTemplate(e.title || "💎 Donatur Desa Access", data))
     .setDescription(applyTemplate(e.description || "Halo {user}, ini adalah menu khusus untuk role **Donatur DESA TULUS** 🤍\n\nStatus role kamu: **Aktif**\n{expiredText}", data))
     .addFields(
@@ -14112,24 +14140,43 @@ function getPakRwLevelSystemConfig() {
   return getLevelSystemConfig(config);
 }
 
-function getLevelRoleMention(level = 1) {
+function getPakRwLevelRoleName(level = 1) {
   const tier = getPakRwLevelRoleTier(level);
-  return tier?.roleId ? `<@&${tier.roleId}>` : "Belum dikonfigurasi";
+  return String(tier?.roleName || tier?.name || "Warga Anyar").trim();
+}
+
+function getLevelRoleByName(guild, level = 1) {
+  const roleName = getPakRwLevelRoleName(level);
+  if (!guild?.roles?.cache) return null;
+  return guild.roles.cache.find((role) => role.name === roleName && !role.managed) || null;
+}
+
+function getLevelRoleMention(level = 1, guild = null) {
+  const role = getLevelRoleByName(guild, level);
+  if (role?.id) return `<@&${role.id}>`;
+  return `@${getPakRwLevelRoleName(level)}`;
+}
+
+function getDynamicLevelRoleNames() {
+  return new Set(getPakRwLevelRoleTiers().map((tier) => String(tier.roleName || tier.name || "").trim()).filter(Boolean));
 }
 
 function getMemberConfiguredLevelRoleIds(member) {
   if (!member?.roles?.cache) return [];
-  const configured = new Set(getConfiguredLevelRoleIds(config));
-  return [...member.roles.cache.keys()].filter((roleId) => configured.has(roleId));
+  const dynamicNames = getDynamicLevelRoleNames();
+  return [...member.roles.cache.values()]
+    .filter((role) => role && dynamicNames.has(role.name) && !role.managed)
+    .map((role) => role.id);
 }
 
 function getLevelRoleSyncStatus(member, level) {
   const tier = getPakRwLevelRoleTier(level);
   const currentRoleIds = getMemberConfiguredLevelRoleIds(member);
-  const correct = Boolean(tier?.roleId)
+  const expectedRole = getLevelRoleByName(member?.guild, level);
+  const correct = Boolean(expectedRole?.id)
     && currentRoleIds.length === 1
-    && currentRoleIds[0] === tier.roleId;
-  return { tier, currentRoleIds, correct };
+    && currentRoleIds[0] === expectedRole.id;
+  return { tier, role: expectedRole, currentRoleIds, correct };
 }
 
 const levelRoleWarningTimes = new Map();
@@ -14139,6 +14186,106 @@ function logLevelRoleWarningOnce(key, message, ttlMs = 30 * 60 * 1000) {
   if (now - last < ttlMs) return;
   levelRoleWarningTimes.set(key, now);
   console.log(message);
+}
+
+function getWargaBaseRole(guild) {
+  if (!guild?.roles?.cache) return null;
+  const ids = [
+    config.welcome?.memberRoleId,
+    config.welcome?.memberTulusRoleId,
+    config.memberTulusRoleId,
+    config.wargaRoleId,
+    config.defaultMemberRoleId
+  ].map((id) => String(id || "").trim()).filter((id) => /^\d{16,22}$/.test(id));
+  for (const id of ids) {
+    const role = guild.roles.cache.get(id);
+    if (role && !role.managed) return role;
+  }
+  return guild.roles.cache.find((role) => role.name?.toLowerCase() === "warga" && !role.managed)
+    || guild.roles.cache.find((role) => /warga/i.test(role.name || "") && !role.managed)
+    || null;
+}
+
+function hasHumanMemberWithRole(guild, roleId) {
+  if (!guild?.members?.cache || !roleId) return false;
+  return guild.members.cache.some((member) => !member.user?.bot && member.roles?.cache?.has(roleId));
+}
+
+async function positionLevelRoleAboveWarga(guild, role, options = {}) {
+  const system = getPakRwLevelSystemConfig();
+  if (!guild || !role || system.autoRoleAboveWarga === false) return;
+  const baseRole = getWargaBaseRole(guild);
+  if (!baseRole) {
+    if (!options.silent) console.log("[LEVEL ROLE] Role Warga belum ditemukan, posisi role level dibiarkan default.");
+    return;
+  }
+  const botMember = guild.members.me || await guild.members.fetchMe().catch(() => null);
+  if (!botMember?.permissions?.has(PermissionsBitField.Flags.ManageRoles)) return;
+  const targetPosition = Math.min(baseRole.position + 1, Math.max(1, botMember.roles.highest.position - 1));
+  if (targetPosition <= 0 || role.position === targetPosition) return;
+  if (botMember.roles.highest.comparePositionTo(role) <= 0) return;
+  await role.setPosition(targetPosition, "Pak RW Auto Level Role: posisi di atas role Warga").catch((err) => {
+    if (!options.silent) console.log(`[LEVEL ROLE] Gagal memindahkan ${role.name} di atas Warga: ${err.message}`);
+  });
+}
+
+async function ensureDynamicLevelRole(guild, tier, options = {}) {
+  if (!guild || !tier) return null;
+  const roleName = String(tier.roleName || tier.name || "Warga Anyar").trim();
+  let role = guild.roles.cache.find((item) => item.name === roleName && !item.managed)
+    || await guild.roles.fetch().then((roles) => roles.find((item) => item.name === roleName && !item.managed)).catch(() => null);
+  const botMember = guild.members.me || await guild.members.fetchMe().catch(() => null);
+  if (!botMember?.permissions?.has(PermissionsBitField.Flags.ManageRoles)) {
+    console.log("[LEVEL ROLE] ERROR: Pak RW tidak memiliki permission Manage Roles.");
+    return null;
+  }
+  if (!role) {
+    role = await guild.roles.create({
+      name: roleName,
+      color: 0,
+      hoist: false,
+      mentionable: false,
+      reason: `Pak RW Auto Level Role dibuat saat ada warga mencapai Level ${tier.level}`
+    }).catch((err) => {
+      console.log(`[LEVEL ROLE] ERROR: Gagal membuat role ${roleName}: ${err.message}`);
+      return null;
+    });
+    if (role && !options.silent) console.log(`[LEVEL ROLE] Role otomatis dibuat: ${role.name} • no color • on demand.`);
+  }
+  if (!role) return null;
+  if (role.managed) return null;
+  if (botMember.roles.highest.comparePositionTo(role) <= 0) {
+    console.log(`[LEVEL ROLE] ERROR: Role ${role.name} berada setara/di atas role Pak RW.`);
+    return null;
+  }
+  await positionLevelRoleAboveWarga(guild, role, options);
+  return role;
+}
+
+async function cleanupEmptyDynamicLevelRoles(guild, keepRoleIds = [], options = {}) {
+  const system = getPakRwLevelSystemConfig();
+  if (!guild?.roles?.cache || system.autoDeleteEmptyRoles === false) return { deleted: 0, kept: 0 };
+  const keep = new Set((keepRoleIds || []).filter(Boolean));
+  const dynamicNames = getDynamicLevelRoleNames();
+  let deleted = 0;
+  let kept = 0;
+  for (const role of guild.roles.cache.values()) {
+    if (!role || role.managed || keep.has(role.id) || !dynamicNames.has(role.name)) continue;
+    if (hasHumanMemberWithRole(guild, role.id)) {
+      kept += 1;
+      continue;
+    }
+    const botMember = guild.members.me || await guild.members.fetchMe().catch(() => null);
+    if (!botMember?.permissions?.has(PermissionsBitField.Flags.ManageRoles)) continue;
+    if (botMember.roles.highest.comparePositionTo(role) <= 0) continue;
+    await role.delete("Pak RW Auto Level Role kosong, dibersihkan otomatis").then(() => {
+      deleted += 1;
+      if (!options.silent) console.log(`[LEVEL ROLE] Role kosong dihapus: ${role.name}`);
+    }).catch((err) => {
+      if (!options.silent) console.log(`[LEVEL ROLE] Gagal hapus role kosong ${role.name}: ${err.message}`);
+    });
+  }
+  return { deleted, kept };
 }
 
 async function syncMemberLevelRole(member, level, options = {}) {
@@ -14155,18 +14302,13 @@ async function syncMemberLevelRole(member, level, options = {}) {
   if (!member?.guild || !member?.roles?.cache || member.user?.bot) {
     return { success: false, skipped: true, reason: "INVALID_MEMBER", tier };
   }
-  if (!tier?.roleId) {
-    if (!options.silent) console.log(`[LEVEL ROLE] ${tier?.name || "Tier"} belum memiliki Role ID.`);
-    return { success: false, reason: "ROLE_TIER_NOT_CONFIGURED", tier };
-  }
-
   const guild = member.guild;
   const botMember = guild.members.me || await guild.members.fetchMe().catch(() => null);
-  const targetRole = guild.roles.cache.get(tier.roleId) || await guild.roles.fetch(tier.roleId).catch(() => null);
+  const targetRole = await ensureDynamicLevelRole(guild, tier, options);
   if (!targetRole) {
-    console.log(`[LEVEL ROLE] ERROR: Role ${tier.name} (${tier.roleId}) tidak ditemukan.`);
-    return { success: false, reason: "ROLE_NOT_FOUND", tier };
+    return { success: false, reason: "AUTO_ROLE_CREATE_FAILED", tier };
   }
+  tier.roleId = targetRole.id;
   if (targetRole.managed) {
     console.log(`[LEVEL ROLE] ERROR: Role ${tier.name} dikelola integrasi dan tidak dapat diberikan manual.`);
     return { success: false, reason: "ROLE_MANAGED", tier };
@@ -14184,17 +14326,18 @@ async function syncMemberLevelRole(member, level, options = {}) {
     return { success: false, reason: "MEMBER_HIERARCHY", tier };
   }
 
-  const configuredRoleIds = getConfiguredLevelRoleIds(config);
-  const oldRoleIds = configuredRoleIds.filter((roleId) => roleId !== tier.roleId && member.roles.cache.has(roleId));
+  const configuredRoleIds = getMemberConfiguredLevelRoleIds(member);
+  const oldRoleIds = configuredRoleIds.filter((roleId) => roleId !== targetRole.id && member.roles.cache.has(roleId));
   const reason = `Sinkronisasi role level Pak RW: Level ${safeLevel} • ${tier.name}`;
 
   try {
     if (oldRoleIds.length) await member.roles.remove(oldRoleIds, reason);
-    if (!member.roles.cache.has(tier.roleId)) await member.roles.add(tier.roleId, reason);
+    if (!member.roles.cache.has(targetRole.id)) await member.roles.add(targetRole.id, reason);
+    await cleanupEmptyDynamicLevelRoles(guild, [targetRole.id], { silent: true });
     if (!options.silent) {
       console.log(`[LEVEL ROLE] ${member.user.tag} → ${tier.name} (Level ${safeLevel}).`);
     }
-    return { success: true, tier, removedRoleIds: oldRoleIds };
+    return { success: true, tier, role: targetRole, roleId: targetRole.id, removedRoleIds: oldRoleIds };
   } catch (error) {
     console.error("[LEVEL ROLE] Gagal sinkronisasi role:", {
       guildId: guild.id,
@@ -14260,11 +14403,6 @@ function scheduleLevelRoleSyncAfterConfigChange(guild) {
   if (levelRoleConfigSyncTimer) clearTimeout(levelRoleConfigSyncTimer);
   levelRoleConfigSyncTimer = setTimeout(async () => {
     levelRoleConfigSyncTimer = null;
-    const configuredCount = getConfiguredLevelRoleIds(config).length;
-    if (configuredCount !== LEVEL_ROLE_TIER_DEFINITIONS.length) {
-      console.log(`[LEVEL ROLE] Sinkronisasi otomatis ditunda: baru ${configuredCount}/${LEVEL_ROLE_TIER_DEFINITIONS.length} role tier terisi.`);
-      return;
-    }
     try {
       createLevelRoleBackup(guild.id);
       const result = await syncAllMemberLevelRoles(guild, { batchSize: 5, delayMs: 900 });
@@ -14286,21 +14424,19 @@ async function validateLevelRoleSetup(guild) {
   console.log(`[LEVEL ROLE] Permission Manage Roles: ${canManageRoles ? "OK" : "TIDAK ADA"}.`);
 
   for (const tier of getPakRwLevelRoleTiers()) {
-    if (!tier.roleId) {
-      console.log(`[LEVEL ROLE] BELUM DIATUR: ${tier.name} (Level ${tier.level}).`);
-      continue;
-    }
-    const role = guild.roles.cache.get(tier.roleId) || await guild.roles.fetch(tier.roleId).catch(() => null);
+    const roleName = String(tier.roleName || tier.name || "");
+    const role = guild.roles.cache.find((item) => item.name === roleName && !item.managed) || null;
     if (!role) {
-      console.log(`[LEVEL ROLE] ERROR: Role ${tier.name} (${tier.roleId}) tidak ditemukan.`);
+      console.log(`[LEVEL ROLE] On-demand: ${roleName} belum dibuat karena belum ada warga yang memakai role ini.`);
       continue;
     }
     if (botMember && botMember.roles.highest.comparePositionTo(role) <= 0) {
-      console.log(`[LEVEL ROLE] ERROR: Role ${tier.name} berada di atas role Pak RW.`);
+      console.log(`[LEVEL ROLE] ERROR: Role ${roleName} berada di atas role Pak RW.`);
     } else {
-      console.log(`[LEVEL ROLE] Role ${tier.name} ditemukan.`);
+      console.log(`[LEVEL ROLE] Role otomatis aktif: ${roleName} • member=${role.members?.filter?.((m) => !m.user?.bot)?.size || 0}.`);
     }
   }
+  await cleanupEmptyDynamicLevelRoles(guild, [], { silent: true });
 
   const levelChannel = getTextChannel(guild, system.levelChannelId);
   if (!levelChannel) {
@@ -14354,7 +14490,7 @@ async function handlePakRwLevelRoleCommand(message) {
     const result = await syncAllMemberLevelRoles(message.guild, { batchSize: 5, delayMs: 900 });
     await safeSend(message.channel, {
       embeds: [new EmbedBuilder()
-        .setColor(DESA_TULUS_EMBED_COLOR_INT)
+        .setColor(defaultEmbedColorInt())
         .setTitle("Sinkronisasi Role Level Selesai")
         .setDescription([
           `Data diperiksa: **${formatNumber(result.total)} warga**`,
@@ -14376,20 +14512,20 @@ async function handlePakRwLevelRoleCommand(message) {
   const userData = getLevelUser(data, message.guild.id, target.id);
   const info = getLevelInfo(userData);
   const status = getLevelRoleSyncStatus(target, info.current.level);
-  const expectedRole = status.tier.roleId ? `<@&${status.tier.roleId}>` : "Belum dikonfigurasi";
+  const expectedRole = getLevelRoleMention(info.current.level, message.guild);
   const currentRoles = status.currentRoleIds.length ? status.currentRoleIds.map((id) => `<@&${id}>`).join(", ") : "Tidak ada";
 
   if (commandType === "one") {
     const sync = await syncMemberLevelRole(target, info.current.level);
     await safeReply(message, sync.success
-      ? `✅ Role level ${target} sudah disinkronkan menjadi **${status.tier.name}** tanpa mengubah EXP atau level.`
+      ? `✅ Role level ${target} sudah disinkronkan menjadi **${sync.tier?.roleName || sync.tier?.name || status.tier.name}** tanpa mengubah EXP atau level.`
       : `❌ Sinkronisasi gagal: **${sync.reason || "UNKNOWN"}**. Cek log Pak RW dan posisi role.`);
     return true;
   }
 
   await safeReply(message, {
     embeds: [new EmbedBuilder()
-      .setColor(DESA_TULUS_EMBED_COLOR_INT)
+      .setColor(defaultEmbedColorInt())
       .setTitle("Pemeriksaan Role Level Warga")
       .setDescription(`${target}`)
       .addFields(
@@ -14696,7 +14832,7 @@ function buildBoostPoinPublicPayload(guild, state = "active") {
   if (!isEnd && roleMentions) contentParts.push(roleMentions);
 
   const embed = new EmbedBuilder()
-    .setColor(DESA_TULUS_EMBED_COLOR_INT)
+    .setColor(defaultEmbedColorInt())
     .setTitle(title)
     .setDescription(description)
     .setFooter({ text: makeOTFooter(template.footer || "DESA TULUS • Boost Poin"), iconURL: template.footerIcon || OT_FOOTER_ICON_URL })
@@ -15079,8 +15215,8 @@ function buildLevelUpEmbed(member, userData) {
     nextLevel: next?.level || info.current.level,
     nextRank: next?.name || info.current.name,
     remainingPoints: formatNumber(remaining),
-    role: getLevelRoleMention(info.current.level),
-    levelRole: getLevelRoleMention(info.current.level)
+    role: getLevelRoleMention(info.current.level, member.guild),
+    levelRole: getLevelRoleMention(info.current.level, member.guild)
   };
 
   const fieldName = next
@@ -15091,12 +15227,12 @@ function buildLevelUpEmbed(member, userData) {
     : "Kamu sudah mencapai level tertinggi warga DESA TULUS.";
 
   const embed = new EmbedBuilder()
-    .setColor(DESA_TULUS_EMBED_COLOR_INT)
+    .setColor(defaultEmbedColorInt())
     .setTitle(normalizePakRwEmojiCodes(applyTemplate(e.title || "<a:rocket_animated:1512884173453529288> Warga Naik Level", data)))
     .setDescription(applyTemplate(e.description || "{user} naik menjadi **{rank} — Level {level}**.\n\nTotal poin aktif: **{total} poin**. Tetap rukun dan aktif di desa.", data))
     .addFields(
       { name: "Tingkatan", value: info.current.name, inline: true },
-      { name: "Role Level", value: getLevelRoleMention(info.current.level), inline: true },
+      { name: "Role Level", value: getLevelRoleMention(info.current.level, member.guild), inline: true },
       { name: normalizePakRwEmojiCodes(fieldName), value: normalizePakRwEmojiCodes(fieldValue), inline: false }
     )
     .setFooter({ text: makeOTFooter(applyTemplate(e.footer || "DESA TULUS • Level Warga", data)), iconURL: e.footerIcon || OT_FOOTER_ICON_URL })
@@ -15125,7 +15261,7 @@ function buildLevelProfileEmbed(member, userData) {
   };
 
   const embed = new EmbedBuilder()
-    .setColor(DESA_TULUS_EMBED_COLOR_INT)
+    .setColor(defaultEmbedColorInt())
     .setTitle(normalizePakRwEmojiCodes(applyTemplate(e.title || "<a:bar_chart:1516453838117277829> Data Keaktifan Warga", data)))
     .setDescription([
       `${member}`,
@@ -15135,7 +15271,7 @@ function buildLevelProfileEmbed(member, userData) {
       buildCekPoinSection("Voice", "🎙️", voiceInfo),
       "",
       `⭐ **Total Level:** ${info.current.name} (Lvl. ${info.current.level})`,
-      `🏷️ **Role Level:** ${getLevelRoleMention(info.current.level)}`,
+      `🏷️ **Role Level:** ${getLevelRoleMention(info.current.level, member.guild)}`,
       `🏆 **Peringkat Server:** ${serverRank ? `#${serverRank}` : "Belum ada"}`,
       `Total Poin: **${formatNumber(total)}**`
     ].join("\n"))
@@ -15157,6 +15293,36 @@ function safeMotmFontRatio(value, fallback, min = 0.018, max = 0.085) {
   return Math.min(max, Math.max(min, n));
 }
 
+function normalizeTopBoardFieldTitle(value, fallback) {
+  const raw = String(value || "").replace(/\s+/g, " ").trim();
+  if (!raw) return fallback;
+  const withoutEmoji = raw.replace(/^[^A-Za-z0-9]+/, "").trim().toLowerCase();
+  if (/^top\s*voice(\s*bulanan)?[: ]*$/.test(withoutEmoji)) return "Top Voice:";
+  if (/^top\s*chat(\s*bulanan)?[: ]*$/.test(withoutEmoji)) return "Top Chat:";
+  return raw;
+}
+
+function normalizeLeaderboardActiveTitle(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "🏆 TOP AKTIF WARGA SEPANJANG WAKTU";
+  if (/papan\s+aktif/i.test(raw)) return "🏆 TOP AKTIF WARGA SEPANJANG WAKTU";
+  return raw;
+}
+
+function normalizeLeaderboardActiveSubtitle(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "Update otomatis setiap hari pukul 00.00 WIB";
+  if (/papan ini mencatat|alur jelas|100\.000 poin/i.test(raw)) return "Update otomatis setiap hari pukul 00.00 WIB";
+  return raw;
+}
+
+function normalizeWelcomeText(value, fallback) {
+  const raw = String(value || "");
+  if (!raw.trim()) return fallback;
+  if (/Sambut warga anyar|Pak RW menyambut|Baca aturan desa|Kenalan di chat warga|Kamu warga ke-/i.test(raw)) return fallback;
+  return raw;
+}
+
 function getTopActiveConfig() {
   const t = config.topActive || {};
   return {
@@ -15168,8 +15334,8 @@ function getTopActiveConfig() {
     topLimit: Math.max(3, Math.min(25, Number(t.topLimit || 10))),
     leaderboardActiveChannelId: t.leaderboardActiveChannelId || t.papanAktifChannelId || "",
     leaderboardActiveTopLimit: Math.max(3, Math.min(25, Number(t.leaderboardActiveTopLimit || t.topLimit || 10))),
-    leaderboardActiveTitleTemplate: t.leaderboardActiveTitleTemplate || "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU",
-    leaderboardActiveSubtitle: t.leaderboardActiveSubtitle || "Papan ini mencatat total poin warga dari awal bergabung sampai seterusnya. Data ini tidak di-reset meskipun siklus level kembali dari awal setelah 100.000 poin.",
+    leaderboardActiveTitleTemplate: normalizeLeaderboardActiveTitle(t.leaderboardActiveTitleTemplate || config.leaderboardAktif?.title || config.papanAktif?.title),
+    leaderboardActiveSubtitle: normalizeLeaderboardActiveSubtitle(t.leaderboardActiveSubtitle || config.leaderboardAktif?.description || config.papanAktif?.description),
     leaderboardActiveFooter: t.leaderboardActiveFooter || "DESA TULUS • Leaderboard Aktif Warga",
     leaderboardActiveImageUrl: t.leaderboardActiveImageUrl || config.embeds?.dashboard?.media?.topActiveBoardImageUrl || "",
     chatPointPerMessage: Number(t.chatPointPerMessage || 5),
@@ -15224,8 +15390,8 @@ function getTopActiveConfig() {
     boardUpdateText: t.boardUpdateText || "Update otomatis setiap hari pukul 00.00 WIB",
     boardFooterText: t.boardFooterText || "Gunakan perintah rapihin untuk melihat poin top aktifnya",
     topActiveFieldTitle: t.topActiveFieldTitle || "🏆 Top Aktif",
-    topVoiceFieldTitle: t.topVoiceFieldTitle || "🎙️ Top Voice",
-    topChatFieldTitle: t.topChatFieldTitle || "💬 Top Chat",
+    topVoiceFieldTitle: normalizeTopBoardFieldTitle(t.topVoiceFieldTitle, "Top Voice:"),
+    topChatFieldTitle: normalizeTopBoardFieldTitle(t.topChatFieldTitle, "Top Chat:"),
     rowArrowEmoji: t.rowArrowEmoji || "<a:Animated_Arrow_Bluelite:1512751559140839576>",
     motmReactionEmojis: t.motmReactionEmojis || "🔥,👏,🏆,🎉,🥳",
     motmThreadArchiveMinutes: Number(t.motmThreadArchiveMinutes || 1440),
@@ -15390,13 +15556,13 @@ function buildTopActiveBoardEmbed(guild, reason = "update") {
   const chatValue = `>>> ${formatTopRowsPakRwStyle(chatRows, "chat")}`.slice(0, 1024);
 
   const embed = new EmbedBuilder()
-    .setColor(DESA_TULUS_EMBED_COLOR_INT)
+    .setColor(defaultEmbedColorInt())
     .setAuthor({ name: cfg.boardAuthor || `${serverName} • Papan peringkat warga aktif` })
     .setTitle(boardTitle)
     .setDescription(updateText)
     .addFields(
-      { name: cfg.topVoiceFieldTitle || "🎙️ Top Voice Bulanan", value: voiceValue, inline: false },
-      { name: cfg.topChatFieldTitle || "💬 Top Chat Bulanan", value: chatValue, inline: false }
+      { name: cfg.topVoiceFieldTitle || "Top Voice:", value: voiceValue, inline: false },
+      { name: cfg.topChatFieldTitle || "Top Chat:", value: chatValue, inline: false }
     )
     .setFooter({ text: makeOTFooter(footerText), iconURL: boardEmbedCfg.footerIcon || OT_FOOTER_ICON_URL })
     .setTimestamp();
@@ -15439,13 +15605,12 @@ function buildLeaderboardActiveEmbed(guild, reason = "update") {
   const rows = getLeaderboardActiveRows(guild.id, cfg.leaderboardActiveTopLimit, guild.ownerId);
   const serverName = config.serverName || guild.name || "DESA TULUS";
   const template = config.embeds?.papanAktif || {};
-  const intro = cfg.leaderboardActiveSubtitle || "Papan ini mencatat total poin warga dari awal bergabung sampai seterusnya. Data ini tidak di-reset meskipun siklus level kembali dari awal setelah 100.000 poin.";
-  const flow = "Alur jelas: poin chat/voice masuk ke siklus level. Saat warga mencapai 100.000 poin, Pak RW memberi role Member Of The Month, lalu poin siklus level kembali dari awal. Poin di Papan Aktif ini tetap lanjut dan tidak di-reset.";
+  const updateText = "Update otomatis setiap hari pukul 00.00 WIB";
   const rowsText = `>>> ${formatLeaderboardActiveRows(rows)}`;
   const embed = new EmbedBuilder()
-    .setColor(DESA_TULUS_EMBED_COLOR_INT)
-    .setTitle(applyTemplate(cfg.leaderboardActiveTitleTemplate || template.title || "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU", { server: serverName }))
-    .setDescription([intro, "", flow, "", rowsText].join("\n"))
+    .setColor(defaultEmbedColorInt())
+    .setTitle(applyTemplate(normalizeLeaderboardActiveTitle(cfg.leaderboardActiveTitleTemplate || template.title), { server: serverName }))
+    .setDescription([updateText, "", "👑 **Peringkat Warga:**", "", rowsText].join("\n"))
     .setFooter({ text: makeOTFooter(cfg.leaderboardActiveFooter || template.footer || `${serverName} • Leaderboard Aktif Warga`), iconURL: template.footerIcon || OT_FOOTER_ICON_URL })
     .setTimestamp();
 
@@ -16398,7 +16563,7 @@ async function sendMotmAnnouncementSeparate(channel, member, userData, { isTest 
       if (manualUrl) {
         // Gambar manual dikirim TANPA caption/teks. Embed hanya dipakai sebagai wadah image URL.
         const imageEmbed = new EmbedBuilder()
-          .setColor(DESA_TULUS_EMBED_COLOR_INT)
+          .setColor(defaultEmbedColorInt())
           .setImage(manualUrl);
         imageMessage = await safeSend(channel, { embeds: [imageEmbed] });
       } else {
@@ -16506,14 +16671,14 @@ function buildMemberOfTheMonthEmbed(member, userData, imageUrl = "") {
   }
 
   const embed = new EmbedBuilder()
-    .setColor(DESA_TULUS_EMBED_COLOR_INT)
+    .setColor(defaultEmbedColorInt())
     .setAuthor({ name: `${config.serverName || "DESA TULUS"} • Member Of The Month`, iconURL: member.user.displayAvatarURL({ dynamic: true }) })
     .setTitle(applyTemplate(e.title || "🏆 MEMBER OF THE MONTH DESA TULUS", data))
     .setDescription(applyTemplate(e.description || "{user} berhasil mencapai **{total} poin aktif** bulan ini dan mendapatkan role **Member Of The Month**.", data))
     .addFields(
       { name: "⭐ Total Poin", value: `**${data.total}** poin`, inline: true },
-      { name: "💬 Top Chat", value: `**${data.chat}** poin`, inline: true },
-      { name: "🎙️ Top Voice", value: `**${data.voice}** poin`, inline: true }
+      { name: "Top Chat:", value: `**${data.chat}** poin`, inline: true },
+      { name: "Top Voice:", value: `**${data.voice}** poin`, inline: true }
     )
     .setFooter({ text: makeOTFooter(applyTemplate(e.footer || "{server} • Member Of The Month", data)) })
     .setTimestamp();
@@ -16598,7 +16763,7 @@ async function checkCycleMemberOfTheMonthReward(member, userData, type = "chat")
   const channel = await getTopActiveChannel(member.guild);
   if (channel && cfg.announceMemberOfTheMonth === true) {
     const embed = new EmbedBuilder()
-      .setColor(DESA_TULUS_EMBED_COLOR_INT)
+      .setColor(defaultEmbedColorInt())
       .setTitle("🏆 MEMBER OF THE MONTH OTOMATIS")
       .setDescription([
         `${member} berhasil mencapai **${formatNumber(threshold)} poin aktif**.`,
@@ -16679,7 +16844,7 @@ async function sendTopActiveLevelNotice(member, userData) {
   const info = getLevelInfo(userData);
   const monthly = getMonthlyStats(userData);
   const embed = new EmbedBuilder()
-    .setColor(DESA_TULUS_EMBED_COLOR_INT)
+    .setColor(defaultEmbedColorInt())
     .setTitle(config.texts?.levelUpTopActiveTitle || "🆙 Warga Naik Level + Masuk Top Aktif")
     .setDescription([
       `${member} baru saja naik ke **Level ${info.current.level} — ${info.current.name}**.`,
@@ -16995,7 +17160,23 @@ initializeAfkVoiceManager({ client, getConfig: () => readConfigFile() });
 
 
 function hexColor(value, fallback = DESA_TULUS_EMBED_COLOR_INT) {
-  return DESA_TULUS_EMBED_COLOR_INT;
+  const raw = String(value || "").trim().replace(/^#/, "");
+  return /^[0-9a-fA-F]{6}$/.test(raw) ? parseInt(raw, 16) : fallback;
+}
+
+function normalizeHexColor(value, fallback = DESA_TULUS_EMBED_COLOR_HEX) {
+  const raw = String(value || "").trim();
+  const match = raw.match(/^#?[0-9a-fA-F]{6}$/);
+  if (!match) return fallback;
+  return raw.startsWith("#") ? raw.toUpperCase() : `#${raw.toUpperCase()}`;
+}
+
+function defaultEmbedColorHex() {
+  return normalizeHexColor(config?.embedColor || DESA_TULUS_EMBED_COLOR_HEX, DESA_TULUS_EMBED_COLOR_HEX);
+}
+
+function defaultEmbedColorInt() {
+  return hexColor(config?.embedColor || DESA_TULUS_EMBED_COLOR_HEX, DESA_TULUS_EMBED_COLOR_INT);
 }
 
 function applyTemplate(text = "", data = {}) {
@@ -17026,9 +17207,13 @@ function applyTemplate(text = "", data = {}) {
     topActiveChannelId: config.topActive?.channelId || "",
     leaderboardChannelId: config.papanAktif?.channelId || config.leaderboardAktif?.channelId || config.topActive?.leaderboardActiveChannelId || config.topActive?.papanAktifChannelId || "",
     ticketChannelId: config.ticketChannelId || "",
+    loketPanelChannelId: config.loket?.panelChannelId || "",
+    loketLogChannelId: config.loket?.logChannelId || "",
     rulesChannel: channelTag(config.rulesChannelId, "#aturan-desa"),
     chatWargaChannel: channelTag(config.chatWargaChannelId, "#chat-warga"),
     ticketChannel: channelTag(config.ticketChannelId, "#ticket"),
+    loketChannel: channelTag(config.loket?.panelChannelId, "#loket"),
+    loketLogChannel: channelTag(config.loket?.logChannelId, "#log-loket"),
     aiChannel: channelTag(config.aiChannelId, "#ai-pak-rw"),
     curhatChannel: channelTag(config.curhatChannelId, "#curhat"),
     anonymousCurhatChannel: channelTag(config.anonymousCurhatChannelId, "#curhat-anonim"),
@@ -17043,6 +17228,7 @@ function applyTemplate(text = "", data = {}) {
     memberRole: welcomeMemberRoleTag(),
     memberTulusRole: welcomeMemberRoleTag(),
     staffRole: roleTag(config.staffRoleId || "", "") || mentionListFromIds(config.commandPermissions?.staffRoleIds || [], "role") || "@Staff",
+    loketStaffRole: roleTag(config.loket?.staffRoleId || "", "@Pengurus Loket"),
     adminRole: roleTag(config.adminRoleId || "", "") || mentionListFromIds(config.commandPermissions?.adminRoleIds || [], "role") || "@Admin",
     moderatorRole: roleTag(config.moderatorRoleId || "", "@Moderator"),
     motmRole: roleTag(config.topActive?.memberOfTheMonthRoleId || config.level100RoleId || "", "@Member Of The Month"),
@@ -17082,8 +17268,167 @@ function embedCfg(name) {
 }
 
 
+function loketConfig() {
+  config.loket = config.loket && typeof config.loket === "object" ? config.loket : {};
+  return {
+    enabled: config.loket.enabled !== false,
+    panelChannelId: config.loket.panelChannelId || "",
+    categoryId: config.loket.categoryId || "",
+    staffRoleId: config.loket.staffRoleId || "",
+    logChannelId: config.loket.logChannelId || "",
+    categoryName: config.loket.categoryName || "🏛️｜LOKET DESA TULUS",
+    channelPrefix: String(config.loket.channelPrefix || "loket").toLowerCase().replace(/[^a-z0-9-_]/g, "").slice(0, 16) || "loket",
+    panelTitle: config.loket.panelTitle || "🏛️ Loket Bantuan DESA TULUS",
+    panelDescription: config.loket.panelDescription || "Butuh bantuan staff atau Pak RW? Buka loket dengan tombol di bawah. Jelaskan masalahnya dengan sopan dan jelas supaya pengurus bisa bantu dengan rapi.",
+    buttonLabel: config.loket.buttonLabel || "Buka Loket",
+    buttonEmoji: config.loket.buttonEmoji || "🏛️",
+    openedTitle: config.loket.openedTitle || "🏛️ Loket Dibuka",
+    openedDescription: config.loket.openedDescription || "Wilujeung sumping di loket bantuan, {user}.\n\nCeritakan masalahnya dengan jelas. Pengurus akan bantu urutkan pelan-pelan.",
+    closeLabel: config.loket.closeLabel || "Tutup Loket",
+    claimLabel: config.loket.claimLabel || "Ambil Loket",
+    transcriptEnabled: config.loket.transcriptEnabled !== false,
+    autoThreadEnabled: config.loket.autoThreadEnabled === true,
+    autoThreadName: config.loket.autoThreadName || "💬 Catatan Loket",
+    imageUrl: config.loket.imageUrl || "",
+    thumbnailUrl: config.loket.thumbnailUrl || "",
+    color: config.loket.color || config.embedColor || DESA_TULUS_EMBED_COLOR_HEX
+  };
+}
+
+function canManageLoket(member) {
+  if (!member) return false;
+  if (member.id === member.guild?.ownerId || String(member.id) === String(config.ownerId || config.ownerUserId || process.env.OWNER_ID || "")) return true;
+  if (member.permissions?.has(PermissionsBitField.Flags.Administrator)) return true;
+  const staffRoleId = loketConfig().staffRoleId;
+  return isFilledId(staffRoleId) && member.roles?.cache?.has(staffRoleId);
+}
+
+function loketPanelRow() {
+  const cfg = loketConfig();
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("loket_open")
+      .setLabel(String(cfg.buttonLabel || "Buka Loket").slice(0, 80))
+      .setEmoji(cfg.buttonEmoji || "🏛️")
+      .setStyle(ButtonStyle.Primary)
+  );
+}
+
+function loketActionRow() {
+  const cfg = loketConfig();
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId("loket_claim").setLabel(String(cfg.claimLabel || "Ambil Loket").slice(0, 80)).setEmoji("🙋").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("loket_close").setLabel(String(cfg.closeLabel || "Tutup Loket").slice(0, 80)).setEmoji("🔒").setStyle(ButtonStyle.Danger)
+  );
+}
+
+function safeChannelName(input = "warga") {
+  return String(input || "warga").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 28) || "warga";
+}
+
+async function getOrCreateLoketCategory(guild) {
+  const cfg = loketConfig();
+  if (isFilledId(cfg.categoryId)) {
+    const found = guild.channels.cache.get(cfg.categoryId);
+    if (found && found.type === ChannelType.GuildCategory) return found;
+  }
+  let existing = guild.channels.cache.find((ch) => ch.type === ChannelType.GuildCategory && ch.name === cfg.categoryName);
+  if (existing) return existing;
+  if (!guild.members.me?.permissions.has(PermissionsBitField.Flags.ManageChannels)) return null;
+  return guild.channels.create({ name: cfg.categoryName, type: ChannelType.GuildCategory, reason: "Auto category Loket Pak RW" }).catch(() => null);
+}
+
+async function sendLoketPanel(channel) {
+  const cfg = loketConfig();
+  const e = embedCfg("loketPanel");
+  const embed = new EmbedBuilder()
+    .setColor(hexColor(e.color || cfg.color, DESA_TULUS_EMBED_COLOR_INT))
+    .setTitle(e.title || cfg.panelTitle)
+    .setDescription(e.description || cfg.panelDescription)
+    .setFooter({ text: e.footer || "DESA TULUS • Loket Pak RW" })
+    .setTimestamp();
+  if (e.authorName) embed.setAuthor({ name: String(e.authorName).slice(0, 256), iconURL: e.authorIcon || undefined });
+  const img = e.image || cfg.imageUrl;
+  const thumb = e.thumbnail || cfg.thumbnailUrl;
+  if (img) embed.setImage(img);
+  if (thumb && thumb !== "avatar") embed.setThumbnail(thumb);
+  return safeSend(channel, { content: e.content || undefined, embeds: [embed], components: [loketPanelRow()] });
+}
+
+async function openLoketFromInteraction(interaction) {
+  const cfg = loketConfig();
+  if (!cfg.enabled) return interaction.reply({ content: "Loket sedang ditutup sementara, nak.", flags: 64 });
+  if (!interaction.guild.members.me?.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
+    return interaction.reply({ content: "Pak RW belum punya izin **Manage Channels** untuk membuat loket.", flags: 64 });
+  }
+  const reason = interaction.fields?.getTextInputValue("loket_reason") || "Belum ada alasan detail.";
+  const existing = interaction.guild.channels.cache.find((ch) => ch.type === ChannelType.GuildText && ch.topic?.includes(`loketUser:${interaction.user.id}`));
+  if (existing) return interaction.reply({ content: `Kamu masih punya loket aktif di ${existing}. Lanjut di sana dulu ya.`, flags: 64 });
+  const category = await getOrCreateLoketCategory(interaction.guild);
+  const staffRoleId = cfg.staffRoleId;
+  const overwrites = [
+    { id: interaction.guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+    { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.AttachFiles] },
+    { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.AttachFiles, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ManageMessages] }
+  ];
+  if (isFilledId(staffRoleId)) overwrites.push({ id: staffRoleId, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.AttachFiles, PermissionsBitField.Flags.ManageMessages] });
+  const channelName = `${cfg.channelPrefix}-${safeChannelName(interaction.user.username)}`.slice(0, 90);
+  const channel = await interaction.guild.channels.create({
+    name: channelName,
+    type: ChannelType.GuildText,
+    parent: category?.id || undefined,
+    topic: `Loket Pak RW DESA TULUS • loketUser:${interaction.user.id}`,
+    permissionOverwrites: overwrites,
+    reason: `Loket dibuka oleh ${interaction.user.tag}`
+  }).catch((err) => null);
+  if (!channel) return interaction.reply({ content: "Pak RW belum bisa membuat channel loket. Cek izin Manage Channels dan posisi role bot.", flags: 64 });
+  const e = embedCfg("loketOpened");
+  const embed = new EmbedBuilder()
+    .setColor(hexColor(e.color || cfg.color, DESA_TULUS_EMBED_COLOR_INT))
+    .setTitle(e.title || cfg.openedTitle)
+    .setDescription(applyTemplate(e.description || cfg.openedDescription, { user: `${interaction.user}`, username: interaction.user.username, reason }).slice(0, 4096))
+    .addFields({ name: "👤 Warga", value: `${interaction.user}`, inline: true }, { name: "📝 Keperluan", value: reason.slice(0, 1024), inline: false })
+    .setFooter({ text: e.footer || "DESA TULUS • Loket Bantuan" })
+    .setTimestamp();
+  if (e.image || cfg.imageUrl) embed.setImage(e.image || cfg.imageUrl);
+  if ((e.thumbnail || cfg.thumbnailUrl) && (e.thumbnail || cfg.thumbnailUrl) !== "avatar") embed.setThumbnail(e.thumbnail || cfg.thumbnailUrl);
+  await channel.send({ content: `${interaction.user}${isFilledId(staffRoleId) ? ` <@&${staffRoleId}>` : ""}`, embeds: [embed], components: [loketActionRow()] });
+  if (cfg.autoThreadEnabled) {
+    const msg = await channel.messages.fetch({ limit: 1 }).then((m) => m.first()).catch(() => null);
+    await msg?.startThread({ name: cfg.autoThreadName, autoArchiveDuration: 1440, reason: "Thread catatan Loket Pak RW" }).catch(() => null);
+  }
+  const log = getTextChannel(interaction.guild, cfg.logChannelId);
+  if (log) await safeSend(log, { content: `🏛️ Loket dibuka oleh ${interaction.user} → ${channel}` });
+  return interaction.reply({ content: `Loket kamu sudah dibuka di ${channel}. Ceritakan detailnya di sana ya.`, flags: 64 });
+}
+
+async function handleLoketButton(interaction) {
+  if (interaction.customId === "loket_open") {
+    const modal = new ModalBuilder().setCustomId("loket_open_modal").setTitle("Buka Loket DESA TULUS");
+    const reason = new TextInputBuilder().setCustomId("loket_reason").setLabel("Keperluan loket").setPlaceholder("Contoh: mau lapor masalah channel / tanya bantuan role").setStyle(TextInputStyle.Paragraph).setMaxLength(900).setRequired(true);
+    modal.addComponents(new ActionRowBuilder().addComponents(reason));
+    return safeShowModal(interaction, modal);
+  }
+  if (interaction.customId === "loket_claim") {
+    if (!canManageLoket(interaction.member)) return interaction.reply({ content: "Tombol ini khusus pengurus loket.", flags: 64 });
+    await interaction.reply({ content: `🙋 Loket ini sedang ditangani oleh ${interaction.user}.` });
+    return true;
+  }
+  if (interaction.customId === "loket_close") {
+    if (!canManageLoket(interaction.member)) return interaction.reply({ content: "Tombol ini khusus pengurus loket.", flags: 64 });
+    const cfg = loketConfig();
+    const log = getTextChannel(interaction.guild, cfg.logChannelId);
+    if (log && cfg.transcriptEnabled) await safeSend(log, { content: `🔒 Loket ditutup oleh ${interaction.user}: **#${interaction.channel.name}**` });
+    await interaction.reply({ content: "Loket ditutup. Channel akan dihapus dalam 5 detik." });
+    setTimeout(() => interaction.channel?.delete(`Loket ditutup oleh ${interaction.user.tag}`).catch(() => {}), 5000);
+    return true;
+  }
+  return false;
+}
+
+
 function color() {
-  return DESA_TULUS_EMBED_COLOR_INT;
+  return defaultEmbedColorInt();
 }
 
 function isFilledId(id) {
@@ -17100,7 +17445,7 @@ function roleTag(id, fallback = "@role belum diatur") {
 
 function welcomeMemberRoleTag() {
   const w = config.welcome || {};
-  return roleTag(w.memberRoleId || config.memberTulusRoleId || "", w.memberRoleName ? `@${w.memberRoleName}` : "@Member Tulus");
+  return roleTag(w.memberRoleId || config.memberTulusRoleId || "", w.memberRoleName ? `@${w.memberRoleName}` : "@Warga");
 }
 
 function mentionIdsFromText(text = "") {
@@ -17402,7 +17747,7 @@ async function sendAnonimPanel(channel) {
 
     const panelEmbedCfg = embedCfg("anonimPanel");
     const embed = new EmbedBuilder()
-      .setColor(DESA_TULUS_EMBED_COLOR_INT)
+      .setColor(defaultEmbedColorInt())
       .setTitle(panelEmbedCfg.title || "☁️ Curhat Anonim DESA TULUS")
       .setDescription(panelEmbedCfg.description || "Punya sesuatu yang ingin kamu ceritakan tanpa menampilkan identitas?\n\nKlik tombol **☁️ Curhat ke Pak RW** di bawah ini. Curhatan kamu akan dikirim sebagai **Anonymous** dan warga bisa membalas lewat thread diskusi 🤍")
       .setFooter({ text: makeOTFooter(panelEmbedCfg.footer || "Pak RW • PANEL_CURHAT_ANONIM") })
@@ -17434,24 +17779,31 @@ async function safeShowModal(interaction, modal) {
   }
 }
 
-function suggestionRow(yes = 0, no = 0) {
+function suggestionRow() {
+  // Compatibility wrapper untuk kode lama.
+  // Tombol Setuju/Tidak Setuju sudah diganti reaction otomatis ✅ dan ❌.
+  return suggestionPanelRow();
+}
+
+function suggestionPanelRow() {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("vote_yes")
-      .setLabel(`Setuju (${yes})`)
-      .setEmoji("✅")
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId("vote_no")
-      .setLabel(`Tidak Setuju (${no})`)
-      .setEmoji("❌")
-      .setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
       .setCustomId("open_suggestion")
       .setLabel("Kasih Saran")
       .setEmoji("💡")
       .setStyle(ButtonStyle.Secondary)
   );
+}
+
+async function setupSuggestionDiscussion(message) {
+  if (!message) return;
+  await message.react("✅").catch((err) => console.log("SARAN REACTION CEKLIS ERROR:", err?.message || err));
+  await message.react("❌").catch((err) => console.log("SARAN REACTION X ERROR:", err?.message || err));
+  await message.startThread({
+    name: "💬 Berikan Tanggapan",
+    autoArchiveDuration: 1440,
+    reason: "Thread otomatis untuk tanggapan kritik dan saran warga"
+  }).catch((err) => console.log("SARAN THREAD ERROR:", err?.message || err));
 }
 
 
@@ -17678,7 +18030,7 @@ client.once(Events.ClientReady, async () => {
     const channel = client.channels.cache.get(config.suggestionChannelId);
     if (channel) {
       const embed = new EmbedBuilder()
-        .setColor(DESA_TULUS_EMBED_COLOR_INT)
+        .setColor(defaultEmbedColorInt())
         .setTitle(config.suggestion?.title || "💡 DESA TULUS • Kritik & Saran")
         .setDescription(config.suggestion?.description || "Klik tombol di bawah untuk mengirim saran.")
         .setFooter({ text: makeOTFooter("Pak RW • Sistem Saran") })
@@ -17686,15 +18038,7 @@ client.once(Events.ClientReady, async () => {
 
       await safeSend(channel, {
         embeds: [embed],
-        components: [
-          new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-              .setCustomId("open_suggestion")
-              .setLabel("Kasih Saran")
-              .setEmoji("💡")
-              .setStyle(ButtonStyle.Secondary)
-          )
-        ]
+        components: [suggestionPanelRow()]
       });
     }
   }
@@ -17738,6 +18082,8 @@ client.on(Events.GuildMemberAdd, async (member) => {
       rulesChannel: channelTag(config.rulesChannelId, "#aturan-desa"),
       chatWargaChannel: channelTag(config.chatWargaChannelId, "#chat-warga"),
       ticketChannel: channelTag(config.ticketChannelId, "#ticket"),
+    loketChannel: channelTag(config.loket?.panelChannelId, "#loket"),
+    loketLogChannel: channelTag(config.loket?.logChannelId, "#log-loket"),
       aiChannel: channelTag(config.aiChannelId, "#ai-pak-rw"),
       curhatChannel: channelTag(config.curhatChannelId, "#curhat"),
       anonymousCurhatChannel: channelTag(config.anonymousCurhatChannelId, "#curhat-anonim"),
@@ -17746,15 +18092,16 @@ client.on(Events.GuildMemberAdd, async (member) => {
       leaderboardChannel: channelTag(config.topActive?.leaderboardActiveChannelId || config.topActive?.papanAktifChannelId, "#leaderboard-aktif")
     };
 
+    const defaultWelcomeMessage = "Wilujeung sumping, **{user}!**\nakhirnya mampir juga ke {server}.\nDi sini tempatnya ngobrol santai, saling kenal, curhat, bercanda, dan jadi bagian dari warga Desa Tulus.\n\nJangan sungkan buat mulai ngobrol ya. Semoga betah di sini";
     const description = applyTemplate(
-      config.welcome.message || "Sambut warga anyar barudak {memberTulusRole}\n\nPak RW menyambut {user} sebagai bagian dari **DESA TULUS**. Semoga betah, rukun, dan saling menghargai.\n\n📌 Baca aturan desa: {rulesChannel}\n💬 Kenalan di chat warga: {chatWargaChannel}\n🎫 Butuh bantuan? Buka ticket: {ticketChannel}\n\nKamu warga ke-**{memberCount}** di desa ini. Wilujeung sumping, semoga betah di lembur urang 🤍",
+      normalizeWelcomeText(config.welcome.message, defaultWelcomeMessage),
       welcomeData
     );
-    const welcomeTitle = applyTemplate(config.welcome.title || "🏡 Wilujeung Sumping Warga Anyar! {displayName}", welcomeData);
-    const welcomeContent = applyTemplate(config.welcome.content || "🤍 Sambut warga anyar barudak {user} {memberRole}", welcomeData);
+    const welcomeTitle = applyTemplate(normalizeWelcomeText(config.welcome.title, "Wilujeung sumping, {displayName}!"), welcomeData);
+    const welcomeContent = applyTemplate(normalizeWelcomeText(config.welcome.content, "{memberTulusRole}"), welcomeData);
 
     const embed = new EmbedBuilder()
-      .setColor(DESA_TULUS_EMBED_COLOR_INT)
+      .setColor(defaultEmbedColorInt())
       .setAuthor({
         name: `${config.serverName || "DESA TULUS"} • Warga Baru`,
         iconURL: member.user.displayAvatarURL({ dynamic: true })
@@ -17798,7 +18145,7 @@ function juraganEmbed(member) {
   };
 
   const embed = new EmbedBuilder()
-    .setColor(DESA_TULUS_EMBED_COLOR_INT)
+    .setColor(defaultEmbedColorInt())
     .setTitle(applyTemplate(e.title || "<a:Boost:1512485430887714866> SELAMAT DATANG JURAGAN! <a:Boost:1512485430887714866>", data))
     .setDescription(applyTemplate(e.description || "Terima kasih sudah mendukung server ini {user}.\nSekarang kamu dapat menikmati benefit dari role {juraganRole}.\n\n**Benefit utama:**\n\n• Mendapatkan role {juraganRole}\n• Display role di member list\n• Bonus ekstra poin +{bonusPercent}%\n• Akses ke fitur Soundboard\n• Akses ke voice channel VIP {vipVoiceChannel}\n• Akses text channel khusus donatur {juraganChatChannel}\n\nGunakan benefit dengan sopan dan tetap jaga suasana warga.", data))
     .setFooter({ text: makeOTFooter(applyTemplate(e.footer || "DESA TULUS • Juragan Desa", data)), iconURL: e.footerIcon || OT_FOOTER_ICON_URL })
@@ -18438,7 +18785,7 @@ async function handleRwTanyaCommand(message) {
   );
 
   const embed = new EmbedBuilder()
-    .setColor(DESA_TULUS_EMBED_COLOR_INT)
+    .setColor(defaultEmbedColorInt())
     .setTitle(`💎 Jawaban Pak RW untuk ${displayName}`)
     .setDescription(trimReply(answer))
     .setFooter({ text: makeOTFooter(`${config.serverName} • RWTANYA Donatur`) })
@@ -18475,7 +18822,7 @@ function buildPakRwBigBotEmbed(message) {
       ].join("\n");
 
   return new EmbedBuilder()
-    .setColor(DESA_TULUS_EMBED_COLOR_INT)
+    .setColor(defaultEmbedColorInt())
     .setTitle("🌾 Pak RW Big Bot Premium DESA TULUS")
     .setDescription([
       "Pak RW ayeuna janten **bot besar balai warga digital** pikeun DESA TULUS.",
@@ -18530,7 +18877,7 @@ async function handleRwLevelCommand(message) {
       : "Belum ada data level warga.";
 
     const embed = new EmbedBuilder()
-      .setColor(DESA_TULUS_EMBED_COLOR_INT)
+      .setColor(defaultEmbedColorInt())
       .setTitle("🏆 Top Level Warga DESA TULUS")
       .setDescription(desc)
       .setFooter({ text: makeOTFooter(`${config.serverName} • Level Leaderboard`) })
@@ -18573,7 +18920,7 @@ function buildServerInfoEmbed(guild) {
   const created = Math.floor(guild.createdTimestamp / 1000);
 
   return new EmbedBuilder()
-    .setColor(DESA_TULUS_EMBED_COLOR_INT)
+    .setColor(defaultEmbedColorInt())
     .setTitle(`🏠 Info Server ${guild.name}`)
     .setThumbnail(guild.iconURL({ size: 256 }) || null)
     .setDescription([
@@ -18604,7 +18951,7 @@ function buildUserInfoEmbed(member) {
     .join(" ") || "Tidak ada role khusus.";
 
   return new EmbedBuilder()
-    .setColor(DESA_TULUS_EMBED_COLOR_INT)
+    .setColor(defaultEmbedColorInt())
     .setTitle(`👤 Info User ${member.displayName}`)
     .setThumbnail(user.displayAvatarURL({ size: 256 }))
     .setDescription([
@@ -18625,7 +18972,7 @@ function buildChannelInfoEmbed(channel) {
   const created = channel.createdTimestamp ? Math.floor(channel.createdTimestamp / 1000) : null;
 
   return new EmbedBuilder()
-    .setColor(DESA_TULUS_EMBED_COLOR_INT)
+    .setColor(defaultEmbedColorInt())
     .setTitle(`📌 Info Channel #${channel.name}`)
     .setDescription([
       `**Channel:** <#${channel.id}>`,
@@ -18650,7 +18997,7 @@ function buildRoleListEmbed(guild) {
     : "Belum ada role yang terbaca.";
 
   return new EmbedBuilder()
-    .setColor(DESA_TULUS_EMBED_COLOR_INT)
+    .setColor(defaultEmbedColorInt())
     .setTitle("🎭 Daftar Role Server")
     .setDescription(desc)
     .setFooter({ text: makeOTFooter(`${config.serverName} • Menampilkan maksimal 25 role`) })
@@ -18663,7 +19010,7 @@ function buildIdHelperEmbed(message) {
   const targetRole = message.mentions.roles.first();
 
   return new EmbedBuilder()
-    .setColor(DESA_TULUS_EMBED_COLOR_INT)
+    .setColor(defaultEmbedColorInt())
     .setTitle("🆔 ID Helper Pak RW")
     .setDescription([
       `**User ID:** \`${targetUser.id}\``,
@@ -18691,7 +19038,7 @@ async function handleUtilityCommand(message, cmd, args) {
   if (cmd === "avatar" || cmd === "pp") {
     const target = message.mentions.users.first() || message.author;
     const embed = new EmbedBuilder()
-      .setColor(DESA_TULUS_EMBED_COLOR_INT)
+      .setColor(defaultEmbedColorInt())
       .setTitle(`🖼️ Avatar ${target.username}`)
       .setImage(target.displayAvatarURL({ size: 1024 }))
       .setFooter({ text: makeOTFooter(`${config.serverName} • Avatar`) })
@@ -18715,7 +19062,7 @@ async function handleUtilityCommand(message, cmd, args) {
 
   if (cmd === "configcek" || cmd === "cekconfig") {
     const embed = new EmbedBuilder()
-      .setColor(DESA_TULUS_EMBED_COLOR_INT)
+      .setColor(defaultEmbedColorInt())
       .setTitle("⚙️ Cek Config Pak RW")
       .setDescription([
         `**Prefix:** \`${config.prefix || "rw"}\``,
@@ -19011,7 +19358,7 @@ function isProtectedCommandFeature(feature = "") {
 
 function commandEmbed(title, description, options = {}) {
   return new EmbedBuilder()
-    .setColor(DESA_TULUS_EMBED_COLOR_INT)
+    .setColor(defaultEmbedColorInt())
     .setTitle(title)
     .setDescription(Array.isArray(description) ? description.join("\n") : String(description || ""))
     .setFooter({ text: makeOTFooter(options.footer || `${config.serverName || "DESA TULUS"} • Pak RW Command Center`) })
@@ -19162,16 +19509,14 @@ function featureChannelKey(feature) {
 
 async function sendSuggestionPanelCommand(channel) {
   const embed = new EmbedBuilder()
-    .setColor(DESA_TULUS_EMBED_COLOR_INT)
+    .setColor(defaultEmbedColorInt())
     .setTitle(config.suggestion?.title || "💡 DESA TULUS • Kritik & Saran")
     .setDescription(config.suggestion?.description || "Punya ide, kritik, saran, atau masukan buat server? Klik tombol di bawah dan tulis dengan jelas ya 🤍")
     .setFooter({ text: makeOTFooter(`${config.serverName || "DESA TULUS"} • Kritik & Saran`) })
     .setTimestamp();
   await channel.send({
     embeds: [embed],
-    components: [new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("open_suggestion").setLabel("Kasih Saran").setEmoji("💡").setStyle(ButtonStyle.Secondary)
-    )]
+    components: [suggestionPanelRow()]
   });
 }
 
@@ -19179,7 +19524,7 @@ async function sendMabarPanelCommand(channel, author) {
   const cfg = config.mabar || {};
   const e = config.embeds?.cariMabar || {};
   const embed = new EmbedBuilder()
-    .setColor(DESA_TULUS_EMBED_COLOR_INT)
+    .setColor(defaultEmbedColorInt())
     .setTitle(e.title || "🎮 CARI MABAR DESA TULUS")
     .setDescription(e.description || "Ada yang mau mabar? Tulis game, mode, slot, dan jam main biar warga gampang ikut.")
     .setFooter({ text: makeOTFooter(e.footer || `${config.serverName || "DESA TULUS"} • Cari Mabar`) })
@@ -19390,8 +19735,8 @@ async function handlePakRwCommandCenterPrefix(message, cmd, args = []) {
     config.ai = config.ai || {};
     if (sub === "status") {
       await safeReply(message, { embeds: [commandEmbed("🤖 Status AI Pak RW", [
-        `Model pintar: \`${config.ai.smartModel || "openai/gpt-5.4"}\``,
-        `Model hemat: \`${config.ai.economyModel || "openai/gpt-5.4-mini"}\``,
+        `Model pintar: \`${config.ai.smartModel || "openai/gpt-4o-mini"}\``,
+        `Model hemat: \`${config.ai.economyModel || "openai/gpt-4o-mini"}\``,
         `Router: **otomatis sesuai tingkat kesulitan**`,
         `Memori per warga: **${config.ai.memoryEnabled === false ? "Nonaktif" : "Aktif"}**`,
         `Channel: ${isFilledId(config.aiChannelId) ? `<#${config.aiChannelId}>` : "belum diatur"}`,
@@ -19402,10 +19747,10 @@ async function handlePakRwCommandCenterPrefix(message, cmd, args = []) {
       return true;
     }
     if (sub === "model" || sub === "smart") {
-      config.ai.smartModel = args[1] || config.ai.smartModel || "openai/gpt-5.4";
+      config.ai.smartModel = args[1] || config.ai.smartModel || "openai/gpt-4o-mini";
       config.ai.openRouterModel = config.ai.smartModel;
     }
-    else if (sub === "hemat" || sub === "economy") config.ai.economyModel = args[1] || config.ai.economyModel || "openai/gpt-5.4-mini";
+    else if (sub === "hemat" || sub === "economy") config.ai.economyModel = args[1] || config.ai.economyModel || "openai/gpt-4o-mini";
     else if (sub === "memory") config.ai.memoryEnabled = normalizeOnOff(args[1], config.ai.memoryEnabled !== false);
     else if (sub === "cooldown") config.ai.cooldownMs = Math.max(1000, parseNumberInput(args[1], config.ai.cooldownMs || 4500));
     else if (sub === "max") config.ai.maxMessageLength = Math.max(500, Math.min(2000, parseNumberInput(args[1], config.ai.maxMessageLength || 1900)));
@@ -19414,7 +19759,7 @@ async function handlePakRwCommandCenterPrefix(message, cmd, args = []) {
       const ch = resolveTextChannelArg(message, args[1]);
       if (!ch) return safeReply(message, `❌ Channel AI tidak ditemukan. Contoh: \`${p}ai channel #nanya-pak-rw\``), true;
       config.aiChannelId = ch.id;
-    } else return safeReply(message, `⚠️ Contoh: \`${p}ai status\`, \`${p}ai smart openai/gpt-5.4\`, \`${p}ai hemat openai/gpt-5.4-mini\`, \`${p}ai memory on\`, \`${p}ai cooldown 12000\`, atau \`${p}ai channel #channel\``), true;
+    } else return safeReply(message, `⚠️ Contoh: \`${p}ai status\`, \`${p}ai smart openai/gpt-4o-mini\`, \`${p}ai hemat openai/gpt-4o-mini\`, \`${p}ai memory on\`, \`${p}ai cooldown 12000\`, atau \`${p}ai channel #channel\``), true;
     await saveLiveConfigFromOwner(message, "Setting AI Pak RW berhasil diperbarui");
     return true;
   }
@@ -19459,7 +19804,7 @@ async function handlePakRwCommandCenterPrefix(message, cmd, args = []) {
       const reply = await askAI(text, "curhat", buildPakRwAiContext(message, text, "curhat"));
       const embedCfg = config.embeds?.curhatReply || {};
       const embed = new EmbedBuilder()
-        .setColor(DESA_TULUS_EMBED_COLOR_INT)
+        .setColor(defaultEmbedColorInt())
         .setTitle(embedCfg.title || "🤍 Balasan Pak RW")
         .setDescription(compactReply(reply || "Aku baca ceritamu. Pelan-pelan ya, kamu tidak harus menyelesaikan semuanya sendirian." ).slice(0, 1900))
         .setFooter({ text: makeOTFooter(embedCfg.footer || `${config.serverName || "DESA TULUS"} • Curhat System`) })
@@ -19476,7 +19821,7 @@ async function handlePakRwCommandCenterPrefix(message, cmd, args = []) {
     const note = args.join(" ").trim();
     const e = config.embeds?.cariMabar || {};
     const embed = new EmbedBuilder()
-      .setColor(DESA_TULUS_EMBED_COLOR_INT)
+      .setColor(defaultEmbedColorInt())
       .setTitle(e.title || "🎮 CARI MABAR DESA TULUS")
       .setDescription([
         note || e.description || "Ada yang mau mabar? Tulis game, mode, slot, dan jam main biar warga gampang ikut.",
@@ -19697,7 +20042,7 @@ function buildOwnerPointEditEmbed(member, action, amount, type, result) {
   const actionText = action === "set" ? "diset menjadi" : "dikurangi";
 
   return new EmbedBuilder()
-    .setColor(DESA_TULUS_EMBED_COLOR_INT)
+    .setColor(defaultEmbedColorInt())
     .setTitle(`👑 ${actionTitle} Owner`)
     .setDescription([
       `Member: ${member}`,
@@ -19717,7 +20062,7 @@ function buildOwnerPointEditEmbed(member, action, amount, type, result) {
 function ownerHelpEmbed(message) {
   const p = ownerCommandConfig().prefix;
   return new EmbedBuilder()
-    .setColor(DESA_TULUS_EMBED_COLOR_INT)
+    .setColor(defaultEmbedColorInt())
     .setTitle("👑 Owner Control Pak RW")
     .setDescription([
       `Prefix owner khusus: **\`${p}\`**`,
@@ -19823,7 +20168,7 @@ async function handleOwnerPrefixCommand(message) {
     const dbStatus = await getMongoStatus(message.guild.id).catch(() => null);
     const cfg = getTopActiveConfig();
     const embed = new EmbedBuilder()
-      .setColor(DESA_TULUS_EMBED_COLOR_INT)
+      .setColor(defaultEmbedColorInt())
       .setTitle("👑 Status Owner Pak RW")
       .setDescription([
         `**Bot:** ${client.user?.tag || "belum ready"}`,
@@ -20240,7 +20585,7 @@ async function handleOwnerPrefixCommand(message) {
     if (!channel || !titleRaw || !descRaw) return safeReply(message, `❌ Contoh: \`${p}embed #channel | Judul | Deskripsi | #7DBD77\``), true;
     const embedColor = DESA_TULUS_EMBED_COLOR_INT;
     const embed = new EmbedBuilder()
-      .setColor(DESA_TULUS_EMBED_COLOR_INT)
+      .setColor(defaultEmbedColorInt())
       .setTitle(titleRaw)
       .setDescription(descRaw.replaceAll("\\n", "\n"))
       .setFooter({ text: makeOTFooter(`${config.serverName || "DESA TULUS"} • Owner Embed`) })
@@ -20420,7 +20765,7 @@ client.on(Events.MessageCreate, async (message) => {
 
       if (cmd === "status") {
         const embed = new EmbedBuilder()
-          .setColor(DESA_TULUS_EMBED_COLOR_INT)
+          .setColor(defaultEmbedColorInt())
           .setTitle("🤖 Pak RW Status")
           .setDescription(
             `✅ Bot online dan stabil\n` +
@@ -20443,10 +20788,25 @@ client.on(Events.MessageCreate, async (message) => {
         return safeReply(message, { embeds: [buildPakRwBigBotEmbed(message)] });
       }
 
+
+      if (cmd === "loket" || cmd === "loketpanel" || cmd === "kirimpaneloket") {
+        const sub = String(args[0] || "panel").toLowerCase();
+        if (sub === "panel" || cmd === "loketpanel" || cmd === "kirimpaneloket") {
+          if (!message.member.permissions.has(PermissionsBitField.Flags.ManageGuild) && !canManageLoket(message.member)) {
+            return safeReply(message, "Command panel loket khusus pengurus/server staff.");
+          }
+          const cfg = loketConfig();
+          const target = getTextChannel(message.guild, cfg.panelChannelId) || message.channel;
+          await sendLoketPanel(target);
+          return safeReply(message, `✅ Panel Loket Pak RW sudah dikirim ke ${target}.`);
+        }
+        return safeReply(message, "🏛️ Untuk membuka loket, klik tombol **Buka Loket** di panel Loket Pak RW.");
+      }
+
       if (cmd === "mongodb" || cmd === "mongo" || cmd === "db") {
         const dbStatus = await getMongoStatus(message.guild.id);
         const embed = new EmbedBuilder()
-          .setColor(DESA_TULUS_EMBED_COLOR_INT)
+          .setColor(defaultEmbedColorInt())
           .setTitle("🗄️ Status Database Pak RW")
           .setDescription([
             `**Mode:** ${dbStatus.active ? "MongoDB aktif ✅" : "Local JSON fallback ⚠️"}`,
@@ -20480,7 +20840,7 @@ client.on(Events.MessageCreate, async (message) => {
         const userData = getLevelUser(data, message.guild.id, target.id);
         const info = getLevelBonusInfo(target);
         const embed = new EmbedBuilder()
-          .setColor(DESA_TULUS_EMBED_COLOR_INT)
+          .setColor(defaultEmbedColorInt())
           .setTitle("🎁 Cek Bonus Ekstra Poin")
           .setDescription([
             `${target}, ini status bonus level kamu.`,
@@ -20511,7 +20871,7 @@ client.on(Events.MessageCreate, async (message) => {
           : "Belum ada data level warga.";
 
         const embed = new EmbedBuilder()
-          .setColor(DESA_TULUS_EMBED_COLOR_INT)
+          .setColor(defaultEmbedColorInt())
           .setTitle("🏆 Top Level Warga DESA TULUS")
           .setDescription(desc)
           .setFooter({ text: makeOTFooter(`${config.serverName} • Level Leaderboard`) })
@@ -20524,8 +20884,8 @@ client.on(Events.MessageCreate, async (message) => {
         if (cmd === "topchat") {
           const rows = getTopActiveRows(message.guild.id, "chat", getTopActiveConfig().topLimit, message.guild.ownerId);
           const embed = new EmbedBuilder()
-            .setColor(DESA_TULUS_EMBED_COLOR_INT)
-            .setTitle("💬 Top Chat Warga Bulan Ini")
+            .setColor(defaultEmbedColorInt())
+            .setTitle("Top Chat:")
             .setDescription("Poin, level, dan rank di bawah dihitung dari **poin chat bulan ini**.\n\n" + formatTopActiveRows(rows, "chat"))
             .setFooter({ text: makeOTFooter(`${config.serverName} • ${getMonthLabel()}`) })
             .setTimestamp();
@@ -20535,8 +20895,8 @@ client.on(Events.MessageCreate, async (message) => {
         if (cmd === "topvoice") {
           const rows = getTopActiveRows(message.guild.id, "voice", getTopActiveConfig().topLimit, message.guild.ownerId);
           const embed = new EmbedBuilder()
-            .setColor(DESA_TULUS_EMBED_COLOR_INT)
-            .setTitle("🎙️ Top Voice Warga Bulan Ini")
+            .setColor(defaultEmbedColorInt())
+            .setTitle("Top Voice:")
             .setDescription("Poin, level, dan rank di bawah dihitung dari **poin voice bulan ini**.\n\n" + formatTopActiveRows(rows, "voice"))
             .setFooter({ text: makeOTFooter(`${config.serverName} • ${getMonthLabel()}`) })
             .setTimestamp();
@@ -20744,11 +21104,12 @@ client.on(Events.MessageCreate, async (message) => {
           "**Fitur yang bisa diatur:**",
           "• 🤖 Tanya Pak RW — AI natural ikut gaya bahasa user",
           "• ☁️ Curhat & Curhat Anonim — panel, thread, balasan anonim",
-          "• 💡 Saran — panel + voting setuju/tidak setuju",
+          "• 💡 Saran — panel + reaction dan thread tanggapan",
+          "• 🏛️ Loket — ruang bantuan privat, claim, close, dan log",
           "• 👋 Welcome — pesan warga baru",
           "• 💎 Juragan — boost role, embed, akses khusus, bonus poin",
           "• 💸 Donatur — role sementara otomatis dari nominal",
-          "• 🔝 Level — chat/voice poin, rank, role level 100",
+          "• 🔝 Level — chat/voice poin, rank, role level otomatis",
           "• 🏆 Top Aktif/MOTM — top chat, top voice, banner manual",
           "• 🖼️ Banner Manual — logo, background, image embed, MOTM",
           "• 🔗 Discord Manager — role/channel/emoji/ID",
@@ -20788,8 +21149,8 @@ client.on(Events.MessageCreate, async (message) => {
           `\`${p}testlevel\` - test embed level-up`,
           `\`${p}testlevel100\` - test preview embed Level 100 tanpa mengubah data`,
           "`paksynclevelroles` - sinkronkan role level seluruh warga (owner)",
-          "`pakceklevelrole @user` - cek role level seorang warga",
-          "`paksynclevelrole @user` - perbaiki role level seorang warga",
+          "`pakceklevelrole @user` - cek role level otomatis seorang warga",
+          "`paksynclevelrole @user` - perbaiki role level otomatis seorang warga",
           "",
           "**Utility Baru**",
           `\`${p}serverinfo\` - info server`,
@@ -20815,7 +21176,7 @@ client.on(Events.MessageCreate, async (message) => {
         }
 
         const embed = new EmbedBuilder()
-          .setColor(DESA_TULUS_EMBED_COLOR_INT)
+          .setColor(defaultEmbedColorInt())
           .setTitle(config.suggestion?.title || "💡 DESA TULUS • Kritik & Saran")
           .setDescription(config.suggestion?.description || "Klik tombol di bawah untuk mengirim saran.")
           .setFooter({ text: makeOTFooter("Pak RW • Sistem Saran") })
@@ -20823,21 +21184,13 @@ client.on(Events.MessageCreate, async (message) => {
 
         return safeReply(message, {
           embeds: [embed],
-          components: [
-            new ActionRowBuilder().addComponents(
-              new ButtonBuilder()
-                .setCustomId("open_suggestion")
-                .setLabel("Kasih Saran")
-                .setEmoji("💡")
-                .setStyle(ButtonStyle.Secondary)
-            )
-          ]
+          components: [suggestionPanelRow()]
         });
       }
 
       if (cmd === "anonim" || cmd === "curhatanonim") {
         const embed = new EmbedBuilder()
-          .setColor(DESA_TULUS_EMBED_COLOR_INT)
+          .setColor(defaultEmbedColorInt())
           .setTitle("☁️ Curhat Anonim DESA TULUS")
           .setDescription(
             "Klik tombol **☁️ Curhat ke Pak RW** di bawah ini untuk mengirim curhatan anonim.\n\n" +
@@ -20900,7 +21253,7 @@ function isOwnerCommandInteractionUser(interaction) {
 function buildOwnerStatusEmbedForGuild(guild) {
   const cfg = getTopActiveConfig();
   return new EmbedBuilder()
-    .setColor(DESA_TULUS_EMBED_COLOR_INT)
+    .setColor(defaultEmbedColorInt())
     .setTitle("👑 Status Owner Pak RW")
     .setDescription([
       `**Bot:** ${client.user?.tag || "belum ready"}`,
@@ -20914,7 +21267,7 @@ function buildOwnerStatusEmbedForGuild(guild) {
       `**MOTM Target:** ${formatNumber(cfg.pointsThreshold || 10000)} poin`,
       `**Bonus:** ${cfg.bonusEnabled ? `+${cfg.bonusPercent || 15}% aktif` : "Nonaktif"}`,
       `**Channel Level:** ${isFilledId(config.levelChannelId) ? `<#${config.levelChannelId}>` : "belum diset"}`,
-      `**Auto Level Role:** ${getPakRwLevelSystemConfig().autoLevelRole ? "Aktif" : "Nonaktif"} • ${getConfiguredLevelRoleIds(config).length}/${LEVEL_ROLE_TIER_DEFINITIONS.length} role tier terisi`,
+      `**Auto Level Role:** ${getPakRwLevelSystemConfig().autoLevelRole ? "Aktif" : "Nonaktif"} • otomatis on-demand • no color • max Lv. 1000`,
       `**Owner di leaderboard:** ${cfg.excludeOwnerFromLeaderboard !== false ? "Tidak muncul ✅" : "Masih muncul ⚠️"}`,
       `**Uptime:** ${Math.floor(process.uptime() / 60)} menit`
     ].join("\n"))
@@ -20924,7 +21277,7 @@ function buildOwnerStatusEmbedForGuild(guild) {
 
 function slashOwnerHelpEmbed(guild) {
   return new EmbedBuilder()
-    .setColor(DESA_TULUS_EMBED_COLOR_INT)
+    .setColor(defaultEmbedColorInt())
     .setTitle("👑 Slash Command Pak RW")
     .setDescription([
       "Command ini sekarang muncul langsung di menu Discord saat ketik `/`.",
@@ -21008,7 +21361,7 @@ async function handlePakRwVisibleSlashCommand(interaction) {
         "• 👋 Welcome — sambut warga baru",
         "• 💎 Juragan — boost role, embed, bonus poin",
         "• 💸 Donatur — role durasi otomatis dari nominal",
-        "• 🔝 Level — chat/voice poin, rank, dan satu role tingkatan otomatis sampai Level 1000",
+        "• 🔝 Level — chat/voice poin, rank, dan satu role tingkatan otomatis on-demand sampai Level 1000",
         "• 🏆 Top Aktif/MOTM — top chat, top voice, banner manual",
         "",
         "Dashboard: buka `/feature-flow` di web panel untuk edit semua modul."
@@ -21029,7 +21382,7 @@ async function handlePakRwVisibleSlashCommand(interaction) {
         "**Yang premium:**",
         "• 🤖 Tanya Pak RW Pro: lucu, rapi, pedas aman, ikut gaya bahasa member",
         "• 🧩 Embed Builder: mirip Carl-bot, pilih channel, preview, raw JSON, kirim langsung",
-        "• 🔝 Level & Cek Poin: role tingkatan otomatis, max Level 1000, dan test tidak mengubah data",
+        "• 🔝 Level & Cek Poin: role tingkatan otomatis on-demand, no color, max Level 1000, dan test tidak mengubah data",
         "• 🏆 Top Aktif/MOTM: Top Voice + Top Chat, auto 00.00 WIB, banner manual",
         "• ☁️ Curhat, 💡 Saran, 👋 Welcome, 💎 Juragan, 💸 Donatur tetap aman",
         "• 🛠️ Tools: MongoDB, backup, dashboard, status, dan command test",
@@ -21076,7 +21429,7 @@ async function handlePakRwVisibleSlashCommand(interaction) {
     const userData = getLevelUser(data, interaction.guild.id, target.id);
     const info = getLevelBonusInfo(target);
     const embed = new EmbedBuilder()
-      .setColor(DESA_TULUS_EMBED_COLOR_INT)
+      .setColor(defaultEmbedColorInt())
       .setTitle("🎁 Cek Bonus Ekstra Poin")
       .setDescription([
         `${target}, ini status bonus level kamu.`,
@@ -21105,8 +21458,8 @@ async function handlePakRwVisibleSlashCommand(interaction) {
     const type = cmd === "topchat" ? "chat" : "voice";
     const rows = getTopActiveRows(interaction.guild.id, type, getTopActiveConfig().topLimit, interaction.guild.ownerId);
     const embed = new EmbedBuilder()
-      .setColor(DESA_TULUS_EMBED_COLOR_INT)
-      .setTitle(cmd === "topchat" ? "💬 Top Chat Warga Bulan Ini" : "🎙️ Top Voice Warga Bulan Ini")
+      .setColor(defaultEmbedColorInt())
+      .setTitle(cmd === "topchat" ? "Top Chat:" : "Top Voice:")
       .setDescription((type === "chat" ? "Poin, level, dan rank di bawah dihitung dari **poin chat bulan ini**." : "Poin, level, dan rank di bawah dihitung dari **poin voice bulan ini**.") + "\n\n" + formatTopActiveRows(rows, type))
       .setFooter({ text: makeOTFooter(`${config.serverName} • ${getMonthLabel()}`) })
       .setTimestamp();
@@ -21310,7 +21663,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     if (interaction.isButton()) {
-
+      if (interaction.customId.startsWith("loket_")) {
+        if (await handleLoketButton(interaction)) return;
+      }
 
       if (interaction.customId === "curhat_anonim_open" || interaction.customId === "open_anonim_curhat") {
         const modal = new ModalBuilder()
@@ -21415,28 +21770,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       if (interaction.customId === "vote_yes" || interaction.customId === "vote_no") {
-        const messageId = interaction.message.id;
-        const userId = interaction.user.id;
-
-        if (!suggestionVotes.has(messageId)) {
-          suggestionVotes.set(messageId, { yes: new Set(), no: new Set() });
-        }
-
-        const data = suggestionVotes.get(messageId);
-
-        if (interaction.customId === "vote_yes") {
-          data.no.delete(userId);
-          data.yes.add(userId);
-        } else {
-          data.yes.delete(userId);
-          data.no.add(userId);
-        }
-
-        return interaction.update({
-          components: [suggestionRow(data.yes.size, data.no.size)]
+        return interaction.reply({
+          content: "Vote tombol sudah diganti jadi reaction ✅ dan ❌. Klik reaction di pesan saran ya.",
+          flags: 64
         });
       }
     }
+    if (interaction.isModalSubmit() && interaction.customId === "loket_open_modal") {
+      return openLoketFromInteraction(interaction);
+    }
+
     if (interaction.isModalSubmit() && interaction.customId === "anonim_curhat_modal") {
       await interaction.deferReply({ flags: 64 });
 
@@ -21445,7 +21788,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const targetChannel = getTextChannel(interaction.guild, config.anonymousCurhatChannelId) || interaction.channel;
 
       const embed = new EmbedBuilder()
-        .setColor(DESA_TULUS_EMBED_COLOR_INT)
+        .setColor(defaultEmbedColorInt())
         .setTitle("☁️ Pesan Curhat")
         .setDescription(content.slice(0, 1200))
         .setFooter({ text: makeOTFooter("☁️ Anonymous") })
@@ -21501,7 +21844,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       const replyEmbed = new EmbedBuilder()
-        .setColor(DESA_TULUS_EMBED_COLOR_INT)
+        .setColor(defaultEmbedColorInt())
         .setTitle("💬 Balasan Anonim")
         .setDescription(content.slice(0, 1000))
         .setFooter({ text: makeOTFooter("☁️ Anonymous Reply") })
@@ -21531,30 +21874,35 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .slice(0, 80);
 
       const senderDisplay = customSenderName || "Anonim";
-      const senderNote = customSenderName
-        ? "Nama pengirim ditulis manual oleh warga."
-        : "Pengirim mengosongkan nama, jadi otomatis tampil sebagai Anonim.";
+      const suggestionTemplate = config.embeds?.suggestionResult || {};
+      const suggestionColor = hexColor(suggestionTemplate.color || config.embedColor || DESA_TULUS_EMBED_COLOR_HEX, DESA_TULUS_EMBED_COLOR_INT);
+      const suggestionTitle = String(suggestionTemplate.title || "📬 Kritik & Saran Baru").trim() || "📬 Kritik & Saran Baru";
+      const descriptionTemplate = String(suggestionTemplate.description || "👤 Pengirim:\n{user} atau anonim\n\n💬 Isi Saran:\n{content}");
+      const titleLine = title ? `\n\n📝 Judul:\n${title}` : "";
+      const suggestionDescription = applyTemplate(descriptionTemplate, {
+        user: senderDisplay,
+        sender: senderDisplay,
+        senderName: senderDisplay,
+        content: `${content}${titleLine}`,
+        title,
+        suggestionTitle: title,
+        author: senderDisplay
+      });
+      const suggestionFooter = String(suggestionTemplate.footer || "DESA TULUS • Kritik & Saran Warga").trim() || "DESA TULUS • Kritik & Saran Warga";
 
       const embed = new EmbedBuilder()
-        .setColor(DESA_TULUS_EMBED_COLOR_INT)
-        .setTitle("💡 Saran Baru DESA TULUS")
-        .setDescription("Ada saran baru dari warga. Silakan vote dan diskusikan dengan baik 🤍")
-        .addFields(
-          { name: "Judul", value: title.slice(0, 1024) },
-          { name: "Isi Saran", value: content.slice(0, 1024) },
-          { name: "Pengirim", value: senderDisplay.slice(0, 1024) },
-          { name: "Info", value: senderNote.slice(0, 1024) }
-        )
-        .setFooter({ text: makeOTFooter("Vote saran ini dengan tombol di bawah • Nama kosong = Anonim") })
+        .setColor(suggestionColor)
+        .setTitle(suggestionTitle)
+        .setDescription(suggestionDescription.slice(0, 4096))
+        .setFooter({ text: suggestionFooter })
         .setTimestamp();
 
       const suggestionChannel = getTextChannel(interaction.guild, config.suggestionChannelId) || interaction.channel;
       const sent = await safeSend(suggestionChannel, {
-        embeds: [embed],
-        components: [suggestionRow(0, 0)]
+        embeds: [embed]
       });
 
-      if (sent) suggestionVotes.set(sent.id, { yes: new Set(), no: new Set() });
+      if (sent) await setupSuggestionDiscussion(sent);
 
       return interaction.reply({
         content: `✅ Saran kamu berhasil dikirim. Pengirim tampil sebagai **${senderDisplay}**. Kalau nama dikosongkan, Pak RW otomatis pakai **Anonim** 🤍`,

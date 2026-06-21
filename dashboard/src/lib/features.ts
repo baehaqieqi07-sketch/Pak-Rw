@@ -2,7 +2,7 @@ import {
   Bot, UserPlus, MessageCircleHeart, ShieldQuestion, MessagesSquare, Gamepad2,
   BrainCircuit, Gauge, BarChart3, WalletCards, Trophy, Medal, Crown, BadgeDollarSign,
   Gem, Image, FileText, Radio, Users, TerminalSquare, ShieldCheck, Activity,
-  DatabaseBackup, Settings, LayoutDashboard, ChartNoAxesCombined, Megaphone, Tags, IdCard, Headphones
+  DatabaseBackup, Settings, LayoutDashboard, ChartNoAxesCombined, Megaphone, Tags, IdCard, Headphones, Landmark
 } from "lucide-react";
 
 export type FeatureDefinition = {
@@ -32,6 +32,7 @@ export const featureGroups = [
       { slug: "curhat", name: "Curhat", icon: MessageCircleHeart, path: "/manage/curhat" },
       { slug: "curhat-anonim", name: "Curhat Anonim", icon: ShieldQuestion, path: "/manage/curhat-anonim" },
       { slug: "saran", name: "Saran & Voting", icon: MessagesSquare, path: "/manage/saran" },
+      { slug: "loket", name: "Loket Bantuan", icon: Landmark, path: "/manage/loket" },
       { slug: "mabar", name: "Cari Mabar", icon: Gamepad2, path: "/manage/mabar" },
       { slug: "ktp-warga", name: "KTP Warga", icon: IdCard, path: "/ktp-warga" }
     ]
@@ -99,8 +100,9 @@ export const features: FeatureDefinition[] = [
   { slug: "welcome", name: "Welcome Warga", description: "Sambutan warga baru dengan channel, role, dan embed yang sinkron.", group: "Komunitas", icon: UserPlus, configPath: "welcome.enabled", channelPath: "welcome.channelId", rolePath: "welcome.memberTulusRoleId", embedKey: "welcome" },
   { slug: "curhat", name: "Curhat", description: "Panel curhat warga dan alur balasan yang tertata.", group: "Komunitas", icon: MessageCircleHeart, configPath: "curhat.enabled", channelPath: "curhatChannelId", embedKey: "curhatReply" },
   { slug: "curhat-anonim", name: "Curhat Anonim", description: "Kirim curhat tanpa menampilkan identitas warga.", group: "Komunitas", icon: ShieldQuestion, configPath: "anonymousCurhat.enabled", channelPath: "anonymousCurhatChannelId", embedKey: "anonimPanel" },
-  { slug: "saran", name: "Saran & Voting", description: "Kotak saran warga dengan voting setuju dan tidak setuju.", group: "Komunitas", icon: MessagesSquare, configPath: "suggestion.enabled", channelPath: "suggestionChannelId", embedKey: "suggestionResult" },
-  { slug: "level", name: "Level & Poin", description: "Satu sistem EXP, level maksimal 1000, dan satu role tingkatan aktif.", group: "Level & Aktivitas", icon: BarChart3, configPath: "level.enabled", channelPath: "levelChannelId", rolePath: "levelSystem.roles.1", embedKey: "levelUp" },
+  { slug: "saran", name: "Saran & Voting", description: "Kotak saran warga dengan reaction dan thread tanggapan.", group: "Komunitas", icon: MessagesSquare, configPath: "suggestion.enabled", channelPath: "suggestionChannelId", embedKey: "suggestionResult" },
+  { slug: "loket", name: "Loket Bantuan", description: "Panel bantuan all-in-one bertema Pak RW DESA TULUS, channel privat, claim, close, dan log.", group: "Komunitas", icon: Landmark, configPath: "loket.enabled", channelPath: "loket.panelChannelId", rolePath: "loket.staffRoleId", embedKey: "loketPanel" },
+  { slug: "level", name: "Level & Poin", description: "Role level otomatis on-demand, no color, max level 1000, tanpa role manual.", group: "Level & Aktivitas", icon: BarChart3, configPath: "level.enabled", channelPath: "levelChannelId", embedKey: "levelUp" },
   { slug: "cek-poin", name: "Cek Poin", description: "Channel khusus untuk melihat poin dan peringkat warga.", group: "Level & Aktivitas", icon: WalletCards, configPath: "features.cekPoin", channelPath: "cekPoinChannelId", embedKey: "levelProfile" },
   { slug: "top-aktif", name: "Top Aktif Bulanan", description: "Peringkat bulanan dengan jadwal otomatis WIB.", group: "Level & Aktivitas", icon: Trophy, configPath: "topActive.enabled", channelPath: "topActive.channelId", embedKey: "topActiveBoard" },
   { slug: "papan-aktif", name: "Papan Aktif Lifetime", description: "Leaderboard seumur hidup yang tidak ikut reset siklus.", group: "Level & Aktivitas", icon: Medal, configPath: "leaderboardAktif.enabled", channelPath: "leaderboardAktif.channelId", embedKey: "papanAktif" },

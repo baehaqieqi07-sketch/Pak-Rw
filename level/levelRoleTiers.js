@@ -3,7 +3,8 @@
 const MAX_LEVEL = 1000;
 
 // Satu-satunya sumber nama dan batas tingkatan level Pak RW.
-// Role ID dibaca dari config.levelSystem.roles berdasarkan angka minimum level.
+// Role dibuat otomatis hanya saat ada warga yang mendapat tingkatan tersebut.
+// Tidak memakai role manual dari dashboard; role kosong akan dibersihkan otomatis.
 const LEVEL_ROLE_TIER_DEFINITIONS = Object.freeze([
   Object.freeze({ level: 1, name: "Warga Anyar" }),
   Object.freeze({ level: 5, name: "Warga Tetap" }),
@@ -18,11 +19,15 @@ const LEVEL_ROLE_TIER_DEFINITIONS = Object.freeze([
   Object.freeze({ level: 400, name: "Kehormatan Desa" }),
   Object.freeze({ level: 500, name: "Legenda Desa" }),
   Object.freeze({ level: 750, name: "Kebanggaan Desa" }),
-  Object.freeze({ level: 1000, name: "Karuhun Desa" })
+  Object.freeze({ level: 1000, name: "Karuhun Desa", roleName: "Karuhun Desa (Lvl. Max)" })
 ]);
 
 function clampLevel(level) {
   return Math.max(1, Math.min(MAX_LEVEL, Math.floor(Number(level) || 1)));
+}
+
+function getLevelRoleName(tier = {}) {
+  return String(tier.roleName || tier.name || "Warga Anyar").trim();
 }
 
 function normalizeRoleId(value) {
@@ -43,9 +48,11 @@ function getLevelSystemConfig(config = {}) {
     maxLevel: MAX_LEVEL,
     levelChannelId: String(levelSystem.levelChannelId || config.levelChannelId || "").trim(),
     autoLevelRole: levelSystem.autoLevelRole !== false,
-    roles: levelSystem.roles && typeof levelSystem.roles === "object"
-      ? levelSystem.roles
-      : {}
+    roles: {},
+    autoRoleMode: String(levelSystem.autoRoleMode || "dynamic_on_demand"),
+    autoRoleAboveWarga: levelSystem.autoRoleAboveWarga !== false,
+    autoRoleNoColor: levelSystem.autoRoleNoColor !== false,
+    autoDeleteEmptyRoles: levelSystem.autoDeleteEmptyRoles !== false
   };
 }
 
@@ -53,7 +60,8 @@ function getLevelRoleTiers(config = {}) {
   const system = getLevelSystemConfig(config);
   return LEVEL_ROLE_TIER_DEFINITIONS.map((tier) => ({
     ...tier,
-    roleId: normalizeRoleId(system.roles[String(tier.level)])
+    roleName: getLevelRoleName(tier),
+    roleId: ""
   }));
 }
 
@@ -79,5 +87,6 @@ module.exports = {
   getLevelSystemConfig,
   getLevelRoleTiers,
   getLevelTier,
+  getLevelRoleName,
   getConfiguredLevelRoleIds
 };

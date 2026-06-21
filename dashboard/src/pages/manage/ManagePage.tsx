@@ -47,7 +47,13 @@ const TARGETS: Record<string, Binding[]> = {
   ai: [{ key: "aiChannel", path: "aiChannelId", kind: "channel", label: "Channel AI Pak RW", helper: "Pak RW hanya merespons di channel yang dipilih.", required: true }],
   curhat: [{ key: "curhatChannel", path: "curhatChannelId", kind: "channel", label: "Channel Curhat", helper: "Tempat panel dan balasan curhat warga.", required: true }],
   "curhat-anonim": [{ key: "anonymousCurhat", path: "anonymousCurhatChannelId", kind: "channel", label: "Channel Curhat Anonim", helper: "Identitas warga tidak ditampilkan pada pesan publik.", required: true }],
-  saran: [{ key: "suggestionChannel", path: "suggestionChannelId", kind: "channel", label: "Channel Saran & Voting", helper: "Tempat saran warga diposting dan divoting.", required: true }],
+  saran: [{ key: "suggestionChannel", path: "suggestionChannelId", kind: "channel", label: "Channel Saran & Voting", helper: "Tempat saran warga diposting dan diberi reaction.", required: true }],
+  loket: [
+    { key: "loketPanelChannel", path: "loket.panelChannelId", kind: "channel", label: "Channel Panel Loket", helper: "Tempat panel Buka Loket dikirim.", required: true, accept: "text" },
+    { key: "loketCategory", path: "loket.categoryId", kind: "channel", label: "Kategori Loket", helper: "Kategori untuk channel loket privat. Kosongkan agar Pak RW membuat kategori otomatis.", accept: "any" },
+    { key: "loketStaffRole", path: "loket.staffRoleId", kind: "role", label: "Role Pengurus Loket", helper: "Role staff yang bisa melihat, claim, dan menutup loket.", required: true },
+    { key: "loketLogChannel", path: "loket.logChannelId", kind: "channel", label: "Channel Log Loket", helper: "Tempat catatan buka/tutup loket dikirim.", accept: "text" }
+  ],
   level: [
     { key: "levelChannel", path: "levelSystem.levelChannelId", kind: "channel", label: "Channel Level", helper: "Semua notifikasi kenaikan level dikirim ke channel ini.", required: true }
   ],
@@ -113,6 +119,14 @@ export function ManagePage() {
   const [postHour, setPostHour] = useState(0);
   const [aiModel, setAiModel] = useState("openai/gpt-4o-mini");
   const [aiMaxTokens, setAiMaxTokens] = useState(460);
+  const [loketPanelTitle, setLoketPanelTitle] = useState("🏛️ Loket Bantuan DESA TULUS");
+  const [loketButtonLabel, setLoketButtonLabel] = useState("Buka Loket");
+  const [loketCategoryName, setLoketCategoryName] = useState("🏛️｜LOKET DESA TULUS");
+  const [loketChannelPrefix, setLoketChannelPrefix] = useState("loket");
+  const [loketCloseLabel, setLoketCloseLabel] = useState("Tutup Loket");
+  const [loketClaimLabel, setLoketClaimLabel] = useState("Ambil Loket");
+  const [loketAutoThread, setLoketAutoThread] = useState(false);
+  const [loketTranscript, setLoketTranscript] = useState(true);
   const [autoLevelRole, setAutoLevelRole] = useState(true);
   const [motmThreshold, setMotmThreshold] = useState(100000);
   const [boostMultiplier, setBoostMultiplier] = useState(10);
@@ -126,19 +140,7 @@ export function ManagePage() {
   const [boostAnnounceEnd, setBoostAnnounceEnd] = useState(true);
   const [boostActionLoading, setBoostActionLoading] = useState<"start" | "stop" | "">("");
 
-  const bindings = useMemo(() => {
-    const base = TARGETS[slug] || [];
-    if (slug !== "level") return base;
-    const tierBindings: Binding[] = (data.levelRoleTiers || []).map((tier) => ({
-      key: `levelRole${tier.level}`,
-      path: `levelSystem.roles.${tier.level}`,
-      kind: "role",
-      label: `${tier.name} · Level ${tier.level}`,
-      helper: `Satu-satunya role level aktif untuk warga Level ${tier.level} ke atas.`,
-      required: true
-    }));
-    return [...base, ...tierBindings];
-  }, [slug, data.levelRoleTiers]);
+  const bindings = useMemo(() => TARGETS[slug] || [], [slug]);
   const availableEmbedKeys = useMemo(() => Object.keys(data.embeds || {}).filter((key) => key !== "dashboard"), [data.embeds]);
   const primaryChannelId = bindings.find((binding) => binding.kind === "channel") ? targets[bindings.find((binding) => binding.kind === "channel")!.key] || "" : "";
   const requiredBindings = bindings.filter((binding) => binding.required);
@@ -175,6 +177,14 @@ export function ManagePage() {
     setPostHour(Number(readPath(cfg, slug === "papan-aktif" ? "leaderboardAktif.autoPostHourWIB" : "topActive.dailyPostHourWIB") ?? 0));
     setAiModel(String(readPath(cfg, "ai.openRouterModel") || "openai/gpt-4o-mini"));
     setAiMaxTokens(Number(readPath(cfg, "ai.maxTokens") || 460));
+    setLoketPanelTitle(String(readPath(cfg, "loket.panelTitle") || "🏛️ Loket Bantuan DESA TULUS"));
+    setLoketButtonLabel(String(readPath(cfg, "loket.buttonLabel") || "Buka Loket"));
+    setLoketCategoryName(String(readPath(cfg, "loket.categoryName") || "🏛️｜LOKET DESA TULUS"));
+    setLoketChannelPrefix(String(readPath(cfg, "loket.channelPrefix") || "loket"));
+    setLoketCloseLabel(String(readPath(cfg, "loket.closeLabel") || "Tutup Loket"));
+    setLoketClaimLabel(String(readPath(cfg, "loket.claimLabel") || "Ambil Loket"));
+    setLoketAutoThread(readPath(cfg, "loket.autoThreadEnabled") === true);
+    setLoketTranscript(readPath(cfg, "loket.transcriptEnabled") !== false);
     setAutoLevelRole(readPath(cfg, "levelSystem.autoLevelRole") !== false);
     setMotmThreshold(Number(readPath(cfg, "level.cycleResetAtPoints") || readPath(cfg, "topActive.pointsThreshold") || 100000));
     setBoostMultiplier(Number(readPath(cfg, "boostPoin.multiplier") || 10));
@@ -229,6 +239,16 @@ export function ManagePage() {
       if (slug === "ai") {
         patches.push({ path: "ai.openRouterModel", value: aiModel });
         patches.push({ path: "ai.maxTokens", value: aiMaxTokens });
+      }
+      if (slug === "loket") {
+        patches.push({ path: "loket.panelTitle", value: loketPanelTitle });
+        patches.push({ path: "loket.buttonLabel", value: loketButtonLabel });
+        patches.push({ path: "loket.categoryName", value: loketCategoryName });
+        patches.push({ path: "loket.channelPrefix", value: loketChannelPrefix });
+        patches.push({ path: "loket.closeLabel", value: loketCloseLabel });
+        patches.push({ path: "loket.claimLabel", value: loketClaimLabel });
+        patches.push({ path: "loket.autoThreadEnabled", value: loketAutoThread });
+        patches.push({ path: "loket.transcriptEnabled", value: loketTranscript });
       }
       if (slug === "boost-poin") {
         const safeMultiplier = Math.max(1, Math.min(100, Number(boostMultiplier || 1)));
@@ -381,8 +401,10 @@ export function ManagePage() {
               <div><span className="summary-dot is-ok" /><div><strong>Template embed</strong><small>{embedKey || "Tidak menggunakan template"}</small></div></div>
             </div>
           </Card>
-          {slug === "level" ? <Card className="full-span-card"><CardHeader title="Auto Level Role" description="Satu sistem level, satu nama tingkatan, dan hanya satu role level aktif per warga." action={<StatusBadge label={autoLevelRole ? "Aktif" : "Nonaktif"} tone={autoLevelRole ? "success" : "neutral"} />} /><div className="boost-option-list"><div className="boost-option-row"><div><strong>Role level otomatis</strong><small>Ketika level berubah, Pak RW mencabut role tier lama dan memberikan satu role tier yang sesuai.</small></div><Toggle checked={autoLevelRole} onChange={(value) => { setAutoLevelRole(value); setDirty(true); }} label="Auto Level Role" /></div></div><div className="info-panel"><ShieldCheck size={19} /><p>Level maksimal dikunci di <strong>1000</strong>. Nama tingkatan dan role dibaca dari satu konfigurasi pusat agar embed, profil, leaderboard, dan role selalu sama.</p></div></Card> : null}
+          {slug === "level" ? <Card className="full-span-card"><CardHeader title="Auto Level Role" description="Role dibuat otomatis saat ada warga yang mendapat tier. Tidak perlu pilih role manual." action={<StatusBadge label={autoLevelRole ? "Aktif" : "Nonaktif"} tone={autoLevelRole ? "success" : "neutral"} />} /><div className="boost-option-list"><div className="boost-option-row"><div><strong>Role level otomatis</strong><small>Ketika level berubah, Pak RW membuat role yang dibutuhkan saja, memberi warna default/no color, mencabut role lama, dan menghapus role kosong.</small></div><Toggle checked={autoLevelRole} onChange={(value) => { setAutoLevelRole(value); setDirty(true); }} label="Auto Level Role" /></div></div><div className="info-panel"><ShieldCheck size={19} /><p>Level maksimal dikunci di <strong>1000</strong>. Role <strong>Karuhun Desa (Lvl. Max)</strong> hanya dibuat saat ada warga mencapai Level 1000. Role otomatis diletakkan di atas Warga agar warna nama tetap mengikuti role Warga.</p></div></Card> : null}
           {slug === "ai" ? <Card><CardHeader title="AI hemat OpenRouter" description="Pengaturan aman yang sudah didukung core bot." /><div className="form-grid two-columns"><div className="form-field"><label>Model utama</label><input value={aiModel} onChange={(event) => { setAiModel(event.target.value); setDirty(true); }} /><small className="field-helper">Gunakan openai/gpt-4o-mini untuk mode hemat.</small></div><div className="form-field"><label>Max token</label><input type="number" min={100} max={1000} value={aiMaxTokens} onChange={(event) => { setAiMaxTokens(Number(event.target.value)); setDirty(true); }} /><small className="field-helper">Batas aman rekomendasi: 300–600.</small></div></div></Card> : null}
+
+          {slug === "loket" ? <Card className="full-span-card"><CardHeader title="Loket Pak RW" description="Semua alur loket bisa diatur dari dashboard tanpa mengubah fitur lain." /><div className="form-grid two-columns"><div className="form-field"><label>Judul panel</label><input value={loketPanelTitle} onChange={(event) => { setLoketPanelTitle(event.target.value); setDirty(true); }} /></div><div className="form-field"><label>Label tombol buka</label><input value={loketButtonLabel} onChange={(event) => { setLoketButtonLabel(event.target.value); setDirty(true); }} /></div><div className="form-field"><label>Nama kategori otomatis</label><input value={loketCategoryName} onChange={(event) => { setLoketCategoryName(event.target.value); setDirty(true); }} /></div><div className="form-field"><label>Prefix nama channel</label><input value={loketChannelPrefix} onChange={(event) => { setLoketChannelPrefix(event.target.value); setDirty(true); }} /><small className="field-helper">Contoh hasil: loket-bekiw.</small></div><div className="form-field"><label>Label claim</label><input value={loketClaimLabel} onChange={(event) => { setLoketClaimLabel(event.target.value); setDirty(true); }} /></div><div className="form-field"><label>Label close</label><input value={loketCloseLabel} onChange={(event) => { setLoketCloseLabel(event.target.value); setDirty(true); }} /></div></div><div className="boost-option-list"><div className="boost-option-row"><div><strong>Buat thread catatan</strong><small>Opsional. Channel loket sudah privat; thread hanya untuk catatan tambahan.</small></div><Toggle checked={loketAutoThread} onChange={(value) => { setLoketAutoThread(value); setDirty(true); }} label="Thread otomatis" /></div><div className="boost-option-row"><div><strong>Log transcript ringkas</strong><small>Saat ditutup, Pak RW kirim catatan ringkas ke channel log.</small></div><Toggle checked={loketTranscript} onChange={(value) => { setLoketTranscript(value); setDirty(true); }} label="Log aktif" /></div></div><div className="info-panel"><Info size={19} /><p>Edit tampilan panel dari tab <strong>Embed & Preview</strong>. Pilih channel panel, kategori, role pengurus, dan log dari tab <strong>Channel & Role</strong>.</p></div></Card> : null}
           {slug === "top-aktif" || slug === "papan-aktif" ? <Card><CardHeader title="Jadwal leaderboard" description="Scheduler core bot tidak diubah; dashboard hanya menyimpan setting yang didukung." /><div className="form-grid two-columns"><div className="form-field"><label>Jumlah peringkat</label><input type="number" min={3} max={25} value={topLimit} onChange={(event) => { setTopLimit(Number(event.target.value)); setDirty(true); }} /></div><div className="form-field"><label>Jam post WIB</label><input type="number" min={0} max={23} value={postHour} onChange={(event) => { setPostHour(Number(event.target.value)); setDirty(true); }} /><small className="field-helper">Gunakan 0 untuk pukul 00.00 WIB.</small></div></div></Card> : null}
           {slug === "motm" ? <Card><CardHeader title="Threshold MOTM" description="Lifetime point tetap lanjut dan tidak ikut reset." /><div className="form-field"><label>Target poin siklus</label><input type="number" min={1000} value={motmThreshold} onChange={(event) => { setMotmThreshold(Number(event.target.value)); setDirty(true); }} /><small className="field-helper">Default DESA TULUS: 100.000 poin.</small></div></Card> : null}
           {slug === "boost-poin" ? <>
