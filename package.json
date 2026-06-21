@@ -1,6 +1,6 @@
 {
   "name": "pak-rw-desa-tulus",
-  "version": "10.10.103",
+  "version": "10.10.106",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -24,5 +24,5 @@
   "engines": {
     "node": ">=22.12.0 <23"
   },
-  "description": "Pak RW DESA TULUS v10.10.100 - background KTP baru, format kritik & saran baru, dan warna semua embed editable dari dashboard"
+  "description": "Pak RW DESA TULUS v10.10.106 - welcome exact, auto level role mention jelas, no color, dan cek hierarchy role Warga"
 }

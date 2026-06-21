@@ -381,3 +381,26 @@ Data member, memory lama, level, role, welcome, curhat, saran, voting, KTP, AFK 
 ## v10.10.102 — Auto Level Role On-Demand
 
 Role level sekarang dibuat otomatis hanya ketika ada warga yang mendapat tier tersebut. Tidak perlu membuat role manual dari dashboard. Role otomatis memakai warna default/no color, dicoba diposisikan di atas role Warga, dan role kosong dibersihkan otomatis. Level maksimal tetap 1000 dengan role `Karuhun Desa (Lvl. Max)`. Data level, poin, dan member tidak direset.
+
+
+## Update v10.10.104 — Format Kotak Saran Rapi
+
+- Modal saran dibuat lebih mirip Kotak Saran Discord: `Nama (kosongkan untuk anonim)` dan `Masukkan kritik/saran kamu di sini:`.
+- Embed hasil saran memakai format sederhana: `📬 Kritik & Saran Baru`, lalu bagian `👤 Pengirim:` dan `💬 Isi Saran:`.
+- Kalau nama dikosongkan, pengirim tampil sebagai `Anonim`; teks `atau anonim` tidak ikut tampil di embed.
+- Tombol panel saran menjadi `📬 Kirim Saran`.
+- Reaction ✅/❌ dan thread `💬 Berikan Tanggapan` tetap otomatis.
+- Tidak mengubah data member, level, AI, KTP, AFK Voice, Loket, welcome, dan fitur lama.
+
+## Update v10.10.105 — Loket Dropdown Desa Tulus
+
+- Loket Bantuan sekarang memakai dropdown/select menu seperti contoh ticket bot, tetapi tetap bernama **Loket** dan bertema **Pak RW DESA TULUS**.
+- Panel Loket menampilkan embed utama, daftar pilihan loket, dan menu dropdown.
+- Setiap pilihan loket bisa punya kategori dan prefix channel sendiri.
+- Dashboard bisa mengedit judul, placeholder dropdown, banner/image, thumbnail, kategori, prefix channel, tombol claim/close, thread/log, dan JSON pilihan dropdown.
+- Data member, level, role, KTP, AI, welcome, curhat, saran, dan MongoDB tidak direset.
+
+
+## v10.10.106 — Welcome Exact + Role Level Embed Jelas
+
+Welcome default sekarang memakai teks Desa Tulus terbaru dan role Warga ID `1504495052695797857`. Auto level role tetap on-demand/no color dan field Role Level pada embed naik level memakai hasil sync role otomatis agar tidak tampil `@unknown-role` ketika role berhasil dibuat.

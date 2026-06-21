@@ -23,6 +23,7 @@ const {
   ChannelType,
   PermissionsBitField,
   ActionRowBuilder,
+  StringSelectMenuBuilder,
   ButtonBuilder,
   ButtonStyle,
   ModalBuilder,
@@ -338,9 +339,35 @@ function readConfigFile() {
   }
 }
 
+const DESA_TULUS_WARGA_ROLE_ID = "1504495052695797857";
+const DESA_TULUS_WELCOME_MESSAGE = "Wilujeung sumping, **{user}!** akhirnya mampir juga ke {server}. Di sini tempatnya ngobrol santai, saling kenal, curhat, bercanda, dan jadi bagian dari warga Desa Tulus. Jangan sungkan buat mulai ngobrol ya. Semoga betah di sini {memberTulusRole}";
+const DESA_TULUS_WELCOME_TITLE = "Wilujeung sumping, {displayName}!";
+
+function isLegacyWelcomeText(value = "") {
+  const raw = String(value || "").replace(/\s+/g, " ").trim().toLowerCase();
+  if (!raw) return true;
+  return /sambut warga anyar|pak rw menyambut|baca aturan desa|kenalan di chat warga|kamu warga ke-/i.test(raw)
+    || (raw.includes("wilujeung sumping") && raw.includes("akhirnya mampir juga") && !raw.includes("{membertulusrole}") && !raw.includes("@warga"));
+}
+
 function applySafeEmbedDisplayMigrations(data = {}) {
   const next = data && typeof data === "object" ? data : {};
   next.embeds = next.embeds && typeof next.embeds === "object" ? next.embeds : {};
+
+  next.welcome = next.welcome && typeof next.welcome === "object" ? next.welcome : {};
+  next.welcome.enabled = next.welcome.enabled !== false;
+  next.welcome.memberRoleId = String(next.welcome.memberRoleId || next.welcome.memberTulusRoleId || next.memberTulusRoleId || DESA_TULUS_WARGA_ROLE_ID).trim();
+  next.welcome.memberRoleName = next.welcome.memberRoleName || "Warga";
+  if (isLegacyWelcomeText(next.welcome.message)) next.welcome.message = DESA_TULUS_WELCOME_MESSAGE;
+  if (!String(next.welcome.title || "").trim() || /Wilujeung Sumping Warga Anyar|🏡/i.test(String(next.welcome.title || ""))) next.welcome.title = DESA_TULUS_WELCOME_TITLE;
+  if (!String(next.welcome.content || "").trim() || String(next.welcome.content || "").trim() === "{memberTulusRole}") next.welcome.content = "";
+  next.memberTulusRoleId = String(next.memberTulusRoleId || next.welcome.memberRoleId || DESA_TULUS_WARGA_ROLE_ID).trim();
+  next.wargaRoleId = String(next.wargaRoleId || next.welcome.memberRoleId || DESA_TULUS_WARGA_ROLE_ID).trim();
+
+  const welcomeEmbed = next.embeds.welcome = next.embeds.welcome && typeof next.embeds.welcome === "object" ? next.embeds.welcome : {};
+  if (isLegacyWelcomeText(welcomeEmbed.description)) welcomeEmbed.description = DESA_TULUS_WELCOME_MESSAGE;
+  if (!String(welcomeEmbed.title || "").trim() || /Wilujeung Sumping Warga Anyar|🏡/i.test(String(welcomeEmbed.title || ""))) welcomeEmbed.title = DESA_TULUS_WELCOME_TITLE;
+  if (!String(welcomeEmbed.content || "").trim() || String(welcomeEmbed.content || "").trim() === "{memberTulusRole}") welcomeEmbed.content = "";
 
   const profile = next.embeds.levelProfile = next.embeds.levelProfile && typeof next.embeds.levelProfile === "object"
     ? next.embeds.levelProfile
@@ -14221,7 +14248,11 @@ async function positionLevelRoleAboveWarga(guild, role, options = {}) {
   }
   const botMember = guild.members.me || await guild.members.fetchMe().catch(() => null);
   if (!botMember?.permissions?.has(PermissionsBitField.Flags.ManageRoles)) return;
-  const targetPosition = Math.min(baseRole.position + 1, Math.max(1, botMember.roles.highest.position - 1));
+  if (botMember.roles.highest.position <= baseRole.position + 1) {
+    if (!options.silent) console.log(`[LEVEL ROLE] Pak RW belum bisa menaruh ${role.name} di atas Warga. Naikkan role bot Pak RW di Server Settings > Roles sampai berada di atas role Warga.`);
+    return;
+  }
+  const targetPosition = baseRole.position + 1;
   if (targetPosition <= 0 || role.position === targetPosition) return;
   if (botMember.roles.highest.comparePositionTo(role) <= 0) return;
   await role.setPosition(targetPosition, "Pak RW Auto Level Role: posisi di atas role Warga").catch((err) => {
@@ -14254,6 +14285,12 @@ async function ensureDynamicLevelRole(guild, tier, options = {}) {
   }
   if (!role) return null;
   if (role.managed) return null;
+  const system = getPakRwLevelSystemConfig();
+  if (system.autoRoleNoColor !== false && role.color !== 0 && botMember.roles.highest.comparePositionTo(role) > 0) {
+    await role.setColor(0, "Pak RW Auto Level Role: warna default/no color").catch((err) => {
+      if (!options.silent) console.log(`[LEVEL ROLE] Gagal set no color untuk ${role.name}: ${err.message}`);
+    });
+  }
   if (botMember.roles.highest.comparePositionTo(role) <= 0) {
     console.log(`[LEVEL ROLE] ERROR: Role ${role.name} berada setara/di atas role Pak RW.`);
     return null;
@@ -15194,7 +15231,7 @@ function getLevelBadge(level) {
 }
 
 
-function buildLevelUpEmbed(member, userData) {
+function buildLevelUpEmbed(member, userData, roleSync = {}) {
   const info = getLevelInfo(userData);
   const next = info.next;
   const total = getTotalLevelPoints(userData);
@@ -15202,6 +15239,7 @@ function buildLevelUpEmbed(member, userData) {
   const voiceInfo = getCategoryLevelInfo(userData, "voice");
   const e = embedCfg("levelUp");
   const remaining = next ? Math.max(0, Number((next.total - total).toFixed(1))) : 0;
+  const roleMention = roleSync.roleId ? `<@&${roleSync.roleId}>` : getLevelRoleMention(info.current.level, member.guild);
   const data = {
     user: `${member}`,
     username: member.user.username,
@@ -15215,8 +15253,8 @@ function buildLevelUpEmbed(member, userData) {
     nextLevel: next?.level || info.current.level,
     nextRank: next?.name || info.current.name,
     remainingPoints: formatNumber(remaining),
-    role: getLevelRoleMention(info.current.level, member.guild),
-    levelRole: getLevelRoleMention(info.current.level, member.guild)
+    role: roleMention,
+    levelRole: roleMention
   };
 
   const fieldName = next
@@ -15232,7 +15270,7 @@ function buildLevelUpEmbed(member, userData) {
     .setDescription(applyTemplate(e.description || "{user} naik menjadi **{rank} — Level {level}**.\n\nTotal poin aktif: **{total} poin**. Tetap rukun dan aktif di desa.", data))
     .addFields(
       { name: "Tingkatan", value: info.current.name, inline: true },
-      { name: "Role Level", value: getLevelRoleMention(info.current.level, member.guild), inline: true },
+      { name: "Role Level", value: roleMention, inline: true },
       { name: normalizePakRwEmojiCodes(fieldName), value: normalizePakRwEmojiCodes(fieldValue), inline: false }
     )
     .setFooter({ text: makeOTFooter(applyTemplate(e.footer || "DESA TULUS • Level Warga", data)), iconURL: e.footerIcon || OT_FOOTER_ICON_URL })
@@ -15316,10 +15354,9 @@ function normalizeLeaderboardActiveSubtitle(value) {
   return raw;
 }
 
-function normalizeWelcomeText(value, fallback) {
+function normalizeWelcomeText(value, fallback = DESA_TULUS_WELCOME_MESSAGE) {
   const raw = String(value || "");
-  if (!raw.trim()) return fallback;
-  if (/Sambut warga anyar|Pak RW menyambut|Baca aturan desa|Kenalan di chat warga|Kamu warga ke-/i.test(raw)) return fallback;
+  if (isLegacyWelcomeText(raw)) return fallback;
   return raw;
 }
 
@@ -17002,7 +17039,7 @@ async function removeExpiredLevel100Roles(guild) {
 }
 
 
-async function sendLevelUp(member, userData, fallbackChannel) {
+async function sendLevelUp(member, userData, fallbackChannel, roleSync = {}) {
   // Alur baru yang lebih jelas:
   // - Notifikasi naik level SELALU masuk ke channel level (config.levelChannelId).
   // - Channel Top Aktif hanya untuk board Top Aktif, Top Chat, Top Voice, MOTM, dan banner.
@@ -17016,7 +17053,7 @@ async function sendLevelUp(member, userData, fallbackChannel) {
 
   await safeSend(levelChannel, {
     content: `🆙 Selamat ${member} berhasil naik level!`,
-    embeds: [buildLevelUpEmbed(member, userData)]
+    embeds: [buildLevelUpEmbed(member, userData, roleSync)]
   });
 }
 
@@ -17076,12 +17113,17 @@ async function addLevelPoints(member, type, amount, fallbackChannel, sourceChann
 
   writeLevelData(data);
 
+  let levelRoleSync = null;
   if (afterInfo.current.level !== before || cycleReset) {
-    await syncMemberLevelRole(member, afterInfo.current.level, { silent: Boolean(cycleReset) });
+    levelRoleSync = await syncMemberLevelRole(member, afterInfo.current.level, { silent: Boolean(cycleReset) });
+    if (levelRoleSync?.roleId) {
+      userData.lastLevelRoleId = levelRoleSync.roleId;
+      writeLevelData(data);
+    }
   }
 
   if (!cycleReset && afterInfo.current.level > before) {
-    await sendLevelUp(member, userData, fallbackChannel);
+    await sendLevelUp(member, userData, fallbackChannel, levelRoleSync || {});
     await sendTopActiveLevelNotice(member, userData);
   }
 }
@@ -17268,6 +17310,81 @@ function embedCfg(name) {
 }
 
 
+const DEFAULT_LOKET_OPTIONS = Object.freeze([
+  {
+    id: "urusan-warga",
+    emoji: "🏛️",
+    label: "Urusan Warga",
+    description: "Bantuan umum, pertanyaan, dan keperluan warga.",
+    channelPrefix: "loket-warga",
+    categoryName: "──── URUSAN WARGA ────"
+  },
+  {
+    id: "bantuan-teknis",
+    emoji: "🛠️",
+    label: "Bantuan Teknis",
+    description: "Masalah bot, role, channel, atau fitur server.",
+    channelPrefix: "loket-bantuan",
+    categoryName: "──── BANTUAN TEKNIS ────"
+  },
+  {
+    id: "kritik-saran",
+    emoji: "📬",
+    label: "Kritik & Saran",
+    description: "Masukan untuk DESA TULUS supaya lebih rapi.",
+    channelPrefix: "loket-saran",
+    categoryName: "──── KRITIK SARAN ────"
+  },
+  {
+    id: "pengajuan",
+    emoji: "🤝",
+    label: "Pengajuan Warga",
+    description: "Pengajuan kerja sama, event, atau permintaan khusus.",
+    channelPrefix: "loket-pengajuan",
+    categoryName: "──── PENGAJUAN ────"
+  },
+  {
+    id: "lainnya",
+    emoji: "📌",
+    label: "Lainnya",
+    description: "Keperluan lain yang belum ada di pilihan loket.",
+    channelPrefix: "loket-lainnya",
+    categoryName: "──── LOKET LAINNYA ────"
+  }
+]);
+
+function normalizeLoketOption(raw = {}, index = 0) {
+  const base = DEFAULT_LOKET_OPTIONS[index] || DEFAULT_LOKET_OPTIONS[DEFAULT_LOKET_OPTIONS.length - 1];
+  const id = String(raw.id || raw.value || base.id || `loket-${index + 1}`)
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60) || `loket-${index + 1}`;
+  return {
+    id,
+    emoji: String(raw.emoji || base.emoji || "🏛️").slice(0, 10),
+    label: String(raw.label || base.label || "Loket").slice(0, 95),
+    description: String(raw.description || base.description || "Buka ruang bantuan khusus.").slice(0, 95),
+    channelPrefix: String(raw.channelPrefix || base.channelPrefix || "loket").toLowerCase().replace(/[^a-z0-9-_]/g, "").slice(0, 24) || "loket",
+    categoryId: String(raw.categoryId || ""),
+    categoryName: String(raw.categoryName || base.categoryName || "🏛️｜LOKET DESA TULUS").slice(0, 95),
+    intro: String(raw.intro || "").slice(0, 1000)
+  };
+}
+
+function loketOptions() {
+  const raw = Array.isArray(config.loket?.options) ? config.loket.options : [];
+  const source = raw.length ? raw : DEFAULT_LOKET_OPTIONS;
+  const options = source.slice(0, 25).map((item, index) => normalizeLoketOption(item, index));
+  return options.length ? options : DEFAULT_LOKET_OPTIONS.map((item, index) => normalizeLoketOption(item, index));
+}
+
+function findLoketOption(optionId = "") {
+  const id = String(optionId || "");
+  return loketOptions().find((item) => item.id === id) || loketOptions()[0];
+}
+
 function loketConfig() {
   config.loket = config.loket && typeof config.loket === "object" ? config.loket : {};
   return {
@@ -17278,12 +17395,15 @@ function loketConfig() {
     logChannelId: config.loket.logChannelId || "",
     categoryName: config.loket.categoryName || "🏛️｜LOKET DESA TULUS",
     channelPrefix: String(config.loket.channelPrefix || "loket").toLowerCase().replace(/[^a-z0-9-_]/g, "").slice(0, 16) || "loket",
+    panelMode: config.loket.panelMode || "select",
     panelTitle: config.loket.panelTitle || "🏛️ Loket Bantuan DESA TULUS",
-    panelDescription: config.loket.panelDescription || "Butuh bantuan staff atau Pak RW? Buka loket dengan tombol di bawah. Jelaskan masalahnya dengan sopan dan jelas supaya pengurus bisa bantu dengan rapi.",
+    panelDescription: config.loket.panelDescription || "Pilih jenis loket dari menu di bawah. Setelah memilih, isi keperluan kamu dan Pak RW akan membuat ruang bantuan privat.",
+    selectPlaceholder: config.loket.selectPlaceholder || "Pilih jenis loket yang kamu butuhkan",
+    selectMinLabel: config.loket.selectMinLabel || "Pilih Jenis Loket",
     buttonLabel: config.loket.buttonLabel || "Buka Loket",
     buttonEmoji: config.loket.buttonEmoji || "🏛️",
     openedTitle: config.loket.openedTitle || "🏛️ Loket Dibuka",
-    openedDescription: config.loket.openedDescription || "Wilujeung sumping di loket bantuan, {user}.\n\nCeritakan masalahnya dengan jelas. Pengurus akan bantu urutkan pelan-pelan.",
+    openedDescription: config.loket.openedDescription || "Wilujeung sumping di loket bantuan, {user}.\n\nJenis loket: **{loketType}**\nCeritakan masalahnya dengan jelas. Pengurus akan bantu urutkan pelan-pelan.",
     closeLabel: config.loket.closeLabel || "Tutup Loket",
     claimLabel: config.loket.claimLabel || "Ambil Loket",
     transcriptEnabled: config.loket.transcriptEnabled !== false,
@@ -17305,6 +17425,23 @@ function canManageLoket(member) {
 
 function loketPanelRow() {
   const cfg = loketConfig();
+  if (cfg.panelMode !== "button") {
+    const select = new StringSelectMenuBuilder()
+      .setCustomId("loket_select")
+      .setPlaceholder(String(cfg.selectPlaceholder || "Pilih jenis loket").slice(0, 150))
+      .setMinValues(1)
+      .setMaxValues(1);
+
+    select.addOptions(loketOptions().map((item) => ({
+      label: item.label,
+      value: item.id,
+      description: item.description,
+      emoji: item.emoji || undefined
+    })));
+
+    return new ActionRowBuilder().addComponents(select);
+  }
+
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId("loket_open")
@@ -17326,26 +17463,39 @@ function safeChannelName(input = "warga") {
   return String(input || "warga").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 28) || "warga";
 }
 
-async function getOrCreateLoketCategory(guild) {
+async function getOrCreateLoketCategory(guild, option = null) {
   const cfg = loketConfig();
-  if (isFilledId(cfg.categoryId)) {
-    const found = guild.channels.cache.get(cfg.categoryId);
+  const targetId = option?.categoryId || cfg.categoryId;
+  const targetName = option?.categoryName || cfg.categoryName;
+  if (isFilledId(targetId)) {
+    const found = guild.channels.cache.get(targetId);
     if (found && found.type === ChannelType.GuildCategory) return found;
   }
-  let existing = guild.channels.cache.find((ch) => ch.type === ChannelType.GuildCategory && ch.name === cfg.categoryName);
+  let existing = guild.channels.cache.find((ch) => ch.type === ChannelType.GuildCategory && ch.name === targetName);
   if (existing) return existing;
   if (!guild.members.me?.permissions.has(PermissionsBitField.Flags.ManageChannels)) return null;
-  return guild.channels.create({ name: cfg.categoryName, type: ChannelType.GuildCategory, reason: "Auto category Loket Pak RW" }).catch(() => null);
+  return guild.channels.create({ name: targetName, type: ChannelType.GuildCategory, reason: "Auto category Loket Pak RW" }).catch(() => null);
+}
+
+function loketOptionsText() {
+  return loketOptions().map((item) => `${item.emoji || "🏛️"} **${item.label}** - ${item.description}`).join("\n");
 }
 
 async function sendLoketPanel(channel) {
   const cfg = loketConfig();
   const e = embedCfg("loketPanel");
+  const baseDescription = e.description || cfg.panelDescription;
+  const description = [
+    baseDescription,
+    "",
+    "**Pilihan Loket:**",
+    loketOptionsText()
+  ].join("\n").slice(0, 4096);
   const embed = new EmbedBuilder()
     .setColor(hexColor(e.color || cfg.color, DESA_TULUS_EMBED_COLOR_INT))
     .setTitle(e.title || cfg.panelTitle)
-    .setDescription(e.description || cfg.panelDescription)
-    .setFooter({ text: e.footer || "DESA TULUS • Loket Pak RW" })
+    .setDescription(description)
+    .setFooter({ text: e.footer || "DESA TULUS • Sistem Loket Pak RW" })
     .setTimestamp();
   if (e.authorName) embed.setAuthor({ name: String(e.authorName).slice(0, 256), iconURL: e.authorIcon || undefined });
   const img = e.image || cfg.imageUrl;
@@ -17361,10 +17511,12 @@ async function openLoketFromInteraction(interaction) {
   if (!interaction.guild.members.me?.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
     return interaction.reply({ content: "Pak RW belum punya izin **Manage Channels** untuk membuat loket.", flags: 64 });
   }
+  const optionId = String(interaction.customId || "").split("__")[1] || "urusan-warga";
+  const option = findLoketOption(optionId);
   const reason = interaction.fields?.getTextInputValue("loket_reason") || "Belum ada alasan detail.";
   const existing = interaction.guild.channels.cache.find((ch) => ch.type === ChannelType.GuildText && ch.topic?.includes(`loketUser:${interaction.user.id}`));
   if (existing) return interaction.reply({ content: `Kamu masih punya loket aktif di ${existing}. Lanjut di sana dulu ya.`, flags: 64 });
-  const category = await getOrCreateLoketCategory(interaction.guild);
+  const category = await getOrCreateLoketCategory(interaction.guild, option);
   const staffRoleId = cfg.staffRoleId;
   const overwrites = [
     { id: interaction.guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
@@ -17372,22 +17524,28 @@ async function openLoketFromInteraction(interaction) {
     { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.AttachFiles, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ManageMessages] }
   ];
   if (isFilledId(staffRoleId)) overwrites.push({ id: staffRoleId, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.AttachFiles, PermissionsBitField.Flags.ManageMessages] });
-  const channelName = `${cfg.channelPrefix}-${safeChannelName(interaction.user.username)}`.slice(0, 90);
+  const channelPrefix = option.channelPrefix || cfg.channelPrefix;
+  const channelName = `${channelPrefix}-${safeChannelName(interaction.user.username)}`.slice(0, 90);
   const channel = await interaction.guild.channels.create({
     name: channelName,
     type: ChannelType.GuildText,
     parent: category?.id || undefined,
-    topic: `Loket Pak RW DESA TULUS • loketUser:${interaction.user.id}`,
+    topic: `Loket Pak RW DESA TULUS • loketUser:${interaction.user.id} • loketType:${option.id}`,
     permissionOverwrites: overwrites,
-    reason: `Loket dibuka oleh ${interaction.user.tag}`
+    reason: `Loket ${option.label} dibuka oleh ${interaction.user.tag}`
   }).catch((err) => null);
   if (!channel) return interaction.reply({ content: "Pak RW belum bisa membuat channel loket. Cek izin Manage Channels dan posisi role bot.", flags: 64 });
   const e = embedCfg("loketOpened");
+  const descriptionSource = option.intro || e.description || cfg.openedDescription;
   const embed = new EmbedBuilder()
     .setColor(hexColor(e.color || cfg.color, DESA_TULUS_EMBED_COLOR_INT))
     .setTitle(e.title || cfg.openedTitle)
-    .setDescription(applyTemplate(e.description || cfg.openedDescription, { user: `${interaction.user}`, username: interaction.user.username, reason }).slice(0, 4096))
-    .addFields({ name: "👤 Warga", value: `${interaction.user}`, inline: true }, { name: "📝 Keperluan", value: reason.slice(0, 1024), inline: false })
+    .setDescription(applyTemplate(descriptionSource, { user: `${interaction.user}`, username: interaction.user.username, reason, loketType: option.label, loketOption: option.label }).slice(0, 4096))
+    .addFields(
+      { name: "👤 Warga", value: `${interaction.user}`, inline: true },
+      { name: "🏷️ Jenis Loket", value: `${option.emoji || "🏛️"} ${option.label}`.slice(0, 1024), inline: true },
+      { name: "📝 Keperluan", value: reason.slice(0, 1024), inline: false }
+    )
     .setFooter({ text: e.footer || "DESA TULUS • Loket Bantuan" })
     .setTimestamp();
   if (e.image || cfg.imageUrl) embed.setImage(e.image || cfg.imageUrl);
@@ -17398,16 +17556,34 @@ async function openLoketFromInteraction(interaction) {
     await msg?.startThread({ name: cfg.autoThreadName, autoArchiveDuration: 1440, reason: "Thread catatan Loket Pak RW" }).catch(() => null);
   }
   const log = getTextChannel(interaction.guild, cfg.logChannelId);
-  if (log) await safeSend(log, { content: `🏛️ Loket dibuka oleh ${interaction.user} → ${channel}` });
-  return interaction.reply({ content: `Loket kamu sudah dibuka di ${channel}. Ceritakan detailnya di sana ya.`, flags: 64 });
+  if (log) await safeSend(log, { content: `🏛️ Loket **${option.label}** dibuka oleh ${interaction.user} → ${channel}` });
+  return interaction.reply({ content: `Loket **${option.label}** kamu sudah dibuka di ${channel}. Ceritakan detailnya di sana ya.`, flags: 64 });
+}
+
+function buildLoketModal(option = null) {
+  const selected = option || loketOptions()[0];
+  const modal = new ModalBuilder().setCustomId(`loket_open_modal__${selected.id}`).setTitle(`Loket • ${selected.label}`.slice(0, 45));
+  const reason = new TextInputBuilder()
+    .setCustomId("loket_reason")
+    .setLabel("Keperluan loket")
+    .setPlaceholder(`Tulis keperluan untuk ${selected.label}`.slice(0, 100))
+    .setStyle(TextInputStyle.Paragraph)
+    .setMaxLength(900)
+    .setRequired(true);
+  modal.addComponents(new ActionRowBuilder().addComponents(reason));
+  return modal;
+}
+
+async function handleLoketSelect(interaction) {
+  const cfg = loketConfig();
+  if (!cfg.enabled) return interaction.reply({ content: "Loket sedang ditutup sementara, nak.", flags: 64 });
+  const selectedId = interaction.values?.[0] || loketOptions()[0]?.id;
+  return safeShowModal(interaction, buildLoketModal(findLoketOption(selectedId)));
 }
 
 async function handleLoketButton(interaction) {
   if (interaction.customId === "loket_open") {
-    const modal = new ModalBuilder().setCustomId("loket_open_modal").setTitle("Buka Loket DESA TULUS");
-    const reason = new TextInputBuilder().setCustomId("loket_reason").setLabel("Keperluan loket").setPlaceholder("Contoh: mau lapor masalah channel / tanya bantuan role").setStyle(TextInputStyle.Paragraph).setMaxLength(900).setRequired(true);
-    modal.addComponents(new ActionRowBuilder().addComponents(reason));
-    return safeShowModal(interaction, modal);
+    return safeShowModal(interaction, buildLoketModal(loketOptions()[0]));
   }
   if (interaction.customId === "loket_claim") {
     if (!canManageLoket(interaction.member)) return interaction.reply({ content: "Tombol ini khusus pengurus loket.", flags: 64 });
@@ -17785,13 +17961,28 @@ function suggestionRow() {
   return suggestionPanelRow();
 }
 
+function suggestionButtonLabel() {
+  const label = String(config.suggestion?.buttonText || "Kirim Saran")
+    .replace(/^\s*[📬💡]\s*/u, "")
+    .trim();
+  return (label || "Kirim Saran").slice(0, 80);
+}
+
+function normalizeSuggestionDescriptionTemplate(raw = "") {
+  const source = String(raw || "").trim();
+  if (!source || /\{user\}\s+atau\s+anonim/i.test(source) || /\{user\}\s+mengirim\s+saran/i.test(source)) {
+    return "**👤 Pengirim:**\n{user}\n\n**💬 Isi Saran:**\n{content}";
+  }
+  return source;
+}
+
 function suggestionPanelRow() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId("open_suggestion")
-      .setLabel("Kasih Saran")
-      .setEmoji("💡")
-      .setStyle(ButtonStyle.Secondary)
+      .setLabel(suggestionButtonLabel())
+      .setEmoji("📬")
+      .setStyle(ButtonStyle.Primary)
   );
 }
 
@@ -18092,13 +18283,13 @@ client.on(Events.GuildMemberAdd, async (member) => {
       leaderboardChannel: channelTag(config.topActive?.leaderboardActiveChannelId || config.topActive?.papanAktifChannelId, "#leaderboard-aktif")
     };
 
-    const defaultWelcomeMessage = "Wilujeung sumping, **{user}!**\nakhirnya mampir juga ke {server}.\nDi sini tempatnya ngobrol santai, saling kenal, curhat, bercanda, dan jadi bagian dari warga Desa Tulus.\n\nJangan sungkan buat mulai ngobrol ya. Semoga betah di sini";
+    const defaultWelcomeMessage = DESA_TULUS_WELCOME_MESSAGE;
     const description = applyTemplate(
       normalizeWelcomeText(config.welcome.message, defaultWelcomeMessage),
       welcomeData
     );
-    const welcomeTitle = applyTemplate(normalizeWelcomeText(config.welcome.title, "Wilujeung sumping, {displayName}!"), welcomeData);
-    const welcomeContent = applyTemplate(normalizeWelcomeText(config.welcome.content, "{memberTulusRole}"), welcomeData);
+    const welcomeTitle = applyTemplate(normalizeWelcomeText(config.welcome.title, DESA_TULUS_WELCOME_TITLE), welcomeData);
+    const welcomeContent = applyTemplate(normalizeWelcomeText(config.welcome.content, ""), welcomeData);
 
     const embed = new EmbedBuilder()
       .setColor(defaultEmbedColorInt())
@@ -18116,10 +18307,9 @@ client.on(Events.GuildMemberAdd, async (member) => {
       embed.setImage(applyTemplate(config.welcome.imageUrl, welcomeData));
     }
 
-    await safeSend(channel, {
-      content: welcomeContent,
-      embeds: [embed]
-    });
+    const welcomePayload = { embeds: [embed] };
+    if (String(welcomeContent || "").trim()) welcomePayload.content = welcomeContent;
+    await safeSend(channel, welcomePayload);
 
   } catch (err) {
     console.log("WELCOME ERROR:", err);
@@ -21662,6 +21852,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
 
+    if (interaction.isStringSelectMenu() && interaction.customId === "loket_select") {
+      return handleLoketSelect(interaction);
+    }
+
     if (interaction.isButton()) {
       if (interaction.customId.startsWith("loket_")) {
         if (await handleLoketButton(interaction)) return;
@@ -21734,36 +21928,27 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         const modal = new ModalBuilder()
           .setCustomId("suggestion_modal")
-          .setTitle("Kasih Saran DESA TULUS");
-
-        const titleInput = new TextInputBuilder()
-          .setCustomId("suggestion_title")
-          .setLabel("Judul saran")
-          .setPlaceholder("Contoh: tambah channel rekomendasi film")
-          .setStyle(TextInputStyle.Short)
-          .setMaxLength(80)
-          .setRequired(true);
-
-        const contentInput = new TextInputBuilder()
-          .setCustomId("suggestion_content")
-          .setLabel("Isi saran")
-          .setPlaceholder("Tulis saran kamu dengan jelas dan sopan")
-          .setStyle(TextInputStyle.Paragraph)
-          .setMaxLength(900)
-          .setRequired(true);
+          .setTitle("Kotak Saran");
 
         const senderInput = new TextInputBuilder()
           .setCustomId("suggestion_sender_name")
-          .setLabel("Nama pengirim (opsional)")
-          .setPlaceholder("Kosongkan kalau ingin tampil sebagai Anonim")
+          .setLabel("Nama (kosongkan untuk anonim)")
+          .setPlaceholder("Contoh: Bekiw / kosongkan kalau anonim")
           .setStyle(TextInputStyle.Short)
           .setMaxLength(80)
           .setRequired(false);
 
+        const contentInput = new TextInputBuilder()
+          .setCustomId("suggestion_content")
+          .setLabel("Masukkan kritik/saran kamu di sini:")
+          .setPlaceholder("Tulis kritik atau saran kamu dengan jelas dan sopan")
+          .setStyle(TextInputStyle.Paragraph)
+          .setMaxLength(1200)
+          .setRequired(true);
+
         modal.addComponents(
-          new ActionRowBuilder().addComponents(titleInput),
-          new ActionRowBuilder().addComponents(contentInput),
-          new ActionRowBuilder().addComponents(senderInput)
+          new ActionRowBuilder().addComponents(senderInput),
+          new ActionRowBuilder().addComponents(contentInput)
         );
 
         return safeShowModal(interaction, modal);
@@ -21776,7 +21961,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         });
       }
     }
-    if (interaction.isModalSubmit() && interaction.customId === "loket_open_modal") {
+    if (interaction.isModalSubmit() && interaction.customId.startsWith("loket_open_modal")) {
       return openLoketFromInteraction(interaction);
     }
 
@@ -21858,7 +22043,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     if (interaction.isModalSubmit() && interaction.customId === "suggestion_modal") {
-      const title = interaction.fields.getTextInputValue("suggestion_title");
+      let title = "";
+      try { title = interaction.fields.getTextInputValue("suggestion_title"); } catch { title = ""; }
       const content = interaction.fields.getTextInputValue("suggestion_content");
       let customSenderName = "";
 
@@ -21877,13 +22063,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const suggestionTemplate = config.embeds?.suggestionResult || {};
       const suggestionColor = hexColor(suggestionTemplate.color || config.embedColor || DESA_TULUS_EMBED_COLOR_HEX, DESA_TULUS_EMBED_COLOR_INT);
       const suggestionTitle = String(suggestionTemplate.title || "📬 Kritik & Saran Baru").trim() || "📬 Kritik & Saran Baru";
-      const descriptionTemplate = String(suggestionTemplate.description || "👤 Pengirim:\n{user} atau anonim\n\n💬 Isi Saran:\n{content}");
-      const titleLine = title ? `\n\n📝 Judul:\n${title}` : "";
+      const descriptionTemplate = normalizeSuggestionDescriptionTemplate(suggestionTemplate.description);
+      const safeContent = String(content || "").trim();
       const suggestionDescription = applyTemplate(descriptionTemplate, {
         user: senderDisplay,
         sender: senderDisplay,
         senderName: senderDisplay,
-        content: `${content}${titleLine}`,
+        content: safeContent,
         title,
         suggestionTitle: title,
         author: senderDisplay

@@ -191,15 +191,14 @@
       "sourceMessageId": "",
       "content": "",
       "embed": {
-        "title": "💡 Saran Baru DESA TULUS",
-        "description": "{user} mengirim saran:\n\n{content}",
+        "title": "📬 Kritik & Saran Baru",
+        "description": "**👤 Pengirim:**\n{user}\n\n**💬 Isi Saran:**\n{content}",
         "color": 8240503,
         "footer": {
-          "text": "DESA TULUS • Saran & Voting",
-          "icon_url": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
+          "text": "DESA TULUS • Kritik & Saran Warga"
         },
         "author": {
-          "name": "DESA TULUS • Pak RW"
+          "name": "DESA TULUS • Kotak Saran"
         }
       },
       "components": [],
