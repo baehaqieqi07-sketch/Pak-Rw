@@ -49,6 +49,30 @@ function getAvatarURL(guild, item) {
   return null;
 }
 
+function summarizeLeaderboardDebugRows(rows = [], limit = 3) {
+  if (!Array.isArray(rows)) return rows;
+  return rows.slice(0, limit).map((item, index) => ({
+    rank: index + 1,
+    userId: getUserId(item),
+    displayName: getUserName(item),
+    points: getPointValue(item),
+    hasAvatar: Boolean(item?.avatarURL || item?.avatarUrl || item?.avatar || item?.displayAvatarURL)
+  }));
+}
+
+function logLeaderboardDebug(label, value) {
+  const verbose = String(process.env.PAKRW_VERBOSE_LEADERBOARD_DEBUG || "").trim() === "1";
+  if (verbose) {
+    console.log(`[LEADERBOARD_IMAGE] ${label}:`, value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    console.log(`[LEADERBOARD_IMAGE] ${label}: total=${value.length}`, summarizeLeaderboardDebugRows(value));
+    return;
+  }
+  console.log(`[LEADERBOARD_IMAGE] ${label}:`, value);
+}
+
 function normalizeLeaderboardUsers(topUsers = []) {
   if (!Array.isArray(topUsers)) return [];
 
@@ -72,9 +96,9 @@ function normalizeLeaderboardUsers(topUsers = []) {
 
 async function hydrateLeaderboardUsers(guild, topUsers = []) {
   const normalizedUsers = normalizeLeaderboardUsers(topUsers);
-  console.log("[LEADERBOARD_IMAGE] normalized:", normalizedUsers);
+  logLeaderboardDebug("normalized", normalizedUsers);
   console.log("[LEADERBOARD_IMAGE] normalized total:", normalizedUsers.length);
-  console.log("[LEADERBOARD_IMAGE] normalized first:", normalizedUsers[0] || null);
+  logLeaderboardDebug("normalized first", normalizedUsers.slice(0, 1));
 
   const hydrated = [];
   for (const item of normalizedUsers) {
@@ -95,7 +119,7 @@ async function hydrateLeaderboardUsers(guild, topUsers = []) {
   }
 
   console.log("[LEADERBOARD_IMAGE] hydrated total:", hydrated.length);
-  console.log("[LEADERBOARD_IMAGE] hydrated first:", hydrated[0] || null);
+  logLeaderboardDebug("hydrated first", hydrated.slice(0, 1));
   return hydrated;
 }
 
@@ -539,10 +563,10 @@ async function drawPodium(ctx, guild, sorted) {
 }
 
 async function generateLeaderboardImage(guild, topUsers = [], leaderboardConfig = {}) {
-  console.log("[LEADERBOARD_IMAGE] raw topUsers:", topUsers);
+  logLeaderboardDebug("raw topUsers", topUsers);
   console.log("[LEADERBOARD_IMAGE] is array:", Array.isArray(topUsers));
   console.log("[LEADERBOARD_IMAGE] total:", Array.isArray(topUsers) ? topUsers.length : 0);
-  console.log("[LEADERBOARD_IMAGE] first:", Array.isArray(topUsers) ? topUsers[0] : null);
+  logLeaderboardDebug("first", Array.isArray(topUsers) ? topUsers.slice(0, 1) : null);
 
   const cfg = normalizeLeaderboardConfig(leaderboardConfig);
   const canvas = createCanvas(WIDTH, HEIGHT);

@@ -401,7 +401,7 @@ function applySafeEmbedDisplayMigrations(data = {}) {
   welcomeEmbed.useEmbed = false;
   welcomeEmbed.mode = "text";
 
-  // v10.10.113: Loket Desa dihapus dari fitur aktif. Data lama tidak dihapus, hanya diabaikan agar tidak reset.
+  // v10.10.114: Loket Desa dihapus dari fitur aktif. Data lama tidak dihapus, hanya diabaikan agar tidak reset.
   next.loket = next.loket && typeof next.loket === "object" ? next.loket : {};
   next.loket.enabled = false;
   next.loket.legacyIgnored = true;
@@ -11703,7 +11703,7 @@ app.post("/api/dashboard/leaderboard/upload", requireDashboardAuth, async (req, 
     cfg.leaderboard.backgroundUploadPath = relativePath;
     cfg.leaderboard.backgroundOverlay = Number.isFinite(Number(cfg.leaderboard.backgroundOverlay)) ? cfg.leaderboard.backgroundOverlay : 0.55;
     cfg.leaderboard.backgroundDarken = Number.isFinite(Number(cfg.leaderboard.backgroundDarken)) ? cfg.leaderboard.backgroundDarken : 0.45;
-    cfg.version = "10.10.113";
+    cfg.version = "10.10.114";
     writeConfigFile(cfg);
     appendDashboardActivity("leaderboard", "Background leaderboard diunggah", `${savedName} (${image.width}x${image.height})`);
     syncLiveConfig(readConfigFile());
@@ -11739,7 +11739,7 @@ app.put("/api/dashboard/settings", requireDashboardAuth, (req, res) => {
       if (!isSafeDashboardPath(pathText)) return res.status(400).json({ ok: false, error: `Path config tidak diizinkan: ${pathText}` });
       setDashboardPath(cfg, pathText, patch.value);
     }
-    cfg.version = "10.10.113";
+    cfg.version = "10.10.114";
     writeConfigFile(cfg);
     appendDashboardActivity("settings", "Setting dashboard disimpan", `${patches.length} field diperbarui melalui adapter aman.`);
     if (levelRoleConfigChanged) {
@@ -11759,7 +11759,7 @@ app.put("/api/dashboard/embed/:key", requireDashboardAuth, (req, res) => {
     const cfg = readConfigFile();
     cfg.embeds = cfg.embeds || {};
     cfg.embeds[key] = mergeDashboardEmbed(cfg.embeds[key] || {}, req.body?.embed || {});
-    cfg.version = "10.10.113";
+    cfg.version = "10.10.114";
     writeConfigFile(cfg);
     appendDashboardActivity("embed", "Template embed disimpan", `Template ${key} diperbarui dari Embed Builder.`);
     return res.json({ ok: true, embed: cfg.embeds[key] });
@@ -11846,7 +11846,7 @@ app.put("/api/afk-voice/config", requireDashboardAuth, async (req, res) => {
       if (!valid.ok) return res.status(400).json({ success: false, message: valid.message, errorCode: valid.errorCode });
     }
     cfg.afkVoice = next;
-    cfg.version = "10.10.113";
+    cfg.version = "10.10.114";
     writeConfigFile(cfg);
     appendDashboardActivity("afk-voice", "AFK Voice diperbarui", next.enabled ? `Channel voice ${next.channelId} diterapkan.` : "Fitur dinonaktifkan.");
 
@@ -11888,7 +11888,7 @@ app.post("/api/afk-voice/disconnect", requireDashboardAuth, async (req, res) => 
   if (!checkActionRateLimit()) return res.status(429).json({ success: false, message: "Tunggu sebentar sebelum memutus koneksi.", errorCode: "RATE_LIMITED" });
   const cfg = readConfigFile();
   cfg.afkVoice = { ...(cfg.afkVoice || {}), enabled: false, updatedAt: new Date().toISOString(), updatedBy: "dashboard" };
-  cfg.version = "10.10.113";
+  cfg.version = "10.10.114";
   writeConfigFile(cfg);
   const result = await disconnectAfkVoice({ disable: true });
   return res.json(result);
@@ -15913,6 +15913,31 @@ function getLeaderboardUserText(item) {
   return item?.displayName || item?.globalName || item?.username || item?.name || item?.tag || "Warga Desa";
 }
 
+function summarizeLeaderboardDebugRows(rows = [], limit = 3) {
+  if (!Array.isArray(rows)) return rows;
+  return rows.slice(0, limit).map((item, index) => ({
+    rank: index + 1,
+    userId: item?.userId || item?.id || item?.memberId || item?.discordId || item?.discordID || item?.user_id || "",
+    displayName: item?.displayName || item?.globalName || item?.username || item?.name || item?.tag || "Warga Desa",
+    points: getLeaderboardPointValue(item),
+    lifetimeTotal: item?.lifetimeTotal,
+    totalPoints: item?.totalPoints
+  }));
+}
+
+function logLeaderboardDebug(label, value) {
+  const verbose = String(process.env.PAKRW_VERBOSE_LEADERBOARD_DEBUG || "").trim() === "1";
+  if (verbose) {
+    console.log(`[LEADERBOARD_IMAGE] ${label}:`, value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    console.log(`[LEADERBOARD_IMAGE] ${label}: total=${value.length}`, summarizeLeaderboardDebugRows(value));
+    return;
+  }
+  console.log(`[LEADERBOARD_IMAGE] ${label}:`, value);
+}
+
 function formatLeaderboardQuote(topUsers = []) {
   const rankEmojis = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
   const arrow = normalizePakRwEmojiCodes(config.leaderboard?.arrowEmoji || getTopActiveConfig().rowArrowEmoji || ARROW_EMOJI) || FALLBACK_ARROW;
@@ -16003,10 +16028,11 @@ async function buildLeaderboardActivePayload(guild, reason = "update") {
   let files = [];
   let imageOk = false;
 
-  console.log("[LEADERBOARD_IMAGE] raw topUsers:", rawRows);
+  logLeaderboardDebug("raw topUsers", rawRows);
   console.log("[LEADERBOARD_IMAGE] is array:", Array.isArray(rawRows));
   console.log("[LEADERBOARD_IMAGE] total:", Array.isArray(rawRows) ? rawRows.length : 0);
-  console.log("[LEADERBOARD_IMAGE] first:", Array.isArray(rawRows) ? rawRows[0] : null);
+  logLeaderboardDebug("first", Array.isArray(rawRows) ? rawRows.slice(0, 1) : null);
+  logLeaderboardDebug("hydrated", rows);
 
   if (cfg.leaderboardUseImage !== false && config.leaderboard?.useImage !== false) {
     try {
@@ -16106,6 +16132,33 @@ async function getTopActiveChannel(guild) {
   const cfg = getTopActiveConfig();
   if (!cfg.enabled || !isFilledId(cfg.channelId)) return null;
   return getTextChannel(guild, cfg.channelId);
+}
+
+async function getLeaderboardActiveChannel(guild) {
+  const cfg = getTopActiveConfig();
+  if (!guild || cfg.enabled === false || config.leaderboard?.enabled === false) return null;
+
+  const candidateIds = [
+    cfg.leaderboardActiveChannelId,
+    config.leaderboard?.channelId,
+    config.leaderboardAktif?.channelId,
+    config.papanAktif?.channelId,
+    cfg.channelId,
+    config.levelChannelId
+  ]
+    .map((id) => String(id || "").trim())
+    .filter((id, index, arr) => isFilledId(id) && arr.indexOf(id) === index);
+
+  for (const id of candidateIds) {
+    const cached = getTextChannel(guild, id);
+    if (cached?.isTextBased?.()) return cached;
+
+    const fetched = await guild.channels.fetch(id).catch(() => null);
+    if (fetched?.isTextBased?.()) return fetched;
+  }
+
+  console.log("[LEADERBOARD_ACTIVE_CHANNEL] channel belum diset / tidak ditemukan. Isi leaderboard.channelId atau topActive.leaderboardActiveChannelId di dashboard/config.");
+  return null;
 }
 
 async function sendTopActiveBoard(guild, reason = "update") {
