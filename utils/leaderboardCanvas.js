@@ -398,11 +398,23 @@ async function drawBackground(ctx, config = {}) {
 }
 
 function drawHeader(ctx, guild, cfg, totalRows) {
-  fillRoundRect(ctx, 58, 34, 1084, 84, 26, "rgba(15, 23, 42, 0.70)", "rgba(148, 163, 184, 0.18)", 2);
-  drawSafeText(ctx, "TOP AKTIF WARGA", 600, 66, { font: font(38, "900"), color: "#F8FAFC", align: "center", maxWidth: 720 });
-  const serverName = guild?.name || "Desa Tulus";
-  const updateTime = String(cfg.updateTime || "00:00").replace(":", ".");
-  drawSafeText(ctx, `${serverName} • Update ${updateTime} WIB • ${Number(totalRows || 0)} warga`, 600, 99, { font: font(17, "700"), color: "#CBD5E1", align: "center", maxWidth: 820 });
+  // Safe area lebih konsisten: tidak terlalu mepet kiri/kanan dan tidak terlalu tinggi.
+  fillRoundRect(ctx, 96, 44, 1008, 74, 22, "rgba(15, 23, 42, 0.74)", "rgba(148, 163, 184, 0.14)", 1.25);
+
+  drawSafeText(ctx, "TOP AKTIF WARGA", 600, 72, {
+    font: font(34, "900"),
+    color: "#F8FAFC",
+    align: "center",
+    maxWidth: 720
+  });
+
+  const serverName = cleanText(guild?.name || cfg.serverName || "Desa Tulus", "Desa Tulus").toUpperCase();
+  drawSafeText(ctx, `${serverName} • update 00.00 WIB • ${totalRows || 0} warga`, 600, 101, {
+    font: font(14, "800"),
+    color: "#CBD5E1",
+    align: "center",
+    maxWidth: 720
+  });
 }
 
 function rankColor(rank) {
@@ -446,96 +458,146 @@ async function drawPodiumUser(ctx, guild, item, rank, centerX, avatarY, avatarSi
   const color = rankColor(rank);
   const exists = Boolean(item);
   const name = exists ? getUserName(item) : "Belum ada";
-  const username = exists ? getUsername(item) : "warga-desa";
+  const username = exists ? getUsername(item) : "warga";
   const points = exists ? getPointValue(item) : 0;
   const avatar = exists ? await loadAvatar(guild, item) : null;
 
-  // soft halo behind avatar
-  ctx.save();
-  const halo = ctx.createRadialGradient(centerX, avatarY + avatarSize / 2, 10, centerX, avatarY + avatarSize / 2, avatarSize * 0.92);
-  halo.addColorStop(0, `${color}33`);
-  halo.addColorStop(1, "rgba(15,23,42,0)");
-  ctx.fillStyle = halo;
-  ctx.beginPath();
-  ctx.arc(centerX, avatarY + avatarSize / 2, avatarSize * 0.92, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
+  await drawCircleAvatar(ctx, avatar, centerX - avatarSize / 2, avatarY, avatarSize, color, rank === 1 ? 4 : 3);
 
-  await drawCircleAvatar(ctx, avatar, centerX - avatarSize / 2, avatarY, avatarSize, color, rank === 1 ? 5 : 4, name);
-  drawRankBadge(ctx, centerX + avatarSize / 2 - 6, avatarY + 10, rank === 1 ? 42 : 34, rank);
+  const badgeSize = rank === 1 ? 38 : 30;
+  drawRankBadge(ctx, centerX + avatarSize / 2 - 10, avatarY + 9, badgeSize, rank);
 
-  const nameY = avatarY + avatarSize + 28;
-  const maxNameWidth = rank === 1 ? 310 : 240;
+  const nameY = avatarY + avatarSize + 31;
+  const userY = nameY + 23;
+  const pointY = userY + 31;
+
   drawSafeText(ctx, name, centerX, nameY, {
-    font: font(rank === 1 ? 24 : 19, "900"),
+    font: font(rank === 1 ? 23 : 19, "900"),
     color: "#F8FAFC",
     align: "center",
-    maxWidth: maxNameWidth
-  });
-  drawSafeText(ctx, `@${username}`, centerX, nameY + 25, {
-    font: font(rank === 1 ? 14 : 12, "700"),
-    color: "#CBD5E1",
-    align: "center",
-    maxWidth: maxNameWidth
+    maxWidth: rank === 1 ? 280 : 235
   });
 
-  fillRoundRect(ctx, centerX - 86, nameY + 42, 172, 30, 14, "rgba(15, 23, 42, 0.72)", "rgba(248, 250, 252, 0.12)", 1);
-  drawSafeText(ctx, `${formatPoints(points)} poin`, centerX, nameY + 58, {
-    font: font(rank === 1 ? 15 : 13, "900"),
-    color,
+  drawSafeText(ctx, `@${username}`, centerX, userY, {
+    font: font(13, "800"),
+    color: "#CBD5E1",
     align: "center",
-    maxWidth: 150
+    maxWidth: rank === 1 ? 220 : 195
+  });
+
+  const pillW = rank === 1 ? 176 : 154;
+  const pillH = 28;
+  fillRoundRect(
+    ctx,
+    centerX - pillW / 2,
+    pointY - pillH / 2,
+    pillW,
+    pillH,
+    14,
+    "rgba(15, 23, 42, 0.72)",
+    "rgba(148, 163, 184, 0.16)",
+    1
+  );
+
+  drawSafeText(ctx, `${formatPoints(points)} poin`, centerX, pointY, {
+    font: font(rank === 1 ? 16 : 14, "900"),
+    color: rank === 1 ? "#FACC15" : "#E2E8F0",
+    align: "center",
+    maxWidth: pillW - 18
   });
 }
 
 async function drawPodium(ctx, guild, sorted) {
-  fillRoundRect(ctx, 70, 140, 1060, 360, 34, "rgba(15, 23, 42, 0.46)", "rgba(148, 163, 184, 0.18)", 2);
-  drawSafeText(ctx, "PODIUM WARGA TERAKTIF", 600, 173, { font: font(20, "900"), color: "#CBD5E1", align: "center" });
+  // Card podium dibuat turun sedikit dan tingginya pas agar tidak nabrak header/list.
+  fillRoundRect(ctx, 96, 146, 1008, 330, 26, "rgba(15, 23, 42, 0.55)", "rgba(148, 163, 184, 0.12)", 1.25);
 
-  // Layout sengaja mirip referensi: rank 2 kiri, rank 1 tengah lebih besar, rank 3 kanan.
-  await drawPodiumUser(ctx, guild, sorted[1], 2, 340, 232, 122);
-  await drawPodiumUser(ctx, guild, sorted[0], 1, 600, 190, 168);
-  await drawPodiumUser(ctx, guild, sorted[2], 3, 860, 232, 122);
+  drawSafeText(ctx, "PODIUM WARGA TERAKTIF", 600, 177, {
+    font: font(20, "900"),
+    color: "#E2E8F0",
+    align: "center",
+    maxWidth: 500
+  });
+
+  // Posisi dibuat simetris dan tidak terlalu lebar.
+  await drawPodiumUser(ctx, guild, sorted[1], 2, 360, 235, 98);
+  await drawPodiumUser(ctx, guild, sorted[0], 1, 600, 205, 128);
+  await drawPodiumUser(ctx, guild, sorted[2], 3, 840, 235, 98);
 }
 
 async function drawCompactRow(ctx, guild, item, rank, x, y, w, h) {
-  const color = rankColor(rank);
-  const exists = Boolean(item);
-  const name = exists ? getUserName(item) : "Belum ada warga";
-  const username = exists ? getUsername(item) : "warga-desa";
-  const userId = exists ? getUserId(item) : "";
-  const points = exists ? getPointValue(item) : 0;
-  const level = exists ? Number(item?.level || 0) || 0 : 0;
-  const avatar = exists ? await loadAvatar(guild, item) : null;
+  const color = "#38BDF8";
+  const avatar = await loadAvatar(guild, item);
+  const name = getUserName(item);
+  const username = getUsername(item);
+  const points = getPointValue(item);
+  const level = getNumberField(item, ["level", "lvl"], 0);
 
-  fillRoundRect(ctx, x, y, w, h, 20, "rgba(30, 41, 59, 0.78)", "rgba(148, 163, 184, 0.18)", 1);
+  fillRoundRect(ctx, x, y, w, h, 16, "rgba(15, 23, 42, 0.54)", "rgba(148, 163, 184, 0.10)", 1);
+
   ctx.save();
-  ctx.fillStyle = color;
-  ctx.globalAlpha = 1;
-  drawRoundRect(ctx, x, y, 7, h, 8);
-  ctx.fill();
+  ctx.fillStyle = "rgba(56, 189, 248, 0.82)";
+  ctx.fillRect(x, y + 8, 4, h - 16);
   ctx.restore();
 
-  drawSafeText(ctx, rankLabel(rank), x + 34, y + h / 2, { font: font(17, "900"), color, align: "center" });
-  await drawCircleAvatar(ctx, avatar, x + 64, y + 12, 46, color, 2, name);
-  drawSafeText(ctx, name, x + 124, y + 28, { font: font(17, "900"), color: "#F8FAFC", maxWidth: 215 });
-  drawSafeText(ctx, `@${username} • ID ${compactDiscordId(userId)}`, x + 124, y + 51, { font: font(11, "700"), color: "#94A3B8", maxWidth: 240 });
-  drawSafeText(ctx, `${formatPoints(points)} poin`, x + w - 28, y + 29, { font: font(17, "900"), color: "#F8FAFC", align: "right", maxWidth: 190 });
-  drawSafeText(ctx, `Level ${level || 0}`, x + w - 28, y + 52, { font: font(12, "800"), color: "#38BDF8", align: "right", maxWidth: 170 });
+  drawSafeText(ctx, `#${String(rank).padStart(2, "0")}`, x + 32, y + h / 2, {
+    font: font(16, "900"),
+    color,
+    align: "center",
+    maxWidth: 54
+  });
+
+  await drawCircleAvatar(ctx, avatar, x + 68, y + 9, 40, "rgba(56, 189, 248, 0.82)", 2);
+
+  drawSafeText(ctx, name, x + 120, y + 21, {
+    font: font(16, "900"),
+    color: "#F8FAFC",
+    maxWidth: 170
+  });
+
+  const meta = `@${username} • ID ${compactDiscordId(getUserId(item))}`;
+  drawSafeText(ctx, meta, x + 120, y + 42, {
+    font: font(10, "800"),
+    color: "#94A3B8",
+    maxWidth: 200
+  });
+
+  drawSafeText(ctx, `${formatPoints(points)} poin`, x + w - 20, y + 22, {
+    font: font(16, "900"),
+    color: "#F8FAFC",
+    align: "right",
+    maxWidth: 158
+  });
+
+  if (level > 0) {
+    drawSafeText(ctx, `Level ${level}`, x + w - 20, y + 43, {
+      font: font(11, "900"),
+      color: "#38BDF8",
+      align: "right",
+      maxWidth: 110
+    });
+  }
 }
 
 async function drawRankingList(ctx, guild, sorted) {
-  fillRoundRect(ctx, 70, 525, 1060, 300, 30, "rgba(15, 23, 42, 0.42)", "rgba(148, 163, 184, 0.16)", 2);
-  drawSafeText(ctx, "DAFTAR WARGA AKTIF LAINNYA", 100, 555, { font: font(18, "900"), color: "#CBD5E1" });
+  // List bawah dibuat lebih lega, simetris, dan footer tidak terlalu dekat.
+  fillRoundRect(ctx, 96, 514, 1008, 294, 24, "rgba(15, 23, 42, 0.52)", "rgba(148, 163, 184, 0.12)", 1.25);
 
-  const rows = sorted.slice(3, 10);
-  for (let i = 0; i < 7; i += 1) {
-    const row = i % 4;
-    const col = i < 4 ? 0 : 1;
-    const x = 95 + col * 520;
-    const y = 580 + row * 59;
-    const w = col === 0 ? 480 : 490;
-    await drawCompactRow(ctx, guild, rows[i], i + 4, x, y, w, 52);
+  drawSafeText(ctx, "DAFTAR WARGA AKTIF LAINNYA", 124, 549, {
+    font: font(18, "900"),
+    color: "#E2E8F0",
+    maxWidth: 430
+  });
+
+  const others = sorted.slice(3, 10);
+  const left = others.slice(0, 4);
+  const right = others.slice(4);
+
+  for (let i = 0; i < left.length; i += 1) {
+    await drawCompactRow(ctx, guild, left[i], i + 4, 124, 582 + i * 56, 438, 50);
+  }
+
+  for (let i = 0; i < right.length; i += 1) {
+    await drawCompactRow(ctx, guild, right[i], i + 8, 638, 582 + i * 56, 438, 50);
   }
 }
 
@@ -548,9 +610,19 @@ async function drawKtpGrid(ctx, guild, sorted) {
 }
 
 function drawFooter(ctx, cfg) {
-  fillRoundRect(ctx, 70, 845, 1060, 36, 14, "rgba(15, 23, 42, 0.66)", "rgba(148, 163, 184, 0.16)", 1);
-  drawSafeText(ctx, cfg.footer || "Pak RW • Desa Tulus Leaderboard", 92, 864, { font: font(14, "800"), color: "#CBD5E1", maxWidth: 480 });
-  drawSafeText(ctx, "Podium style aktif • top 3 besar + ranking lengkap", 1108, 864, { font: font(13, "700"), color: "#94A3B8", align: "right", maxWidth: 520 });
+  // Footer dibuat simple, sejajar dengan card lain, tidak terlalu panjang/mepet bawah.
+  fillRoundRect(ctx, 96, 836, 1008, 32, 15, "rgba(15, 23, 42, 0.68)", "rgba(148, 163, 184, 0.09)", 1);
+  drawSafeText(ctx, cfg.footer || "Pak RW • Desa Tulus Leaderboard", 120, 853, {
+    font: font(12, "800"),
+    color: "#CBD5E1",
+    maxWidth: 430
+  });
+  drawSafeText(ctx, "Update otomatis • 00.00 WIB", 1080, 853, {
+    font: font(11, "700"),
+    color: "#94A3B8",
+    align: "right",
+    maxWidth: 360
+  });
 }
 
 async function generateLeaderboardImage(guild, topUsers = [], leaderboardConfig = {}) {
@@ -562,7 +634,7 @@ async function generateLeaderboardImage(guild, topUsers = [], leaderboardConfig 
   try {
     const hydratedUsers = await hydrateLeaderboardUsers(guild, topUsers);
     if (process.env.PAKRW_DEBUG_LEADERBOARD === "1") {
-      console.log(`[LEADERBOARD_IMAGE] render podium total=${hydratedUsers.length} first=${hydratedUsers[0]?.displayName || "-"}`);
+      console.log(`[LEADERBOARD_IMAGE] render refined podium total=${hydratedUsers.length} first=${hydratedUsers[0]?.displayName || "-"}`);
     }
 
     await drawBackground(ctx, cfg);
