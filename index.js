@@ -43,6 +43,11 @@ const {
   getLevelRoleBaseName
 } = require("./level/levelRoleTiers");
 
+const { generateLeaderboardImage } = require("./utils/leaderboardCanvas");
+
+const ARROW_EMOJI = "<a:Animated_Arrow_Bluelite:1512751559140839576>";
+const FALLBACK_ARROW = "➜";
+
 const DESA_TULUS_EMBED_COLOR_HEX = "#7DBD77";
 const DESA_TULUS_EMBED_COLOR_INT = 0x7DBD77;
 
@@ -416,8 +421,36 @@ function applySafeEmbedDisplayMigrations(data = {}) {
 
   next.topActive = next.topActive && typeof next.topActive === "object" ? next.topActive : {};
   next.topActive.rowArrowEmoji = normalizePakRwEmojiCodes(
-    next.topActive.rowArrowEmoji || "<a:Animated_Arrow_Bluelite:1512751559140839576>"
+    next.topActive.rowArrowEmoji || ARROW_EMOJI
   );
+
+  next.leaderboard = next.leaderboard && typeof next.leaderboard === "object" ? next.leaderboard : {};
+  next.leaderboard.enabled = next.leaderboard.enabled !== false;
+  next.leaderboard.useQuoteFormat = next.leaderboard.useQuoteFormat !== false;
+  next.leaderboard.useImage = next.leaderboard.useImage !== false;
+  next.leaderboard.arrowEmoji = normalizePakRwEmojiCodes(next.leaderboard.arrowEmoji || next.topActive.rowArrowEmoji || ARROW_EMOJI);
+  next.leaderboard.fallbackArrow = String(next.leaderboard.fallbackArrow || FALLBACK_ARROW).trim() || FALLBACK_ARROW;
+  next.leaderboard.maxEntries = Math.max(1, Math.min(10, Number(next.leaderboard.maxEntries || next.topActive.leaderboardActiveTopLimit || 10)));
+  next.leaderboard.updateTime = String(next.leaderboard.updateTime || "00:00").trim() || "00:00";
+  next.leaderboard.timezone = String(next.leaderboard.timezone || "Asia/Jakarta").trim() || "Asia/Jakarta";
+  next.leaderboard.color = String(next.leaderboard.color || "#FACC15").trim() || "#FACC15";
+  next.leaderboard.title = normalizeLeaderboardActiveTitle(next.leaderboard.title || next.topActive.leaderboardActiveTitleTemplate || next.papanAktif?.title || next.leaderboardAktif?.title);
+  next.leaderboard.footer = String(next.leaderboard.footer || "Pak RW • Desa Tulus Leaderboard").trim() || "Pak RW • Desa Tulus Leaderboard";
+  next.leaderboard.channelId = String(next.leaderboard.channelId || next.papanAktif?.channelId || next.leaderboardAktif?.channelId || next.topActive.leaderboardActiveChannelId || "").trim();
+  next.leaderboard.messageId = String(next.leaderboard.messageId || next.papanAktif?.messageId || next.leaderboardAktif?.messageId || next.topActive.leaderboardActiveMessageId || "").trim();
+
+  next.papanAktif = next.papanAktif && typeof next.papanAktif === "object" ? next.papanAktif : {};
+  next.leaderboardAktif = next.leaderboardAktif && typeof next.leaderboardAktif === "object" ? next.leaderboardAktif : {};
+  next.papanAktif.channelId = next.papanAktif.channelId || next.leaderboard.channelId;
+  next.leaderboardAktif.channelId = next.leaderboardAktif.channelId || next.leaderboard.channelId;
+  next.papanAktif.messageId = next.papanAktif.messageId || next.leaderboard.messageId;
+  next.leaderboardAktif.messageId = next.leaderboardAktif.messageId || next.leaderboard.messageId;
+  next.topActive.leaderboardActiveChannelId = next.topActive.leaderboardActiveChannelId || next.leaderboard.channelId;
+  next.topActive.leaderboardActiveMessageId = next.topActive.leaderboardActiveMessageId || next.leaderboard.messageId;
+  next.topActive.leaderboardActiveTopLimit = Math.max(1, Math.min(10, Number(next.topActive.leaderboardActiveTopLimit || next.leaderboard.maxEntries || 10)));
+  next.topActive.leaderboardActiveTitleTemplate = normalizeLeaderboardActiveTitle(next.topActive.leaderboardActiveTitleTemplate || next.leaderboard.title);
+  next.topActive.leaderboardActiveSubtitle = normalizeLeaderboardActiveSubtitle(next.topActive.leaderboardActiveSubtitle || "Update otomatis setiap hari pukul 00.00 WIB");
+  next.topActive.leaderboardActiveFooter = next.topActive.leaderboardActiveFooter || next.leaderboard.footer;
   return next;
 }
 
@@ -6282,6 +6315,11 @@ function renderMaxtonMegaControl(req, saved = false, error = "") {
           ${configInput("topActiveBonusPercent", "Persen Bonus Ekstra", topCfg.bonusPercent || 15, "number")}
           ${configInput("topActiveArchiveMinutes", "Durasi Arsip Thread Image (menit)", topCfg.autoImageThreadArchiveMinutes || 1440, "number")}
           ${configInput("topActiveTitle", "Judul Board", topCfg.title || "🏆 TOP AKTIF WARGA DESA TULUS")}
+          ${configInput("leaderboardTitle", "Judul Leaderboard Lifetime", cfg.leaderboard?.title || topCfg.leaderboardActiveTitleTemplate || "🏆 TOP AKTIF WARGA SEPANJANG WAKTU")}
+          ${configInput("leaderboardColor", "Warna Leaderboard Lifetime", cfg.leaderboard?.color || "#FACC15")}
+          ${configInput("leaderboardFooter", "Footer Leaderboard Lifetime", cfg.leaderboard?.footer || "Pak RW • Desa Tulus Leaderboard")}
+          ${configInput("leaderboardMessageId", "Message ID Leaderboard Lama", cfg.leaderboard?.messageId || topCfg.leaderboardActiveMessageId || "")}
+          <div class="mega-check">${checkboxInput("leaderboardUseImage", "Pakai Image PNG Leaderboard", cfg.leaderboard?.useImage !== false)}</div>
           ${configInput("topActiveFooter", "Footer Board", topCfg.footer || "DESA TULUS • Top Aktif Warga")}
           ${configInput("topActiveBannerTitle", "Judul Banner", topCfg.bannerTitle || "MEMBER OF THE MONTH")}
           ${configInput("topActiveBannerSubtitle", "Subjudul Banner", topCfg.bannerSubtitle || "TOP CHAT • TOP VOICE • TOP AKTIF")}
@@ -6588,6 +6626,29 @@ function applyMaxtonControlPost(body = {}) {
   cfg.topActive.enabled = bool("topActiveEnabled");
   cfg.topActive.channelId = body.topActiveChannelId || cfg.topActive.channelId || cfg.levelChannelId || "";
   cfg.topActive.leaderboardActiveChannelId = body.leaderboardActiveChannelId || cfg.topActive.leaderboardActiveChannelId || "";
+  cfg.leaderboard = cfg.leaderboard && typeof cfg.leaderboard === "object" ? cfg.leaderboard : {};
+  cfg.leaderboard.enabled = true;
+  cfg.leaderboard.useQuoteFormat = true;
+  cfg.leaderboard.useImage = body.leaderboardUseImage === "on";
+  cfg.leaderboard.arrowEmoji = ARROW_EMOJI;
+  cfg.leaderboard.fallbackArrow = FALLBACK_ARROW;
+  cfg.leaderboard.maxEntries = 10;
+  cfg.leaderboard.updateTime = "00:00";
+  cfg.leaderboard.timezone = "Asia/Jakarta";
+  cfg.leaderboard.color = body.leaderboardColor || cfg.leaderboard.color || "#FACC15";
+  cfg.leaderboard.title = body.leaderboardTitle || cfg.leaderboard.title || "🏆 TOP AKTIF WARGA SEPANJANG WAKTU";
+  cfg.leaderboard.footer = body.leaderboardFooter || cfg.leaderboard.footer || "Pak RW • Desa Tulus Leaderboard";
+  cfg.leaderboard.channelId = cfg.topActive.leaderboardActiveChannelId || cfg.leaderboard.channelId || "";
+  cfg.leaderboard.messageId = body.leaderboardMessageId || cfg.leaderboard.messageId || "";
+  cfg.papanAktif = cfg.papanAktif || {};
+  cfg.leaderboardAktif = cfg.leaderboardAktif || {};
+  cfg.papanAktif.channelId = cfg.leaderboard.channelId;
+  cfg.leaderboardAktif.channelId = cfg.leaderboard.channelId;
+  cfg.papanAktif.messageId = cfg.leaderboard.messageId;
+  cfg.leaderboardAktif.messageId = cfg.leaderboard.messageId;
+  cfg.topActive.leaderboardActiveMessageId = cfg.leaderboard.messageId;
+  cfg.topActive.leaderboardActiveTitleTemplate = cfg.leaderboard.title;
+  cfg.topActive.leaderboardActiveFooter = cfg.leaderboard.footer;
   cfg.topActive.memberOfTheMonthRoleId = body.memberOfTheMonthRoleId || cfg.topActive.memberOfTheMonthRoleId || "";
   cfg.topActive.pointsThreshold = num(body.topActivePointsThreshold, cfg.topActive.pointsThreshold ?? 100000, 1);
   cfg.topActive.topLimit = num(body.topActiveLimit, cfg.topActive.topLimit ?? 10, 3, 50);
@@ -10280,8 +10341,8 @@ function renderCommands() {
 
 
 /* ===================== PAK RW FULL PREMIUM DASHBOARD REBUILD v10.10.63 ===================== */
-const PAKRW_DASHBOARD_RELEASE = "10.10.79";
-const PAKRW_DASHBOARD_RELEASE_NAME = "Auto Level Role Otomatis On-Demand";
+const PAKRW_DASHBOARD_RELEASE = "10.10.108";
+const PAKRW_DASHBOARD_RELEASE_NAME = "Leaderboard Premium PNG";
 
 const PAKRW_PLACEHOLDER_GROUPS = [
   ["User", ["{user}", "{userId}", "{username}", "{displayName}", "{avatar}", "{joinedAt}"]],
@@ -11093,7 +11154,7 @@ function renderPakRwFeatureSpecificFields(slug, cfg, guild) {
   }
   if (slug === "papan-aktif") {
     const papan = cfg.papanAktif || cfg.leaderboardAktif || {};
-    return `${pakRwChannelSelect("leaderboardChannelId", "Channel Leaderboard Lifetime", papan.channelId || cfg.topActive?.leaderboardActiveChannelId || "", guild, "Disarankan: 🏆│leaderboard-aktif")}${pakRwTextField("papanTitle", "Judul Papan Aktif", papan.title || "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU", "Tidak digabung dengan Top Aktif Bulanan.")}${pakRwTextField("papanTopLimit", "Top Limit Lifetime", papan.topLimit || 10, "Jumlah ranking lifetime.", "number")}${pakRwSwitch("papanAutoPost", "Auto post lifetime", papan.autoPost !== false, "Lifetime tidak reset.")}`;
+    return `${pakRwChannelSelect("leaderboardChannelId", "Channel Leaderboard Lifetime", papan.channelId || cfg.topActive?.leaderboardActiveChannelId || cfg.leaderboard?.channelId || "", guild, "Disarankan: 🏆│leaderboard-aktif")}${pakRwTextField("papanTitle", "Judul Papan Aktif", cfg.leaderboard?.title || papan.title || "🏆 TOP AKTIF WARGA SEPANJANG WAKTU", "Tidak digabung dengan Top Aktif Bulanan.")}${pakRwTextField("leaderboardColor", "Warna Leaderboard", cfg.leaderboard?.color || "#FACC15", "Default premium kuning #FACC15.")}${pakRwTextField("leaderboardFooter", "Footer Leaderboard", cfg.leaderboard?.footer || "Pak RW • Desa Tulus Leaderboard", "Footer embed.")}${pakRwTextField("leaderboardMessageId", "Message ID Lama", cfg.leaderboard?.messageId || papan.messageId || "", "Agar auto post edit pesan lama, bukan spam kirim baru.")}${pakRwTextField("papanTopLimit", "Top Limit Lifetime", cfg.leaderboard?.maxEntries || papan.topLimit || 10, "Jumlah ranking lifetime maksimal 10.", "number")}${pakRwSwitch("leaderboardUseImage", "Pakai Image PNG otomatis", cfg.leaderboard?.useImage !== false, "Kalau canvas gagal, Pak RW tetap kirim embed teks.")}${pakRwSwitch("papanAutoPost", "Auto post lifetime", papan.autoPost !== false, "Lifetime tidak reset.")}`;
   }
   if (slug === "motm") {
     return `${pakRwRoleSelect("motmRoleId", "Role Member Of The Month", cfg.topActive?.memberOfTheMonthRoleId || cfg.level100RoleId || "", guild, "Bot role harus di atas role ini.")}${pakRwTextField("pointsThreshold", "Threshold Poin", cfg.topActive?.pointsThreshold || cfg.level?.cycleResetAtPoints || 100000, "Saat tercapai: role MOTM, cycle reset, lifetime tetap lanjut.", "number")}${pakRwSwitch("announceMemberOfTheMonth", "Umumkan MOTM", cfg.topActive?.announceMemberOfTheMonth !== false, "Kirim embed saat warga mencapai threshold.")}`;
@@ -11180,8 +11241,27 @@ function savePakRwManagePage(req, slug) {
     cfg.papanAktif.autoPost = req.body.papanAutoPost === "on";
     cfg.papanAktif.autoPostHourWIB = Number(cfg.papanAktif.autoPostHourWIB ?? 0);
     cfg.leaderboardAktif = { ...cfg.papanAktif };
+    cfg.leaderboard = cfg.leaderboard || {};
+    cfg.leaderboard.enabled = true;
+    cfg.leaderboard.useQuoteFormat = true;
+    cfg.leaderboard.useImage = req.body.leaderboardUseImage === "on";
+    cfg.leaderboard.arrowEmoji = ARROW_EMOJI;
+    cfg.leaderboard.fallbackArrow = FALLBACK_ARROW;
+    cfg.leaderboard.maxEntries = Math.max(1, Math.min(10, Number(req.body.papanTopLimit || cfg.leaderboard.maxEntries || 10)));
+    cfg.leaderboard.updateTime = "00:00";
+    cfg.leaderboard.timezone = "Asia/Jakarta";
+    cfg.leaderboard.color = String(req.body.leaderboardColor || cfg.leaderboard.color || "#FACC15");
+    cfg.leaderboard.title = String(req.body.papanTitle || cfg.leaderboard.title || "🏆 TOP AKTIF WARGA SEPANJANG WAKTU");
+    cfg.leaderboard.footer = String(req.body.leaderboardFooter || cfg.leaderboard.footer || "Pak RW • Desa Tulus Leaderboard");
+    cfg.leaderboard.channelId = channelId;
+    cfg.leaderboard.messageId = String(req.body.leaderboardMessageId || cfg.leaderboard.messageId || "");
+    cfg.papanAktif.messageId = cfg.leaderboard.messageId;
+    cfg.leaderboardAktif.messageId = cfg.leaderboard.messageId;
     cfg.topActive = cfg.topActive || {};
     cfg.topActive.leaderboardActiveChannelId = channelId;
+    cfg.topActive.leaderboardActiveMessageId = cfg.leaderboard.messageId;
+    cfg.topActive.leaderboardActiveTitleTemplate = cfg.leaderboard.title;
+    cfg.topActive.leaderboardActiveFooter = cfg.leaderboard.footer;
     cfg.topActive.useOneChannel = false;
   } else if (slug === "motm") {
     cfg.topActive = cfg.topActive || {};
@@ -11506,7 +11586,7 @@ app.put("/api/dashboard/settings", requireDashboardAuth, (req, res) => {
       if (!isSafeDashboardPath(pathText)) return res.status(400).json({ ok: false, error: `Path config tidak diizinkan: ${pathText}` });
       setDashboardPath(cfg, pathText, patch.value);
     }
-    cfg.version = "10.10.107";
+    cfg.version = "10.10.108";
     writeConfigFile(cfg);
     appendDashboardActivity("settings", "Setting dashboard disimpan", `${patches.length} field diperbarui melalui adapter aman.`);
     if (levelRoleConfigChanged) {
@@ -11526,7 +11606,7 @@ app.put("/api/dashboard/embed/:key", requireDashboardAuth, (req, res) => {
     const cfg = readConfigFile();
     cfg.embeds = cfg.embeds || {};
     cfg.embeds[key] = mergeDashboardEmbed(cfg.embeds[key] || {}, req.body?.embed || {});
-    cfg.version = "10.10.107";
+    cfg.version = "10.10.108";
     writeConfigFile(cfg);
     appendDashboardActivity("embed", "Template embed disimpan", `Template ${key} diperbarui dari Embed Builder.`);
     return res.json({ ok: true, embed: cfg.embeds[key] });
@@ -11613,7 +11693,7 @@ app.put("/api/afk-voice/config", requireDashboardAuth, async (req, res) => {
       if (!valid.ok) return res.status(400).json({ success: false, message: valid.message, errorCode: valid.errorCode });
     }
     cfg.afkVoice = next;
-    cfg.version = "10.10.107";
+    cfg.version = "10.10.108";
     writeConfigFile(cfg);
     appendDashboardActivity("afk-voice", "AFK Voice diperbarui", next.enabled ? `Channel voice ${next.channelId} diterapkan.` : "Fitur dinonaktifkan.");
 
@@ -11655,7 +11735,7 @@ app.post("/api/afk-voice/disconnect", requireDashboardAuth, async (req, res) => 
   if (!checkActionRateLimit()) return res.status(429).json({ success: false, message: "Tunggu sebentar sebelum memutus koneksi.", errorCode: "RATE_LIMITED" });
   const cfg = readConfigFile();
   cfg.afkVoice = { ...(cfg.afkVoice || {}), enabled: false, updatedAt: new Date().toISOString(), updatedBy: "dashboard" };
-  cfg.version = "10.10.107";
+  cfg.version = "10.10.108";
   writeConfigFile(cfg);
   const result = await disconnectAfkVoice({ disable: true });
   return res.json(result);
@@ -15388,12 +15468,14 @@ function getTopActiveConfig() {
     pointsThreshold: Number(t.pointsThreshold || 100000),
     useOneChannel: t.useOneChannel !== false,
     topLimit: Math.max(3, Math.min(25, Number(t.topLimit || 10))),
-    leaderboardActiveChannelId: t.leaderboardActiveChannelId || t.papanAktifChannelId || "",
-    leaderboardActiveTopLimit: Math.max(3, Math.min(25, Number(t.leaderboardActiveTopLimit || t.topLimit || 10))),
-    leaderboardActiveTitleTemplate: normalizeLeaderboardActiveTitle(t.leaderboardActiveTitleTemplate || config.leaderboardAktif?.title || config.papanAktif?.title),
+    leaderboardActiveChannelId: t.leaderboardActiveChannelId || t.papanAktifChannelId || config.leaderboard?.channelId || "",
+    leaderboardActiveMessageId: t.leaderboardActiveMessageId || config.leaderboard?.messageId || config.leaderboardAktif?.messageId || config.papanAktif?.messageId || "",
+    leaderboardActiveTopLimit: Math.max(1, Math.min(10, Number(config.leaderboard?.maxEntries || t.leaderboardActiveTopLimit || t.topLimit || 10))),
+    leaderboardActiveTitleTemplate: normalizeLeaderboardActiveTitle(t.leaderboardActiveTitleTemplate || config.leaderboard?.title || config.leaderboardAktif?.title || config.papanAktif?.title),
     leaderboardActiveSubtitle: normalizeLeaderboardActiveSubtitle(t.leaderboardActiveSubtitle || config.leaderboardAktif?.description || config.papanAktif?.description),
-    leaderboardActiveFooter: t.leaderboardActiveFooter || "DESA TULUS • Leaderboard Aktif Warga",
+    leaderboardActiveFooter: t.leaderboardActiveFooter || config.leaderboard?.footer || "Pak RW • Desa Tulus Leaderboard",
     leaderboardActiveImageUrl: t.leaderboardActiveImageUrl || config.embeds?.dashboard?.media?.topActiveBoardImageUrl || "",
+    leaderboardUseImage: config.leaderboard?.useImage !== false,
     chatPointPerMessage: Number(t.chatPointPerMessage || 5),
     voicePointPerMinute: Number(t.voicePointPerMinute || 2),
     bonusEnabled: t.bonusEnabled !== false,
@@ -15563,7 +15645,7 @@ function getTopActiveArrowEmoji() {
 }
 
 function getTopRankLabel(index) {
-  return ["🥇", "🥈", "🥉"][index] || `${index + 1}`;
+  return ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"][index] || `${index + 1}.`;
 }
 
 function formatTopActiveRows(rows, kind = "active") {
@@ -15630,6 +15712,62 @@ function buildTopActiveBoardEmbed(guild, reason = "update") {
   return embed;
 }
 
+function formatLeaderboardPoint(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number)) return "0";
+  return new Intl.NumberFormat("id-ID", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  }).format(number);
+}
+
+function getLeaderboardPointValue(item) {
+  const raw = item?.points ?? item?.point ?? item?.totalPoints ?? item?.lifetimeTotal ?? item?.score ?? item?.xp ?? item?.exp ?? 0;
+  const number = Number(raw);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function getLeaderboardUserText(item) {
+  const userId = item?.userId || item?.id || item?.memberId || item?.discordId;
+  if (userId) return `<@${userId}>`;
+  return item?.displayName || item?.username || item?.name || "Warga Desa";
+}
+
+function formatLeaderboardQuote(topUsers = []) {
+  const rankEmojis = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
+  const arrow = normalizePakRwEmojiCodes(config.leaderboard?.arrowEmoji || getTopActiveConfig().rowArrowEmoji || ARROW_EMOJI) || FALLBACK_ARROW;
+
+  if (!Array.isArray(topUsers) || topUsers.length === 0) {
+    return [
+      ">>> 🏆 **Peringkat Warga:**",
+      "Belum ada warga yang masuk peringkat.",
+      "Mulai aktif ngobrol untuk masuk leaderboard."
+    ].join("\n");
+  }
+
+  const sorted = [...topUsers]
+    .filter(Boolean)
+    .sort((a, b) => getLeaderboardPointValue(b) - getLeaderboardPointValue(a))
+    .slice(0, 10);
+
+  if (!sorted.length) {
+    return [
+      ">>> 🏆 **Peringkat Warga:**",
+      "Belum ada warga yang masuk peringkat.",
+      "Mulai aktif ngobrol untuk masuk leaderboard."
+    ].join("\n");
+  }
+
+  const lines = sorted.map((item, index) => {
+    const rank = rankEmojis[index] || `${index + 1}.`;
+    const userText = getLeaderboardUserText(item);
+    const points = formatLeaderboardPoint(getLeaderboardPointValue(item));
+    return `${rank} ${userText} ${arrow} **${points} poin**`;
+  });
+
+  return `>>> 🏆 **Peringkat Warga:**\n${lines.join("\n")}`;
+}
+
 function getLeaderboardActiveRows(guildId, limit = 10, ownerId = "") {
   const data = readLevelData();
   const rows = Object.values(data.users || {})
@@ -15637,56 +15775,145 @@ function getLeaderboardActiveRows(guildId, limit = 10, ownerId = "") {
     .filter((u) => !shouldExcludeOwnerFromLeaderboard(ownerId, u.userId))
     .map((u) => ({
       ...u,
+      points: getLifetimeLevelPoints(u),
       lifetimeTotal: getLifetimeLevelPoints(u),
+      totalPoints: getLifetimeLevelPoints(u),
       lifetimeChat: Number(u.lifetimeChat || u.chat || 0),
       lifetimeVoice: Number(u.lifetimeVoice || u.voice || 0)
     }))
     .filter((u) => Number(u.lifetimeTotal || 0) > 0)
     .sort((a, b) => Number(b.lifetimeTotal || 0) - Number(a.lifetimeTotal || 0));
-  return rows.slice(0, Math.max(3, Math.min(25, Number(limit || 10))));
+  return rows.slice(0, Math.max(1, Math.min(10, Number(limit || 10))));
 }
 
-function formatLeaderboardActiveRows(rows = []) {
-  if (!rows.length) return "Belum ada data Papan Aktif.";
-  const arrow = getTopActiveArrowEmoji();
-  return rows.map((u, i) => {
-    const rank = getTopRankLabel(i);
-    const info = getLevelInfoFromPoints(u.lifetimeTotal || 0);
-    return `${rank} <@${u.userId}> ${arrow} **${formatNumber(u.lifetimeTotal)} poin**\n🏷️ ${info.current.name} • Lifetime Lv. ${info.current.level}`;
-  }).join("\n");
-}
-
-function buildLeaderboardActiveEmbed(guild, reason = "update") {
+function buildLeaderboardActiveEmbed(guild, topUsers = null, reason = "update", imageOk = false) {
   const cfg = getTopActiveConfig();
-  const rows = getLeaderboardActiveRows(guild.id, cfg.leaderboardActiveTopLimit, guild.ownerId);
+  const rows = Array.isArray(topUsers) ? topUsers : getLeaderboardActiveRows(guild.id, cfg.leaderboardActiveTopLimit, guild.ownerId);
   const serverName = config.serverName || guild.name || "DESA TULUS";
   const template = config.embeds?.papanAktif || {};
-  const updateText = "Update otomatis setiap hari pukul 00.00 WIB";
-  const rowsText = `>>> ${formatLeaderboardActiveRows(rows)}`;
+  const title = applyTemplate(normalizeLeaderboardActiveTitle(config.leaderboard?.title || cfg.leaderboardActiveTitleTemplate || template.title), { server: serverName });
+  const updateText = "Update otomatis setiap hari pukul **00.00 WIB**";
+  const leaderboardText = formatLeaderboardQuote(rows);
+  const description = `${updateText}\n\n${leaderboardText}`.slice(0, 4000);
+  const colorHex = String(config.leaderboard?.color || "#FACC15").trim();
+
   const embed = new EmbedBuilder()
-    .setColor(defaultEmbedColorInt())
-    .setTitle(applyTemplate(normalizeLeaderboardActiveTitle(cfg.leaderboardActiveTitleTemplate || template.title), { server: serverName }))
-    .setDescription([updateText, "", "👑 **Peringkat Warga:**", "", rowsText].join("\n"))
-    .setFooter({ text: makeOTFooter(cfg.leaderboardActiveFooter || template.footer || `${serverName} • Leaderboard Aktif Warga`), iconURL: template.footerIcon || OT_FOOTER_ICON_URL })
+    .setColor(/^#[0-9A-Fa-f]{6}$/.test(colorHex) ? colorHex : "#FACC15")
+    .setTitle(title || "🏆 TOP AKTIF WARGA SEPANJANG WAKTU")
+    .setDescription(description || [
+      "Update otomatis setiap hari pukul **00.00 WIB**",
+      "",
+      ">>> 🏆 **Peringkat Warga:**",
+      "Belum ada warga yang masuk peringkat.",
+      "Mulai aktif ngobrol untuk masuk leaderboard."
+    ].join("\n"))
+    .setFooter({ text: makeOTFooter(config.leaderboard?.footer || cfg.leaderboardActiveFooter || template.footer || "Pak RW • Desa Tulus Leaderboard"), iconURL: template.footerIcon || OT_FOOTER_ICON_URL })
     .setTimestamp();
 
-  const image = cfg.leaderboardActiveImageUrl || template.image || template.imageUrl || "";
-  if (image) embed.setImage(image);
+  const guildIcon = guild?.iconURL?.({ extension: "png", size: 128 });
+  if (guildIcon) embed.setThumbnail(guildIcon);
+  if (imageOk) embed.setImage("attachment://leaderboard.png");
   return embed;
 }
 
-async function getLeaderboardActiveChannel(guild) {
+async function buildLeaderboardActivePayload(guild, reason = "update") {
   const cfg = getTopActiveConfig();
-  const channelId = cfg.leaderboardActiveChannelId;
-  if (!cfg.enabled || !isFilledId(channelId)) return null;
-  return getTextChannel(guild, channelId);
+  const rows = getLeaderboardActiveRows(guild.id, cfg.leaderboardActiveTopLimit, guild.ownerId);
+  let files = [];
+  let imageOk = false;
+
+  if (cfg.leaderboardUseImage !== false) {
+    try {
+      const imageBuffer = await generateLeaderboardImage(guild, rows);
+      if (imageBuffer && Buffer.isBuffer(imageBuffer) && imageBuffer.length > 1000) {
+        files = [new AttachmentBuilder(imageBuffer, { name: "leaderboard.png" })];
+        imageOk = true;
+      }
+    } catch (error) {
+      console.error("[LEADERBOARD_IMAGE_SEND_ERROR]", error?.message || error);
+      imageOk = false;
+      files = [];
+    }
+  }
+
+  return {
+    embeds: [buildLeaderboardActiveEmbed(guild, rows, reason, imageOk)],
+    files
+  };
 }
 
-async function sendLeaderboardActiveBoard(guild, reason = "update") {
+function persistLeaderboardActiveMessageId(messageId = "") {
+  const id = String(messageId || "").trim();
+  if (!id) return;
+  try {
+    config.leaderboard = config.leaderboard && typeof config.leaderboard === "object" ? config.leaderboard : {};
+    config.papanAktif = config.papanAktif && typeof config.papanAktif === "object" ? config.papanAktif : {};
+    config.leaderboardAktif = config.leaderboardAktif && typeof config.leaderboardAktif === "object" ? config.leaderboardAktif : {};
+    config.topActive = config.topActive && typeof config.topActive === "object" ? config.topActive : {};
+    config.leaderboard.messageId = id;
+    config.papanAktif.messageId = id;
+    config.leaderboardAktif.messageId = id;
+    config.topActive.leaderboardActiveMessageId = id;
+    writeConfigFile(JSON.parse(JSON.stringify(config)));
+  } catch (error) {
+    console.error("[LEADERBOARD_MESSAGE_ID_SAVE_ERROR]", error?.message || error);
+  }
+}
+
+async function sendLeaderboardActiveBoard(guild, reason = "update", options = {}) {
   const channel = await getLeaderboardActiveChannel(guild);
   if (!channel) return false;
-  await safeSend(channel, { embeds: [buildLeaderboardActiveEmbed(guild, reason)] });
-  return true;
+
+  const permissionMessage = "Pak RW belum punya izin yang cukup untuk mengirim leaderboard. Pastikan izin View Channel, Send Messages, Embed Links, Attach Files, Use External Emojis, dan Read Message History aktif.";
+  const me = guild.members.me;
+  if (me && channel.permissionsFor) {
+    const perms = channel.permissionsFor(me);
+    const needed = [
+      PermissionsBitField.Flags.ViewChannel,
+      PermissionsBitField.Flags.SendMessages,
+      PermissionsBitField.Flags.EmbedLinks,
+      PermissionsBitField.Flags.AttachFiles,
+      PermissionsBitField.Flags.UseExternalEmojis,
+      PermissionsBitField.Flags.ReadMessageHistory
+    ];
+    if (!perms || !needed.every((flag) => perms.has(flag))) {
+      await safeSend(channel, permissionMessage).catch(() => null);
+      return false;
+    }
+  }
+
+  const payload = await buildLeaderboardActivePayload(guild, reason);
+  const cfg = getTopActiveConfig();
+  const messageId = String(options.messageId || cfg.leaderboardActiveMessageId || config.leaderboard?.messageId || config.papanAktif?.messageId || config.leaderboardAktif?.messageId || "").trim();
+
+  if (messageId) {
+    const oldMessage = await channel.messages.fetch(messageId).catch(() => null);
+    if (oldMessage) {
+      try {
+        await oldMessage.edit(payload);
+        persistLeaderboardActiveMessageId(oldMessage.id);
+        return true;
+      } catch (error) {
+        console.error("[AUTO_LEADERBOARD_EDIT_ERROR]", error?.message || error);
+        try {
+          await oldMessage.edit({ embeds: payload.embeds });
+          persistLeaderboardActiveMessageId(oldMessage.id);
+          return true;
+        } catch (fallbackError) {
+          console.error("[AUTO_LEADERBOARD_EDIT_TEXT_ERROR]", fallbackError?.message || fallbackError);
+        }
+      }
+    }
+  }
+
+  const sent = await safeSend(channel, payload);
+  if (sent?.id) persistLeaderboardActiveMessageId(sent.id);
+  return Boolean(sent);
+}
+
+async function previewLeaderboardActiveBoard(target, guild, reason = "preview") {
+  const payload = await buildLeaderboardActivePayload(guild, reason);
+  return safeReply(target, payload);
 }
 
 async function getTopActiveChannel(guild) {
@@ -19097,7 +19324,7 @@ async function handleRwLevelCommand(message) {
   }
 
   if (["rwpapanaktif", "rwleaderboardaktif"].includes(cmd)) {
-    await safeReply(message, { embeds: [buildLeaderboardActiveEmbed(message.guild, "prefix command")] });
+    await previewLeaderboardActiveBoard(message, message.guild, "prefix command");
     return true;
   }
 
@@ -20604,10 +20831,26 @@ async function handleOwnerPrefixCommand(message) {
     return true;
   }
 
+  if (cmd === "previewtop" || cmd === "previewpapanaktif" || cmd === "previewleaderboardaktif") {
+    const channel = resolveTextChannelArg(message, args[0]) || message.channel;
+    const payload = await buildLeaderboardActivePayload(message.guild, `preview oleh ${message.author.username}`);
+    await safeSend(channel, payload);
+    await safeReply(message, `✅ Preview leaderboard format baru dikirim ke ${channel}.`);
+    return true;
+  }
+
   if (cmd === "postpapanaktif" || cmd === "postleaderboardaktif") {
-    const channel = resolveTextChannelArg(message, args[0]) || await getLeaderboardActiveChannel(message.guild) || message.channel;
-    await channel.send({ embeds: [buildLeaderboardActiveEmbed(message.guild, "owner command")] });
-    await safeReply(message, `✅ Papan Aktif lifetime dikirim ke ${channel}.`);
+    const targetChannel = resolveTextChannelArg(message, args[0]);
+    if (targetChannel) {
+      const payload = await buildLeaderboardActivePayload(message.guild, `owner command oleh ${message.author.username}`);
+      const sent = await safeSend(targetChannel, payload);
+      if (sent?.id && targetChannel.id === (getTopActiveConfig().leaderboardActiveChannelId || config.leaderboard?.channelId)) persistLeaderboardActiveMessageId(sent.id);
+      await safeReply(message, sent ? `✅ Papan Aktif lifetime dikirim ke ${targetChannel}.` : "❌ Pak RW gagal mengirim leaderboard. Cek permission channel.");
+      return true;
+    }
+
+    const ok = await sendLeaderboardActiveBoard(message.guild, `owner command oleh ${message.author.username}`);
+    await safeReply(message, ok ? "✅ Papan Aktif lifetime sudah dikirim/diupdate ke channel Leaderboard Aktif." : "❌ Channel Leaderboard Aktif belum benar atau permission kurang. Cek dashboard `/top-active`.");
     return true;
   }
 
@@ -21659,7 +21902,9 @@ async function handlePakRwVisibleSlashCommand(interaction) {
   }
 
   if (cmd === "papanaktif") {
-    await interaction.reply({ embeds: [buildLeaderboardActiveEmbed(interaction.guild, "slash command")] });
+    await interaction.deferReply();
+    const payload = await buildLeaderboardActivePayload(interaction.guild, "slash command");
+    await interaction.editReply(payload);
     return true;
   }
 

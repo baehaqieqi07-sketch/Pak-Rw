@@ -404,3 +404,10 @@ Role level sekarang dibuat otomatis hanya ketika ada warga yang mendapat tier te
 ## v10.10.106 — Welcome Exact + Role Level Embed Jelas
 
 Welcome default sekarang memakai teks Desa Tulus terbaru dan role Warga ID `1504495052695797857`. Auto level role tetap on-demand/no color dan field Role Level pada embed naik level memakai hasil sync role otomatis agar tidak tampil `@unknown-role` ketika role berhasil dibuat.
+
+## v10.10.108 — Leaderboard Premium PNG
+
+Papan Aktif lifetime sekarang memakai embed quote rapi + image PNG otomatis bertema Desa Tulus.
+Ranking maksimal 10 warga, memakai emoji panah `<a:Animated_Arrow_Bluelite:1512751559140839576>` di embed, dan panah static biru di canvas.
+Jika image gagal dirender, Pak RW tetap mengirim embed teks biasa.
+Auto post akan mengedit pesan lama jika `leaderboard.messageId` tersedia supaya channel tidak spam.

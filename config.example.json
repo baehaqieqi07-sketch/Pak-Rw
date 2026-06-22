@@ -723,12 +723,13 @@
     "leaderboardActiveTopLimit": 10,
     "leaderboardActiveTitleTemplate": "🏆 TOP AKTIF WARGA SEPANJANG WAKTU",
     "leaderboardActiveSubtitle": "Update otomatis setiap hari pukul 00.00 WIB",
-    "leaderboardActiveFooter": "DESA TULUS • Leaderboard Aktif Warga",
+    "leaderboardActiveFooter": "Pak RW • Desa Tulus Leaderboard",
     "leaderboardActiveImageUrl": "",
     "dashboardEditable": true,
     "imageUploadNote": "Jika ingin tampilan seperti contoh TOP 1/2/3, isi Image Board URL dari dashboard. Jika kosong, Pak RW tetap mengirim embed teks yang rapi.",
     "leaderboardActiveSetupNote": "Buat channel text khusus bernama 🏆│leaderboard-aktif, copy Channel ID, lalu isi leaderboardActiveChannelId di dashboard/config. Jangan digabung dengan channel Top Aktif bulanan.",
-    "dashboardHelp": "Top Aktif Bulanan dipisah dari Papan Aktif Lifetime. Judul bulan otomatis mengikuti {month}."
+    "dashboardHelp": "Top Aktif Bulanan dipisah dari Papan Aktif Lifetime. Judul bulan otomatis mengikuti {month}.",
+    "leaderboardActiveMessageId": ""
   },
   "texts": {
     "motmContentTemplate": "🏆 Selamat {user}! Kamu menjadi {role} TOP CHAT BULAN {month} di DESA TULUS.",
@@ -1253,7 +1254,7 @@
       "Discord Manager"
     ]
   },
-  "version": "10.10.107",
+  "version": "10.10.108",
   "bigBot": {
     "releaseName": "Pak RW KTP Warga dan AFK Voice Stabil"
   },
@@ -1417,7 +1418,8 @@
     "autoPostHourWIB": 0,
     "imageUrl": "",
     "doNotResetLifetime": true,
-    "separateFromMonthlyTopActive": true
+    "separateFromMonthlyTopActive": true,
+    "messageId": ""
   },
   "leaderboardAktif": {
     "enabled": true,
@@ -1429,7 +1431,8 @@
     "autoPostHourWIB": 0,
     "imageUrl": "",
     "doNotResetLifetime": true,
-    "separateFromMonthlyTopActive": true
+    "separateFromMonthlyTopActive": true,
+    "messageId": ""
   },
   "mentionPlaceholders": {
     "note": "Pak RW memakai picker live API agar channel dan role bisa dipilih langsung dari nama Discord. @everyone/@here tetap diblokir."
@@ -1580,5 +1583,20 @@
     ]
   },
   "memberTulusRoleId": "1504495052695797857",
-  "wargaRoleId": "1504495052695797857"
+  "wargaRoleId": "1504495052695797857",
+  "leaderboard": {
+    "enabled": true,
+    "useQuoteFormat": true,
+    "useImage": true,
+    "arrowEmoji": "<a:Animated_Arrow_Bluelite:1512751559140839576>",
+    "fallbackArrow": "➜",
+    "maxEntries": 10,
+    "updateTime": "00:00",
+    "timezone": "Asia/Jakarta",
+    "color": "#FACC15",
+    "title": "🏆 TOP AKTIF WARGA SEPANJANG WAKTU",
+    "footer": "Pak RW • Desa Tulus Leaderboard",
+    "channelId": "1516167288066281672",
+    "messageId": ""
+  }
 }
