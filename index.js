@@ -524,7 +524,7 @@ function escapeHtml(input = "") {
 // Discord tidak merender custom animated emoji jika ditulis sebagai teks di embed footer.
 // Solusi aman: footer text tetap rapi, emoji DESA TULUS dipasang sebagai footer icon dari CDN emoji Discord.
 const OT_FOOTER_EMOJI = "<a:Desa_Tulus2:1518502350363430932>";
-const OT_FOOTER_EMOJI_ID = "1516424353934348299";
+const OT_FOOTER_EMOJI_ID = "1518502350363430932";
 const OT_FOOTER_ICON_URL = `https://cdn.discordapp.com/emojis/${OT_FOOTER_EMOJI_ID}.gif?size=44&quality=lossless`;
 const OT_FOOTER_PREFIX = "DESA TULUS";
 

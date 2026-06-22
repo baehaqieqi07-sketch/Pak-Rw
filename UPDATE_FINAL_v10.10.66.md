@@ -74,7 +74,7 @@ Update ini menambahkan lifecycle Boost Poin yang dapat dikendalikan melalui dash
 
 ### Footer
 
-Semua template aktif menggunakan icon URL custom emoji `1516424353934348299` dan teks `DESA TULUS • ...`. Custom emoji tidak ditulis mentah di footer karena Discord footer tidak merender syntax emoji; emoji digunakan sebagai `iconURL` agar benar-benar tampil.
+Semua template aktif menggunakan icon URL custom emoji `1518502350363430932` dan teks `DESA TULUS • ...`. Custom emoji tidak ditulis mentah di footer karena Discord footer tidak merender syntax emoji; emoji digunakan sebagai `iconURL` agar benar-benar tampil.
 
 ## File berubah
 

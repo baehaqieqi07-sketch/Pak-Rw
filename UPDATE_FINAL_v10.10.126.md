@@ -3,7 +3,7 @@
 Hotfix aman.
 
 ## Perubahan
-- Semua emoji/icon footer Desa Tulus versi lama dengan ID `1516424353934348299` diganti menjadi:
+- Semua emoji/icon footer Desa Tulus versi lama dengan ID `1518502350363430932` diganti menjadi:
   `<a:Desa_Tulus2:1518502350363430932>`
 
 ## Tidak diubah

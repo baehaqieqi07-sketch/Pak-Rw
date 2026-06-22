@@ -230,7 +230,7 @@ export function EmbedBuilder({
       color: "#7DBD77",
       authorName: "DESA TULUS • Pak RW",
       footerText: "DESA TULUS • Pak RW",
-      footerIcon: "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless",
+      footerIcon: "https://cdn.discordapp.com/emojis/1518502350363430932.gif?size=64&quality=lossless",
       fields: [],
       buttons: []
     });

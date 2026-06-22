@@ -807,7 +807,7 @@ function makeKtpAttachmentName(record = {}) {
 function footerIconUrl(config = {}) {
   return config.embeds?.welcome?.footerIcon ||
     config.embeds?.levelUp?.footerIcon ||
-    "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless";
+    "https://cdn.discordapp.com/emojis/1518502350363430932.gif?size=64&quality=lossless";
 }
 
 function buildKtpButton(config = {}) {
