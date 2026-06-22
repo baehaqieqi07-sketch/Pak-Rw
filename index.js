@@ -43,7 +43,7 @@ const {
   getLevelRoleBaseName
 } = require("./level/levelRoleTiers");
 
-const { generateLeaderboardImage } = require("./utils/leaderboardCanvas");
+const { generateLeaderboardImage, normalizeLeaderboardUsers } = require("./utils/leaderboardCanvas");
 
 const ARROW_EMOJI = "<a:Animated_Arrow_Bluelite:1512751559140839576>";
 const FALLBACK_ARROW = "➜";
@@ -434,6 +434,14 @@ function applySafeEmbedDisplayMigrations(data = {}) {
   next.leaderboard.updateTime = String(next.leaderboard.updateTime || "00:00").trim() || "00:00";
   next.leaderboard.timezone = String(next.leaderboard.timezone || "Asia/Jakarta").trim() || "Asia/Jakarta";
   next.leaderboard.color = String(next.leaderboard.color || "#FACC15").trim() || "#FACC15";
+  next.leaderboard.backgroundMode = ["default", "url", "upload"].includes(String(next.leaderboard.backgroundMode || "")) ? String(next.leaderboard.backgroundMode) : "default";
+  next.leaderboard.backgroundUrl = String(next.leaderboard.backgroundUrl || next.leaderboardAktif?.imageUrl || "").trim();
+  next.leaderboard.backgroundPath = String(next.leaderboard.backgroundPath || "assets/leaderboard/background.png").trim() || "assets/leaderboard/background.png";
+  next.leaderboard.backgroundOverlay = Math.max(0, Math.min(0.9, Number(next.leaderboard.backgroundOverlay ?? 0.55)));
+  next.leaderboard.backgroundBlur = Math.max(0, Math.min(18, Number(next.leaderboard.backgroundBlur ?? 0)));
+  next.leaderboard.backgroundDarken = Math.max(0, Math.min(0.85, Number(next.leaderboard.backgroundDarken ?? 0.45)));
+  next.leaderboard.backgroundFit = String(next.leaderboard.backgroundFit || "cover").trim() || "cover";
+  next.leaderboard.imageTheme = String(next.leaderboard.imageTheme || "desa_tulus_dark").trim() || "desa_tulus_dark";
   next.leaderboard.title = normalizeLeaderboardActiveTitle(next.leaderboard.title || next.topActive.leaderboardActiveTitleTemplate || next.papanAktif?.title || next.leaderboardAktif?.title);
   next.leaderboard.footer = String(next.leaderboard.footer || "Pak RW • Desa Tulus Leaderboard").trim() || "Pak RW • Desa Tulus Leaderboard";
   next.leaderboard.channelId = String(next.leaderboard.channelId || next.papanAktif?.channelId || next.leaderboardAktif?.channelId || next.topActive.leaderboardActiveChannelId || "").trim();
@@ -6092,7 +6100,7 @@ function maxtonEmbedEditor(key, label, embed = {}, rows = 7) {
 
 function maxtonFormatLibraryHtml() {
   const placeholders = ["{user}", "{username}", "{server}", "{memberCount}", "{role}", "{month}", "{level}", "{rank}", "{total}", "{chat}", "{voice}", "{expiredText}"];
-  const welcomeFormat = "Halo {user}, wilujeung sumping di **{server} 🤍**\n\nSenang kamu sudah bergabung. Jangan lupa baca rules dan kenalan di chat warga ya.\n\nKamu adalah warga ke-**{memberCount}**.";
+  const welcomeFormat = DESA_TULUS_WELCOME_MESSAGE;
   const motmFormat = "🏆 Selamat {user} Kamu menjadi {role} **TOP AKTIF BULAN INI**!\n\nTerima kasih sudah aktif di {server}.\nTotal poin: **{total}**";
   const levelFormat = "{user} berhasil naik level!\n\n{badge} Sekarang menjadi **{rank}**\n🏷️ Level: **{level}**\n⭐ Total Poin: **{total}**";
   return `<section class="panel mega-section" id="format-center">
@@ -6146,6 +6154,7 @@ function renderMaxtonMegaControl(req, saved = false, error = "") {
   cfg.welcome = cfg.welcome || {};
   cfg.ai = cfg.ai || {};
   cfg.suggestion = cfg.suggestion || {};
+  cfg.loket = cfg.loket || {};
   cfg.panels = cfg.panels || {};
   cfg.topActive = cfg.topActive || {};
   cfg.embeds.dashboard = cfg.embeds.dashboard || {};
@@ -6253,7 +6262,10 @@ function renderMaxtonMegaControl(req, saved = false, error = "") {
           ${maxtonChannelSelect(guild, "topActiveChannelId", "Channel Top Aktif Bulanan", topCfg.channelId || cfg.levelChannelId, "text")}
           ${maxtonChannelSelect(guild, "leaderboardActiveChannelId", "Channel Leaderboard Aktif / Papan Aktif", topCfg.leaderboardActiveChannelId || "", "text")}
           ${maxtonChannelSelect(guild, "boostChannelId", "Channel Boost / Juragan", cfg.juragan.boostChannelId, "text")}
-          ${maxtonChannelSelect(guild, "ticketChannelId", "Channel Ticket", cfg.ticketChannelId, "text")}
+          ${maxtonChannelSelect(guild, "ticketChannelId", "Channel Ticket Lama", cfg.ticketChannelId, "text")}
+          ${maxtonChannelSelect(guild, "loketPanelChannelId", "Channel Panel Loket", cfg.loket?.panelChannelId || "", "text")}
+          ${maxtonChannelSelect(guild, "loketCategoryId", "Kategori Loket", cfg.loket?.categoryId || "", "category")}
+          ${maxtonChannelSelect(guild, "loketLogChannelId", "Channel Log Loket", cfg.loket?.logChannelId || "", "text")}
           ${maxtonChannelSelect(guild, "logChannelId", "Channel Log", cfg.logChannelId, "text")}
           ${maxtonChannelSelect(guild, "rulesChannelId", "Channel Rules", cfg.rulesChannelId, "text")}
           ${maxtonChannelSelect(guild, "infoChannelId", "Channel Info", cfg.infoChannelId, "text")}
@@ -6269,8 +6281,11 @@ function renderMaxtonMegaControl(req, saved = false, error = "") {
           ${maxtonRoleSelect(guild, "donaturRoleId", "Role Donatur", cfg.donaturRoleId)}
           ${maxtonRoleSelect(guild, "level100RoleId", "Role Level 100", cfg.level100RoleId)}
           ${maxtonRoleSelect(guild, "memberOfTheMonthRoleId", "Role Member Of The Month", topCfg.memberOfTheMonthRoleId)}
-          ${maxtonRoleSelect(guild, "welcomeMemberRoleId", "Role Welcome / Member Tulus", cfg.welcome?.memberRoleId || "")}
+          ${maxtonRoleSelect(guild, "welcomeMemberRoleId", "Role Welcome / Warga", cfg.welcome?.memberRoleId || cfg.memberTulusRoleId || cfg.wargaRoleId || "")}
+          ${maxtonRoleSelect(guild, "loketStaffRoleId", "Role Pengurus Loket", cfg.loket?.staffRoleId || "")}
           ${configInput("level100RoleDurationDays", "Durasi Role Level 100 (hari)", cfg.level100RoleDurationDays ?? 30, "number")}
+        ${checkboxInput("levelAutoLevelRole", "Auto Level Role On-Demand Aktif", cfg.levelSystem?.autoLevelRole !== false)}
+        ${configInput("levelMaxLevel", "Level Maksimal", cfg.levelSystem?.maxLevel || 1000, "number")}
           ${configInput("levelPointsPerLevel", "Poin per Level", cfg.level?.pointsPerLevel ?? 500, "number")}
           ${configInput("levelMaxLevel", "Level Maksimal", cfg.level?.maxLevel ?? 100, "number")}
           ${configInput("donaturDefaultDays", "Default Donatur Days", cfg.donaturDefaultDays ?? 30, "number")}
@@ -6287,6 +6302,9 @@ function renderMaxtonMegaControl(req, saved = false, error = "") {
           <div class="mega-check">${checkboxInput("welcomeSendToChatWarga", "Welcome ke Chat Warga", cfg.welcome.sendToChatWarga !== false)}</div>
           <div class="mega-check">${checkboxInput("juraganEnabled", "Juragan / Boost Aktif", cfg.juragan.enabled !== false)}</div>
           <div class="mega-check">${checkboxInput("suggestionEnabled", "Suggestion Aktif", cfg.suggestion.enabled !== false)}</div>
+          <div class="mega-check">${checkboxInput("suggestionButtonOnResult", "Tombol Saran Ikut di Setiap Saran", cfg.suggestion.buttonOnResult !== false)}</div>
+          <div class="mega-check">${checkboxInput("loketEnabled", "Loket Bantuan Aktif", cfg.loket?.enabled !== false)}</div>
+          <div class="mega-check">${checkboxInput("levelAutoLevelRole", "Auto Level Role On-Demand", cfg.levelSystem?.autoLevelRole !== false)}</div>
           <div class="mega-check">${checkboxInput("sendSuggestionPanelOnReady", "Kirim Panel Saran saat Ready", cfg.panels.sendSuggestionPanelOnReady === true)}</div>
           <div class="mega-check">${checkboxInput("topActiveEnabled", "Top Aktif Aktif", topCfg.enabled !== false)}</div>
           <div class="mega-check">${checkboxInput("topActiveUseOneChannel", "Mode 1 Channel", topCfg.useOneChannel !== false)}</div>
@@ -6353,8 +6371,8 @@ function renderMaxtonMegaControl(req, saved = false, error = "") {
           ${configInput("topActiveBoardAuthor", "Author Board", topCfg.boardAuthor || "DESA TULUS • Papan peringkat warga paling aktif")}
           ${configInput("topActiveBoardTitleTemplate", "Template Judul Board", topCfg.boardTitleTemplate || "🏆 TOP AKTIF WARGA BULAN {month}")}
           ${configInput("topActiveTopActiveFieldTitle", "Judul Field Top Aktif", topCfg.topActiveFieldTitle || "🏆 Top Aktif")}
-          ${configInput("topActiveTopVoiceFieldTitle", "Judul Field Top Voice", topCfg.topVoiceFieldTitle || "Top Voice:")}
-          ${configInput("topActiveTopChatFieldTitle", "Judul Field Top Chat", topCfg.topChatFieldTitle || "Top Chat:")}
+          ${configInput("topActiveTopVoiceFieldTitle", "Judul Field Top Voice", topCfg.topVoiceFieldTitle || "🎙️ Top Voice:")}
+          ${configInput("topActiveTopChatFieldTitle", "Judul Field Top Chat", topCfg.topChatFieldTitle || "💬 Top Chat:")}
           ${configInput("topActiveRowArrowEmoji", "Emoji/Panah Baris Ranking", topCfg.rowArrowEmoji || "<a:Animated_Arrow_Bluelite:1512751559140839576>")}
           ${configInput("topActiveDailyPostHourWIB", "Jam Auto Post Harian WIB", topCfg.dailyPostHourWIB ?? 0, "number")}
         </div>
@@ -6387,10 +6405,17 @@ function renderMaxtonMegaControl(req, saved = false, error = "") {
         <h3>✍️ Semua Text Center</h3>
         <p class="section-note">Semua text penting dibuat bisa diedit dari dashboard. Ada field simpel, daftar text otomatis dari config, tambah text baru, dan JSON semua text. Placeholder aman: {user}, {username}, {server}, {memberRole}, {rulesChannel}, {chatWargaChannel}, {ticketChannel}, {role}, {month}, {total}, {chat}, {voice}, {level}, {rank}, {memberCount}, {expiredText}.</p>
         <div class="formgrid">
-          ${configInput("welcomeTitle", "Judul Welcome", cfg.welcome.title || "🏡 Wilujeung Sumping Warga Anyar! {displayName}")}
-          ${configInput("welcomeContent", "Teks di Atas Embed Welcome", cfg.welcome.content || "🤍 Sambut warga anyar barudak {user} {memberRole}")}
+          ${configInput("welcomeTitle", "Judul Welcome", cfg.welcome.title || DESA_TULUS_WELCOME_TITLE)}
+          ${configInput("welcomeContent", "Teks di Atas Embed Welcome", cfg.welcome.content || "")}
           ${configInput("welcomeImageUrl", "Image Welcome URL (opsional)", cfg.welcome.imageUrl || "")}
-          ${configInput("suggestionTitle", "Judul Panel Saran", cfg.suggestion.title || "💡 DESA TULUS • Kritik & Saran")}
+          ${configInput("suggestionTitle", "Judul Panel Saran", cfg.suggestion.title || "📬 Kotak Saran DESA TULUS")}
+          ${configInput("suggestionButtonText", "Teks Tombol Saran", cfg.suggestion.buttonText || "📬 Kirim Saran")}
+          ${configInput("loketPanelTitle", "Judul Panel Loket", cfg.loket?.panelTitle || "🏛️ LOKET DESA TULUS")}
+          ${configInput("loketSelectPlaceholder", "Placeholder Dropdown Loket", cfg.loket?.selectPlaceholder || "Pilih jenis loket yang kamu butuhkan")}
+          ${configInput("loketImageUrl", "Image/Banner Loket URL", cfg.loket?.imageUrl || "")}
+          ${configInput("loketThumbnailUrl", "Thumbnail Loket URL", cfg.loket?.thumbnailUrl || "")}
+          ${configInput("loketCategoryName", "Nama Category Loket", cfg.loket?.categoryName || "🏛️｜LOKET DESA TULUS")}
+          ${configInput("loketChannelPrefix", "Prefix Channel Loket", cfg.loket?.channelPrefix || "loket")}
           ${configInput("dashboardBrandTitle", "Dashboard Brand Title", dash.brandTitle || "Pak RW")}
           ${configInput("dashboardBrandSubtitle", "Dashboard Brand Subtitle", dash.brandSubtitle || "Pak RW Control")}
           ${configInput("dashboardHomeTitle", "Dashboard Home Title", dash.homeTitle || "Pak RW Control")}
@@ -6400,7 +6425,9 @@ function renderMaxtonMegaControl(req, saved = false, error = "") {
           ${configInput("newTextKey", "Tambah Text Baru (key, opsional)", "")}
         </div>
         ${textareaInput("welcomeMessage", "Isi Welcome Message", cfg.welcome.message || "", 8)}
-        ${textareaInput("suggestionDescription", "Deskripsi Panel Saran", cfg.suggestion.description || "", 5)}
+        ${textareaInput("suggestionDescription", "Deskripsi Panel Saran", cfg.suggestion.description || "Klik tombol di bawah untuk mengirim kritik atau saran. Setelah terkirim, warga bisa memberi tanggapan lewat reaction dan thread.", 5)}
+        ${textareaInput("loketPanelDescription", "Deskripsi Panel Loket", cfg.loket?.panelDescription || "Pilih jenis loket dari menu di bawah. Setelah memilih, isi keperluan kamu dan Pak RW akan membuat ruang bantuan privat khusus untuk kamu.", 5)}
+        ${textareaInput("loketOptionsJson", "Pilihan Dropdown Loket JSON", JSON.stringify(cfg.loket?.options || [], null, 2), 10)}
         ${textareaInput("dashboardHomeSubtitle", "Dashboard Home Subtitle", dash.homeSubtitle || "", 4)}
         ${textareaInput("dashboardHelpText", "Text Bantuan di Atas Dashboard", texts.dashboardHelpText || "Pilih menu, ubah isi yang kamu mau, lalu klik Simpan Semua.", 4)}
         ${textareaInput("levelUpTopActiveTitle", "Judul Notifikasi Level-Up Top Aktif", texts.levelUpTopActiveTitle || "🆙 Warga Naik Level + Masuk Top Aktif", 3)}
@@ -6539,6 +6566,7 @@ function applyMaxtonControlPost(body = {}) {
   cfg.welcome = cfg.welcome || {};
   cfg.ai = cfg.ai || {};
   cfg.suggestion = cfg.suggestion || {};
+  cfg.loket = cfg.loket || {};
   cfg.panels = cfg.panels || {};
   cfg.topActive = cfg.topActive || {};
   cfg.texts = cfg.texts || {};
@@ -6612,15 +6640,45 @@ function applyMaxtonControlPost(body = {}) {
 
   cfg.welcome.enabled = bool("welcomeEnabled");
   cfg.welcome.sendToChatWarga = bool("welcomeSendToChatWarga");
-  cfg.welcome.title = body.welcomeTitle || cfg.welcome.title || "🏡 Wilujeung Sumping Warga Anyar! {displayName}";
-  cfg.welcome.content = body.welcomeContent || cfg.welcome.content || "🤍 Sambut warga anyar barudak {user} {memberRole}";
+  cfg.welcome.title = body.welcomeTitle || cfg.welcome.title || DESA_TULUS_WELCOME_TITLE;
+  cfg.welcome.content = body.welcomeContent || cfg.welcome.content || "";
   cfg.welcome.imageUrl = body.welcomeImageUrl || cfg.welcome.imageUrl || "";
   cfg.welcome.memberRoleId = body.welcomeMemberRoleId || cfg.welcome.memberRoleId || "";
   cfg.welcome.memberRoleName = cfg.welcome.memberRoleName || "Member Tulus";
-  cfg.welcome.message = body.welcomeMessage || cfg.welcome.message || "";
+  cfg.welcome.message = body.welcomeMessage || cfg.welcome.message || DESA_TULUS_WELCOME_MESSAGE;
   cfg.suggestion.enabled = bool("suggestionEnabled");
-  cfg.suggestion.title = body.suggestionTitle || cfg.suggestion.title || "💡 DESA TULUS • Kritik & Saran";
-  cfg.suggestion.description = body.suggestionDescription || cfg.suggestion.description || "";
+  cfg.suggestion.title = body.suggestionTitle || cfg.suggestion.title || "📬 Kotak Saran DESA TULUS";
+  cfg.suggestion.description = body.suggestionDescription || cfg.suggestion.description || "Klik tombol di bawah untuk mengirim kritik atau saran. Setelah terkirim, warga bisa memberi tanggapan lewat reaction dan thread.";
+  cfg.suggestion.buttonText = body.suggestionButtonText || cfg.suggestion.buttonText || "📬 Kirim Saran";
+  cfg.suggestion.buttonOnResult = body.suggestionButtonOnResult === "on";
+  cfg.loket = cfg.loket || {};
+  cfg.loket.enabled = body.loketEnabled === "on";
+  cfg.loket.panelMode = "select";
+  cfg.loket.panelChannelId = body.loketPanelChannelId || cfg.loket.panelChannelId || "";
+  cfg.loket.categoryId = body.loketCategoryId || cfg.loket.categoryId || "";
+  cfg.loket.staffRoleId = body.loketStaffRoleId || cfg.loket.staffRoleId || "";
+  cfg.loket.logChannelId = body.loketLogChannelId || cfg.loket.logChannelId || "";
+  cfg.loket.panelTitle = body.loketPanelTitle || cfg.loket.panelTitle || "🏛️ LOKET DESA TULUS";
+  cfg.loket.panelDescription = body.loketPanelDescription || cfg.loket.panelDescription || "Pilih jenis loket dari menu di bawah. Setelah memilih, isi keperluan kamu dan Pak RW akan membuat ruang bantuan privat khusus untuk kamu.";
+  cfg.loket.selectPlaceholder = body.loketSelectPlaceholder || cfg.loket.selectPlaceholder || "Pilih jenis loket yang kamu butuhkan";
+  cfg.loket.imageUrl = body.loketImageUrl || cfg.loket.imageUrl || "";
+  cfg.loket.thumbnailUrl = body.loketThumbnailUrl || cfg.loket.thumbnailUrl || "";
+  cfg.loket.categoryName = body.loketCategoryName || cfg.loket.categoryName || "🏛️｜LOKET DESA TULUS";
+  cfg.loket.channelPrefix = body.loketChannelPrefix || cfg.loket.channelPrefix || "loket";
+  cfg.loket.claimLabel = body.loketClaimLabel || cfg.loket.claimLabel || "Ambil Loket";
+  cfg.loket.closeLabel = body.loketCloseLabel || cfg.loket.closeLabel || "Tutup Loket";
+  cfg.loket.autoThreadEnabled = body.loketAutoThreadEnabled === "on";
+  cfg.loket.transcriptEnabled = body.loketTranscriptEnabled !== "off";
+  if (body.loketOptionsJson) { try { cfg.loket.options = JSON.parse(body.loketOptionsJson); } catch (err) { console.log("LOKET OPTIONS JSON ERROR:", err.message); } }
+  cfg.levelSystem = cfg.levelSystem || {};
+  cfg.levelSystem.enabled = true;
+  cfg.levelSystem.maxLevel = 1000;
+  cfg.levelSystem.autoLevelRole = body.levelAutoLevelRole === "on";
+  cfg.levelSystem.autoRoleMode = "dynamic_on_demand";
+  cfg.levelSystem.autoRoleNoColor = true;
+  cfg.levelSystem.autoRoleAboveWarga = true;
+  cfg.levelSystem.autoDeleteEmptyRoles = true;
+  cfg.levelSystem.wargaRoleId = cfg.welcome?.memberRoleId || cfg.memberTulusRoleId || cfg.wargaRoleId || DESA_TULUS_WARGA_ROLE_ID;
   cfg.panels.sendSuggestionPanelOnReady = bool("sendSuggestionPanelOnReady");
 
   cfg.topActive.enabled = bool("topActiveEnabled");
@@ -6704,8 +6762,8 @@ function applyMaxtonControlPost(body = {}) {
   cfg.topActive.boardTitleTemplate = body.topActiveBoardTitleTemplate || cfg.topActive.boardTitleTemplate || "🏆 TOP AKTIF WARGA BULAN {month}";
   cfg.topActive.boardUpdateText = body.topActiveBoardUpdateText || cfg.topActive.boardUpdateText || "Update otomatis setiap hari pukul **00.00 WIB**";
   cfg.topActive.topActiveFieldTitle = body.topActiveTopActiveFieldTitle || cfg.topActive.topActiveFieldTitle || "🏆 Top Aktif";
-  cfg.topActive.topVoiceFieldTitle = body.topActiveTopVoiceFieldTitle || cfg.topActive.topVoiceFieldTitle || "Top Voice:";
-  cfg.topActive.topChatFieldTitle = body.topActiveTopChatFieldTitle || cfg.topActive.topChatFieldTitle || "Top Chat:";
+  cfg.topActive.topVoiceFieldTitle = body.topActiveTopVoiceFieldTitle || cfg.topActive.topVoiceFieldTitle || "🎙️ Top Voice:";
+  cfg.topActive.topChatFieldTitle = body.topActiveTopChatFieldTitle || cfg.topActive.topChatFieldTitle || "💬 Top Chat:";
   cfg.topActive.rowArrowEmoji = body.topActiveRowArrowEmoji || cfg.topActive.rowArrowEmoji || "<a:Animated_Arrow_Bluelite:1512751559140839576>";
   cfg.topActive.dailyPostHourWIB = num(body.topActiveDailyPostHourWIB, cfg.topActive.dailyPostHourWIB ?? 0, 0, 23);
   cfg.topActive.motmReactionEmojis = body.motmReactionEmojis || cfg.topActive.motmReactionEmojis || "🔥,👏,🏆,🎉,🥳";
@@ -8821,10 +8879,12 @@ function renderModulesPage(req, saved = false, error = "") {
       <div class="formgrid">
         ${checkboxInput("welcomeEnabled", "Welcome Aktif", cfg.welcome?.enabled !== false)}
         ${checkboxInput("welcomeSendToChatWarga", "Kirim Welcome ke Chat Warga", cfg.welcome?.sendToChatWarga !== false)}
-        ${configInput("welcomeTitle", "Judul Welcome", cfg.welcome?.title || "")}
+        ${configInput("welcomeTitle", "Judul Welcome", cfg.welcome?.title || DESA_TULUS_WELCOME_TITLE)}
+        ${configInput("welcomeContent", "Content Luar Embed (kosongkan biar tidak dobel mention)", cfg.welcome?.content || "")}
+        ${maxtonRoleSelect(guild, "welcomeMemberRoleId", "Role Warga untuk Mention Welcome", cfg.welcome?.memberRoleId || cfg.memberTulusRoleId || cfg.wargaRoleId || "")}
         ${configInput("chatWargaChannelId", "Chat Warga Channel ID", cfg.chatWargaChannelId || "")}
       </div>
-      ${textareaInput("welcomeMessage", "Isi Welcome Message", cfg.welcome?.message || "", 8)}
+      ${textareaInput("welcomeMessage", "Isi Welcome Message", cfg.welcome?.message || DESA_TULUS_WELCOME_MESSAGE, 8)}
 
       <h3 style="margin-top:28px">💎 Juragan / Booster Settings</h3>
       <div class="formgrid">
@@ -8850,6 +8910,8 @@ function renderModulesPage(req, saved = false, error = "") {
         ${configInput("cekPoinChannelId", "Cek Poin Channel ID", cfg.cekPoinChannelId || cfg.level?.checkPointChannelId || cfg.levelChannelId || "")}
         ${configInput("level100RoleId", "Role ID Level 100", cfg.level100RoleId || "")}
         ${configInput("level100RoleDurationDays", "Durasi Role Level 100 (hari)", cfg.level100RoleDurationDays ?? 30, "number")}
+        ${checkboxInput("levelAutoLevelRole", "Auto Level Role On-Demand Aktif", cfg.levelSystem?.autoLevelRole !== false)}
+        ${configInput("levelMaxLevel", "Level Maksimal", cfg.levelSystem?.maxLevel || 1000, "number")}
       </div>
 
       <h3 style="margin-top:28px">💡 Suggestion / Panel Settings</h3>
@@ -8857,9 +8919,34 @@ function renderModulesPage(req, saved = false, error = "") {
         ${checkboxInput("suggestionEnabled", "Suggestion Aktif", cfg.suggestion?.enabled !== false)}
         ${checkboxInput("sendSuggestionPanelOnReady", "Kirim Panel Saran saat Bot Online", cfg.panels?.sendSuggestionPanelOnReady === true)}
         ${configInput("suggestionChannelId", "Suggestion Channel ID", cfg.suggestionChannelId || "")}
-        ${configInput("suggestionTitle", "Judul Panel Saran", cfg.suggestion?.title || "")}
+        ${configInput("suggestionTitle", "Judul Panel Saran", cfg.suggestion?.title || "📬 Kotak Saran DESA TULUS")}
+        ${configInput("suggestionButtonText", "Teks Tombol Saran", cfg.suggestion?.buttonText || "📬 Kirim Saran")}
+        ${checkboxInput("suggestionButtonOnResult", "Tombol Ikut di Setiap Saran Baru", cfg.suggestion?.buttonOnResult !== false)}
       </div>
       ${textareaInput("suggestionDescription", "Deskripsi Panel Saran", cfg.suggestion?.description || "", 5)}
+
+
+      <h3 style="margin-top:28px">🏛️ Loket Bantuan Settings</h3>
+      <p class="section-note">Panel Loket dropdown/select menu wajib bisa diedit dari dashboard. Ini bukan ticket lama, namanya Loket Pak RW DESA TULUS.</p>
+      <div class="formgrid">
+        ${checkboxInput("loketEnabled", "Loket Aktif", cfg.loket?.enabled !== false)}
+        ${maxtonChannelSelect(guild, "loketPanelChannelId", "Channel Panel Loket", cfg.loket?.panelChannelId || "", "text")}
+        ${maxtonChannelSelect(guild, "loketCategoryId", "Kategori Loket", cfg.loket?.categoryId || "", "category")}
+        ${maxtonRoleSelect(guild, "loketStaffRoleId", "Role Pengurus Loket", cfg.loket?.staffRoleId || "")}
+        ${maxtonChannelSelect(guild, "loketLogChannelId", "Channel Log Loket", cfg.loket?.logChannelId || "", "text")}
+        ${configInput("loketPanelTitle", "Judul Panel Loket", cfg.loket?.panelTitle || "🏛️ LOKET DESA TULUS")}
+        ${configInput("loketSelectPlaceholder", "Placeholder Dropdown", cfg.loket?.selectPlaceholder || "Pilih jenis loket yang kamu butuhkan")}
+        ${configInput("loketImageUrl", "Image/Banner Loket URL", cfg.loket?.imageUrl || "")}
+        ${configInput("loketThumbnailUrl", "Thumbnail Loket URL", cfg.loket?.thumbnailUrl || "")}
+        ${configInput("loketCategoryName", "Nama Category Otomatis", cfg.loket?.categoryName || "🏛️｜LOKET DESA TULUS")}
+        ${configInput("loketChannelPrefix", "Prefix Channel Loket", cfg.loket?.channelPrefix || "loket")}
+        ${configInput("loketClaimLabel", "Label Tombol Ambil", cfg.loket?.claimLabel || "Ambil Loket")}
+        ${configInput("loketCloseLabel", "Label Tombol Tutup", cfg.loket?.closeLabel || "Tutup Loket")}
+        ${checkboxInput("loketAutoThreadEnabled", "Buat Thread Catatan Loket", cfg.loket?.autoThreadEnabled === true)}
+        ${checkboxInput("loketTranscriptEnabled", "Log Transcript Ringkas", cfg.loket?.transcriptEnabled !== false)}
+      </div>
+      ${textareaInput("loketPanelDescription", "Deskripsi Panel Loket", cfg.loket?.panelDescription || "Pilih jenis loket dari menu di bawah. Setelah memilih, isi keperluan kamu dan Pak RW akan membuat ruang bantuan privat khusus untuk kamu.", 5)}
+      ${textareaInput("loketOptionsJson", "Pilihan Dropdown Loket (JSON)", JSON.stringify(cfg.loket?.options || [], null, 2), 10)}
 
       <h3 style="margin-top:28px">📌 Other Channel IDs</h3>
       <div class="formgrid">
@@ -10341,7 +10428,7 @@ function renderCommands() {
 
 
 /* ===================== PAK RW FULL PREMIUM DASHBOARD REBUILD v10.10.63 ===================== */
-const PAKRW_DASHBOARD_RELEASE = "10.10.108";
+const PAKRW_DASHBOARD_RELEASE = "10.10.109";
 const PAKRW_DASHBOARD_RELEASE_NAME = "Leaderboard Premium PNG";
 
 const PAKRW_PLACEHOLDER_GROUPS = [
@@ -11394,7 +11481,7 @@ const pakRwDashboardAllowedRoots = new Set([
   "logChannelId", "donaturRoleId", "level100RoleId", "welcome", "ai", "curhat", "anonymousCurhat",
   "suggestion", "level", "levelSystem", "topActive", "leaderboardAktif", "papanAktif", "boostPoin", "mabar",
   "juragan", "donatur", "features", "commandPermissions", "embeds", "dashboard", "panels", "mentions",
-  "mentionPlaceholders", "placeholderLibrary", "texts", "serverIdExporter", "ktpSystem", "afkVoice"
+  "mentionPlaceholders", "placeholderLibrary", "texts", "serverIdExporter", "ktpSystem", "afkVoice", "loket", "leaderboard"
 ]);
 
 function isSafeDashboardPath(input = "") {
@@ -11575,6 +11662,87 @@ app.post("/api/dashboard/ktp/upload", requireDashboardAuth, async (req, res) => 
   }
 });
 
+const LEADERBOARD_UPLOAD_DIR = path.join(__dirname, "assets", "leaderboard");
+function safeLeaderboardAssetPath(input = "") {
+  const relative = String(input || "").replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!relative.startsWith("assets/leaderboard/")) return "";
+  const resolved = path.resolve(__dirname, relative);
+  const root = path.resolve(__dirname, "assets", "leaderboard") + path.sep;
+  return resolved.startsWith(root) ? resolved : "";
+}
+
+app.get("/api/dashboard/leaderboard/background", requireDashboardAuth, (req, res) => {
+  const relativePath = String(req.query.path || config.leaderboard?.backgroundPath || "assets/leaderboard/background.png").replace(/\\/g, "/").replace(/^\/+/, "");
+  const filePath = safeLeaderboardAssetPath(relativePath);
+  if (!filePath) return res.status(404).send("Background leaderboard tidak valid.");
+  if (!fs.existsSync(filePath)) {
+    const stored = readStore("leaderboardAssets", { files: {} })?.files?.[relativePath];
+    if (stored?.data) {
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, Buffer.from(stored.data, "base64"));
+    }
+  }
+  if (!fs.existsSync(filePath)) return res.status(404).send("Background leaderboard belum ada.");
+  res.setHeader("Cache-Control", "no-store");
+  return res.sendFile(filePath);
+});
+
+app.post("/api/dashboard/leaderboard/upload", requireDashboardAuth, async (req, res) => {
+  try {
+    if (!CanvasKit?.loadImage) return res.status(503).json({ ok: false, error: "Canvas belum siap di runtime bot." });
+    const fileName = String(req.body?.fileName || "background.png").replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 80);
+    const dataUrl = String(req.body?.dataUrl || "");
+    const match = dataUrl.match(/^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/i);
+    if (!match) return res.status(400).json({ ok: false, error: "Format gambar tidak valid. Gunakan PNG, JPG, atau WebP." });
+    const bytes = Buffer.from(match[2], "base64");
+    if (!bytes.length || bytes.length > 8 * 1024 * 1024) return res.status(400).json({ ok: false, error: "Ukuran gambar harus antara 1 byte dan 8 MB." });
+    const image = await CanvasKit.loadImage(bytes).catch(() => null);
+    if (!image?.width || !image?.height) return res.status(400).json({ ok: false, error: "File tidak dapat dibaca sebagai gambar." });
+
+    fs.mkdirSync(LEADERBOARD_UPLOAD_DIR, { recursive: true });
+    const extension = match[1].toLowerCase() === "jpeg" ? "jpg" : match[1].toLowerCase();
+    const base = path.basename(fileName, path.extname(fileName)).replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 48) || "background";
+    const savedName = `background-${Date.now()}-${base}.${extension}`;
+    const savedPath = path.join(LEADERBOARD_UPLOAD_DIR, savedName);
+    fs.writeFileSync(savedPath, bytes);
+    const relativePath = `assets/leaderboard/${savedName}`;
+
+    const assetStore = readStore("leaderboardAssets", { files: {} }) || { files: {} };
+    assetStore.files = assetStore.files && typeof assetStore.files === "object" ? assetStore.files : {};
+    assetStore.files[relativePath] = { data: bytes.toString("base64"), mime: `image/${extension === "jpg" ? "jpeg" : extension}`, width: image.width, height: image.height, updatedAt: Date.now() };
+    writeStore("leaderboardAssets", assetStore);
+
+    const cfg = readConfigFile();
+    cfg.leaderboard = cfg.leaderboard && typeof cfg.leaderboard === "object" ? cfg.leaderboard : {};
+    cfg.leaderboard.backgroundMode = "upload";
+    cfg.leaderboard.backgroundPath = relativePath;
+    cfg.leaderboard.backgroundOverlay = Number.isFinite(Number(cfg.leaderboard.backgroundOverlay)) ? cfg.leaderboard.backgroundOverlay : 0.55;
+    cfg.leaderboard.backgroundDarken = Number.isFinite(Number(cfg.leaderboard.backgroundDarken)) ? cfg.leaderboard.backgroundDarken : 0.45;
+    cfg.version = "10.10.109";
+    writeConfigFile(cfg);
+    appendDashboardActivity("leaderboard", "Background leaderboard diunggah", `${savedName} (${image.width}x${image.height})`);
+    syncLiveConfig(readConfigFile());
+    return res.json({ ok: true, path: relativePath, width: image.width, height: image.height, config: readConfigFile() });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message || String(err) });
+  }
+});
+
+app.get("/api/dashboard/leaderboard/preview.png", requireDashboardAuth, async (req, res) => {
+  try {
+    const guild = getDashboardGuild ? getDashboardGuild() : client.guilds.cache.first();
+    if (!guild) return res.status(503).send("Server DESA TULUS belum terbaca.");
+    const cfg = getTopActiveConfig();
+    const rows = normalizeLeaderboardUsers(getLeaderboardActiveRows(guild.id, cfg.leaderboardActiveTopLimit, guild.ownerId));
+    const imageBuffer = await generateLeaderboardImage(guild, rows, config.leaderboard || {});
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "no-store");
+    return res.send(imageBuffer);
+  } catch (err) {
+    return res.status(500).send(err.message || String(err));
+  }
+});
+
 app.put("/api/dashboard/settings", requireDashboardAuth, (req, res) => {
   try {
     const patches = Array.isArray(req.body?.patches) ? req.body.patches.slice(0, 80) : [];
@@ -11586,7 +11754,7 @@ app.put("/api/dashboard/settings", requireDashboardAuth, (req, res) => {
       if (!isSafeDashboardPath(pathText)) return res.status(400).json({ ok: false, error: `Path config tidak diizinkan: ${pathText}` });
       setDashboardPath(cfg, pathText, patch.value);
     }
-    cfg.version = "10.10.108";
+    cfg.version = "10.10.109";
     writeConfigFile(cfg);
     appendDashboardActivity("settings", "Setting dashboard disimpan", `${patches.length} field diperbarui melalui adapter aman.`);
     if (levelRoleConfigChanged) {
@@ -11606,7 +11774,7 @@ app.put("/api/dashboard/embed/:key", requireDashboardAuth, (req, res) => {
     const cfg = readConfigFile();
     cfg.embeds = cfg.embeds || {};
     cfg.embeds[key] = mergeDashboardEmbed(cfg.embeds[key] || {}, req.body?.embed || {});
-    cfg.version = "10.10.108";
+    cfg.version = "10.10.109";
     writeConfigFile(cfg);
     appendDashboardActivity("embed", "Template embed disimpan", `Template ${key} diperbarui dari Embed Builder.`);
     return res.json({ ok: true, embed: cfg.embeds[key] });
@@ -11693,7 +11861,7 @@ app.put("/api/afk-voice/config", requireDashboardAuth, async (req, res) => {
       if (!valid.ok) return res.status(400).json({ success: false, message: valid.message, errorCode: valid.errorCode });
     }
     cfg.afkVoice = next;
-    cfg.version = "10.10.108";
+    cfg.version = "10.10.109";
     writeConfigFile(cfg);
     appendDashboardActivity("afk-voice", "AFK Voice diperbarui", next.enabled ? `Channel voice ${next.channelId} diterapkan.` : "Fitur dinonaktifkan.");
 
@@ -11735,7 +11903,7 @@ app.post("/api/afk-voice/disconnect", requireDashboardAuth, async (req, res) => 
   if (!checkActionRateLimit()) return res.status(429).json({ success: false, message: "Tunggu sebentar sebelum memutus koneksi.", errorCode: "RATE_LIMITED" });
   const cfg = readConfigFile();
   cfg.afkVoice = { ...(cfg.afkVoice || {}), enabled: false, updatedAt: new Date().toISOString(), updatedBy: "dashboard" };
-  cfg.version = "10.10.108";
+  cfg.version = "10.10.109";
   writeConfigFile(cfg);
   const result = await disconnectAfkVoice({ disable: true });
   return res.json(result);
@@ -13310,8 +13478,13 @@ app.post("/modules", requireDashboardAuth, (req, res) => {
     cfg.welcome = cfg.welcome || {};
     cfg.welcome.enabled = req.body.welcomeEnabled === "on";
     cfg.welcome.sendToChatWarga = req.body.welcomeSendToChatWarga === "on";
-    cfg.welcome.title = req.body.welcomeTitle || "";
-    cfg.welcome.message = req.body.welcomeMessage || "";
+    cfg.welcome.title = req.body.welcomeTitle || DESA_TULUS_WELCOME_TITLE;
+    cfg.welcome.content = req.body.welcomeContent || "";
+    cfg.welcome.memberRoleId = req.body.welcomeMemberRoleId || cfg.welcome.memberRoleId || cfg.memberTulusRoleId || cfg.wargaRoleId || DESA_TULUS_WARGA_ROLE_ID;
+    cfg.welcome.memberRoleName = "Warga";
+    cfg.memberTulusRoleId = cfg.welcome.memberRoleId;
+    cfg.wargaRoleId = cfg.welcome.memberRoleId;
+    cfg.welcome.message = req.body.welcomeMessage || DESA_TULUS_WELCOME_MESSAGE;
 
     cfg.juragan = cfg.juragan || {};
     cfg.juragan.enabled = req.body.juraganEnabled === "on";
@@ -13338,8 +13511,40 @@ app.post("/modules", requireDashboardAuth, (req, res) => {
 
     cfg.suggestion = cfg.suggestion || {};
     cfg.suggestion.enabled = req.body.suggestionEnabled === "on";
-    cfg.suggestion.title = req.body.suggestionTitle || "";
-    cfg.suggestion.description = req.body.suggestionDescription || "";
+    cfg.suggestion.title = req.body.suggestionTitle || "📬 Kotak Saran DESA TULUS";
+    cfg.suggestion.description = req.body.suggestionDescription || "Klik tombol di bawah untuk mengirim kritik atau saran. Setelah terkirim, warga bisa memberi tanggapan lewat reaction dan thread.";
+    cfg.suggestion.buttonText = req.body.suggestionButtonText || "📬 Kirim Saran";
+    cfg.suggestion.buttonOnResult = req.body.suggestionButtonOnResult === "on";
+
+    cfg.loket = cfg.loket || {};
+    cfg.loket.enabled = req.body.loketEnabled === "on";
+    cfg.loket.panelMode = "select";
+    cfg.loket.panelChannelId = req.body.loketPanelChannelId || cfg.loket.panelChannelId || "";
+    cfg.loket.categoryId = req.body.loketCategoryId || cfg.loket.categoryId || "";
+    cfg.loket.staffRoleId = req.body.loketStaffRoleId || cfg.loket.staffRoleId || "";
+    cfg.loket.logChannelId = req.body.loketLogChannelId || cfg.loket.logChannelId || "";
+    cfg.loket.panelTitle = req.body.loketPanelTitle || "🏛️ LOKET DESA TULUS";
+    cfg.loket.panelDescription = req.body.loketPanelDescription || "Pilih jenis loket dari menu di bawah. Setelah memilih, isi keperluan kamu dan Pak RW akan membuat ruang bantuan privat khusus untuk kamu.";
+    cfg.loket.selectPlaceholder = req.body.loketSelectPlaceholder || "Pilih jenis loket yang kamu butuhkan";
+    cfg.loket.imageUrl = req.body.loketImageUrl || "";
+    cfg.loket.thumbnailUrl = req.body.loketThumbnailUrl || "";
+    cfg.loket.categoryName = req.body.loketCategoryName || "🏛️｜LOKET DESA TULUS";
+    cfg.loket.channelPrefix = req.body.loketChannelPrefix || "loket";
+    cfg.loket.claimLabel = req.body.loketClaimLabel || "Ambil Loket";
+    cfg.loket.closeLabel = req.body.loketCloseLabel || "Tutup Loket";
+    cfg.loket.autoThreadEnabled = req.body.loketAutoThreadEnabled === "on";
+    cfg.loket.transcriptEnabled = req.body.loketTranscriptEnabled !== "off";
+    if (req.body.loketOptionsJson) { try { cfg.loket.options = JSON.parse(req.body.loketOptionsJson); } catch (err) { console.log("LOKET OPTIONS JSON ERROR:", err.message); } }
+
+    cfg.levelSystem = cfg.levelSystem || {};
+    cfg.levelSystem.enabled = true;
+    cfg.levelSystem.maxLevel = 1000;
+    cfg.levelSystem.autoLevelRole = req.body.levelAutoLevelRole === "on";
+    cfg.levelSystem.autoRoleMode = "dynamic_on_demand";
+    cfg.levelSystem.autoRoleNoColor = true;
+    cfg.levelSystem.autoRoleAboveWarga = true;
+    cfg.levelSystem.autoDeleteEmptyRoles = true;
+    cfg.levelSystem.wargaRoleId = cfg.welcome?.memberRoleId || cfg.memberTulusRoleId || cfg.wargaRoleId || DESA_TULUS_WARGA_ROLE_ID;
 
     cfg.suggestionChannelId = req.body.suggestionChannelId || "";
     // Level, Top Aktif/MOTM, dan Cek Poin dikunci aman pada update ini.
@@ -15434,8 +15639,8 @@ function normalizeTopBoardFieldTitle(value, fallback) {
   const raw = String(value || "").replace(/\s+/g, " ").trim();
   if (!raw) return fallback;
   const withoutEmoji = raw.replace(/^[^A-Za-z0-9]+/, "").trim().toLowerCase();
-  if (/^top\s*voice(\s*bulanan)?[: ]*$/.test(withoutEmoji)) return "Top Voice:";
-  if (/^top\s*chat(\s*bulanan)?[: ]*$/.test(withoutEmoji)) return "Top Chat:";
+  if (/^top\s*voice(\s*bulanan)?[: ]*$/.test(withoutEmoji)) return "🎙️ Top Voice:";
+  if (/^top\s*chat(\s*bulanan)?[: ]*$/.test(withoutEmoji)) return "💬 Top Chat:";
   return raw;
 }
 
@@ -15528,8 +15733,8 @@ function getTopActiveConfig() {
     boardUpdateText: t.boardUpdateText || "Update otomatis setiap hari pukul 00.00 WIB",
     boardFooterText: t.boardFooterText || "Gunakan perintah rapihin untuk melihat poin top aktifnya",
     topActiveFieldTitle: t.topActiveFieldTitle || "🏆 Top Aktif",
-    topVoiceFieldTitle: normalizeTopBoardFieldTitle(t.topVoiceFieldTitle, "Top Voice:"),
-    topChatFieldTitle: normalizeTopBoardFieldTitle(t.topChatFieldTitle, "Top Chat:"),
+    topVoiceFieldTitle: normalizeTopBoardFieldTitle(t.topVoiceFieldTitle, "🎙️ Top Voice:"),
+    topChatFieldTitle: normalizeTopBoardFieldTitle(t.topChatFieldTitle, "💬 Top Chat:"),
     rowArrowEmoji: t.rowArrowEmoji || "<a:Animated_Arrow_Bluelite:1512751559140839576>",
     motmReactionEmojis: t.motmReactionEmojis || "🔥,👏,🏆,🎉,🥳",
     motmThreadArchiveMinutes: Number(t.motmThreadArchiveMinutes || 1440),
@@ -15699,8 +15904,8 @@ function buildTopActiveBoardEmbed(guild, reason = "update") {
     .setTitle(boardTitle)
     .setDescription(updateText)
     .addFields(
-      { name: cfg.topVoiceFieldTitle || "Top Voice:", value: voiceValue, inline: false },
-      { name: cfg.topChatFieldTitle || "Top Chat:", value: chatValue, inline: false }
+      { name: cfg.topVoiceFieldTitle || "🎙️ Top Voice:", value: voiceValue, inline: false },
+      { name: cfg.topChatFieldTitle || "💬 Top Chat:", value: chatValue, inline: false }
     )
     .setFooter({ text: makeOTFooter(footerText), iconURL: boardEmbedCfg.footerIcon || OT_FOOTER_ICON_URL })
     .setTimestamp();
@@ -15722,15 +15927,15 @@ function formatLeaderboardPoint(value) {
 }
 
 function getLeaderboardPointValue(item) {
-  const raw = item?.points ?? item?.point ?? item?.totalPoints ?? item?.lifetimeTotal ?? item?.score ?? item?.xp ?? item?.exp ?? 0;
+  const raw = item?.points ?? item?.point ?? item?.totalPoints ?? item?.totalPoint ?? item?.lifetimeTotal ?? item?.score ?? item?.xp ?? item?.exp ?? 0;
   const number = Number(raw);
   return Number.isFinite(number) ? number : 0;
 }
 
 function getLeaderboardUserText(item) {
-  const userId = item?.userId || item?.id || item?.memberId || item?.discordId;
+  const userId = item?.userId || item?.id || item?.memberId || item?.discordId || item?.discordID || item?.user_id;
   if (userId) return `<@${userId}>`;
-  return item?.displayName || item?.username || item?.name || "Warga Desa";
+  return item?.displayName || item?.globalName || item?.username || item?.name || item?.tag || "Warga Desa";
 }
 
 function formatLeaderboardQuote(topUsers = []) {
@@ -15788,7 +15993,7 @@ function getLeaderboardActiveRows(guildId, limit = 10, ownerId = "") {
 
 function buildLeaderboardActiveEmbed(guild, topUsers = null, reason = "update", imageOk = false) {
   const cfg = getTopActiveConfig();
-  const rows = Array.isArray(topUsers) ? topUsers : getLeaderboardActiveRows(guild.id, cfg.leaderboardActiveTopLimit, guild.ownerId);
+  const rows = normalizeLeaderboardUsers(Array.isArray(topUsers) ? topUsers : getLeaderboardActiveRows(guild.id, cfg.leaderboardActiveTopLimit, guild.ownerId));
   const serverName = config.serverName || guild.name || "DESA TULUS";
   const template = config.embeds?.papanAktif || {};
   const title = applyTemplate(normalizeLeaderboardActiveTitle(config.leaderboard?.title || cfg.leaderboardActiveTitleTemplate || template.title), { server: serverName });
@@ -15818,13 +16023,18 @@ function buildLeaderboardActiveEmbed(guild, topUsers = null, reason = "update", 
 
 async function buildLeaderboardActivePayload(guild, reason = "update") {
   const cfg = getTopActiveConfig();
-  const rows = getLeaderboardActiveRows(guild.id, cfg.leaderboardActiveTopLimit, guild.ownerId);
+  const rawRows = getLeaderboardActiveRows(guild.id, cfg.leaderboardActiveTopLimit, guild.ownerId);
+  const rows = normalizeLeaderboardUsers(rawRows);
   let files = [];
   let imageOk = false;
 
+  console.log("[LEADERBOARD_IMAGE] raw top users:", rawRows);
+  console.log("[LEADERBOARD_IMAGE] total users:", Array.isArray(rawRows) ? rawRows.length : "not array");
+  console.log("[LEADERBOARD_IMAGE] first user:", Array.isArray(rawRows) ? rawRows[0] : null);
+
   if (cfg.leaderboardUseImage !== false) {
     try {
-      const imageBuffer = await generateLeaderboardImage(guild, rows);
+      const imageBuffer = await generateLeaderboardImage(guild, rows, config.leaderboard || {});
       if (imageBuffer && Buffer.isBuffer(imageBuffer) && imageBuffer.length > 1000) {
         files = [new AttachmentBuilder(imageBuffer, { name: "leaderboard.png" })];
         imageOk = true;
@@ -16960,8 +17170,8 @@ function buildMemberOfTheMonthEmbed(member, userData, imageUrl = "") {
     .setDescription(applyTemplate(e.description || "{user} berhasil mencapai **{total} poin aktif** bulan ini dan mendapatkan role **Member Of The Month**.", data))
     .addFields(
       { name: "⭐ Total Poin", value: `**${data.total}** poin`, inline: true },
-      { name: "Top Chat:", value: `**${data.chat}** poin`, inline: true },
-      { name: "Top Voice:", value: `**${data.voice}** poin`, inline: true }
+      { name: "💬 Top Chat:", value: `**${data.chat}** poin`, inline: true },
+      { name: "🎙️ Top Voice:", value: `**${data.voice}** poin`, inline: true }
     )
     .setFooter({ text: makeOTFooter(applyTemplate(e.footer || "{server} • Member Of The Month", data)) })
     .setTimestamp();
@@ -21337,7 +21547,7 @@ client.on(Events.MessageCreate, async (message) => {
           const rows = getTopActiveRows(message.guild.id, "chat", getTopActiveConfig().topLimit, message.guild.ownerId);
           const embed = new EmbedBuilder()
             .setColor(defaultEmbedColorInt())
-            .setTitle("Top Chat:")
+            .setTitle("💬 Top Chat:")
             .setDescription("Poin, level, dan rank di bawah dihitung dari **poin chat bulan ini**.\n\n" + formatTopActiveRows(rows, "chat"))
             .setFooter({ text: makeOTFooter(`${config.serverName} • ${getMonthLabel()}`) })
             .setTimestamp();
@@ -21348,7 +21558,7 @@ client.on(Events.MessageCreate, async (message) => {
           const rows = getTopActiveRows(message.guild.id, "voice", getTopActiveConfig().topLimit, message.guild.ownerId);
           const embed = new EmbedBuilder()
             .setColor(defaultEmbedColorInt())
-            .setTitle("Top Voice:")
+            .setTitle("🎙️ Top Voice:")
             .setDescription("Poin, level, dan rank di bawah dihitung dari **poin voice bulan ini**.\n\n" + formatTopActiveRows(rows, "voice"))
             .setFooter({ text: makeOTFooter(`${config.serverName} • ${getMonthLabel()}`) })
             .setTimestamp();
@@ -21913,7 +22123,7 @@ async function handlePakRwVisibleSlashCommand(interaction) {
     const rows = getTopActiveRows(interaction.guild.id, type, getTopActiveConfig().topLimit, interaction.guild.ownerId);
     const embed = new EmbedBuilder()
       .setColor(defaultEmbedColorInt())
-      .setTitle(cmd === "topchat" ? "Top Chat:" : "Top Voice:")
+      .setTitle(cmd === "topchat" ? "💬 Top Chat:" : "🎙️ Top Voice:")
       .setDescription((type === "chat" ? "Poin, level, dan rank di bawah dihitung dari **poin chat bulan ini**." : "Poin, level, dan rank di bawah dihitung dari **poin voice bulan ini**.") + "\n\n" + formatTopActiveRows(rows, type))
       .setFooter({ text: makeOTFooter(`${config.serverName} • ${getMonthLabel()}`) })
       .setTimestamp();

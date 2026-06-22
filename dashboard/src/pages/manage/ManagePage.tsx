@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
-  Activity, CheckCircle2, CircleAlert, Clock3, FileText, Gauge, Info, Layers3, Play,
+  Activity, CheckCircle2, CircleAlert, Clock3, FileImage, FileText, Gauge, Info, Layers3, Play,
   RefreshCcw, Save, Settings2, ShieldCheck, SlidersHorizontal, Sparkles, Square, Wand2
 } from "lucide-react";
 import { useDashboard } from "../../app/DashboardContext";
@@ -117,6 +117,14 @@ export function ManagePage() {
   const [dirty, setDirty] = useState(false);
   const [topLimit, setTopLimit] = useState(10);
   const [postHour, setPostHour] = useState(0);
+  const [leaderboardUseImage, setLeaderboardUseImage] = useState(true);
+  const [leaderboardBackgroundMode, setLeaderboardBackgroundMode] = useState("default");
+  const [leaderboardBackgroundUrl, setLeaderboardBackgroundUrl] = useState("");
+  const [leaderboardBackgroundPath, setLeaderboardBackgroundPath] = useState("assets/leaderboard/background.png");
+  const [leaderboardOverlay, setLeaderboardOverlay] = useState(0.55);
+  const [leaderboardBlur, setLeaderboardBlur] = useState(0);
+  const [leaderboardDarken, setLeaderboardDarken] = useState(0.45);
+  const [leaderboardUploading, setLeaderboardUploading] = useState(false);
   const [aiModel, setAiModel] = useState("openai/gpt-4o-mini");
   const [aiMaxTokens, setAiMaxTokens] = useState(460);
   const [welcomeTitle, setWelcomeTitle] = useState("Wilujeung sumping, {displayName}!");
@@ -186,6 +194,14 @@ export function ManagePage() {
     setEmbed(normalizeEmbed(data.embeds?.[nextEmbedKey] || {}));
     setTopLimit(Number(readPath(cfg, slug === "papan-aktif" ? "leaderboardAktif.topLimit" : "topActive.topLimit") || 10));
     setPostHour(Number(readPath(cfg, slug === "papan-aktif" ? "leaderboardAktif.autoPostHourWIB" : "topActive.dailyPostHourWIB") ?? 0));
+    const leaderboardCfg = readPath(cfg, "leaderboard") || {};
+    setLeaderboardUseImage(leaderboardCfg.useImage !== false);
+    setLeaderboardBackgroundMode(["default", "url", "upload"].includes(String(leaderboardCfg.backgroundMode || "")) ? String(leaderboardCfg.backgroundMode) : "default");
+    setLeaderboardBackgroundUrl(String(leaderboardCfg.backgroundUrl || ""));
+    setLeaderboardBackgroundPath(String(leaderboardCfg.backgroundPath || "assets/leaderboard/background.png"));
+    setLeaderboardOverlay(Number(leaderboardCfg.backgroundOverlay ?? 0.55));
+    setLeaderboardBlur(Number(leaderboardCfg.backgroundBlur ?? 0));
+    setLeaderboardDarken(Number(leaderboardCfg.backgroundDarken ?? 0.45));
     setAiModel(String(readPath(cfg, "ai.openRouterModel") || "openai/gpt-4o-mini"));
     setAiMaxTokens(Number(readPath(cfg, "ai.maxTokens") || 460));
     setWelcomeTitle(String(readPath(cfg, "welcome.title") || "Wilujeung sumping, {displayName}!"));
@@ -251,8 +267,30 @@ export function ManagePage() {
         patches.push({ path: "topActive.dailyPostHourWIB", value: postHour });
       }
       if (slug === "papan-aktif") {
+        const leaderboardChannelId = targets.leaderboardChannel || "";
         patches.push({ path: "leaderboardAktif.topLimit", value: topLimit });
         patches.push({ path: "leaderboardAktif.autoPostHourWIB", value: postHour });
+        patches.push({ path: "leaderboardAktif.channelId", value: leaderboardChannelId });
+        patches.push({ path: "papanAktif.channelId", value: leaderboardChannelId });
+        patches.push({ path: "topActive.leaderboardActiveChannelId", value: leaderboardChannelId });
+        patches.push({ path: "leaderboard.enabled", value: enabled });
+        patches.push({ path: "leaderboard.useQuoteFormat", value: true });
+        patches.push({ path: "leaderboard.useImage", value: leaderboardUseImage });
+        patches.push({ path: "leaderboard.channelId", value: leaderboardChannelId });
+        patches.push({ path: "leaderboard.maxEntries", value: Math.max(1, Math.min(10, Number(topLimit || 10))) });
+        patches.push({ path: "leaderboard.updateTime", value: "00:00" });
+        patches.push({ path: "leaderboard.timezone", value: "Asia/Jakarta" });
+        patches.push({ path: "leaderboard.backgroundMode", value: leaderboardBackgroundMode });
+        patches.push({ path: "leaderboard.backgroundUrl", value: leaderboardBackgroundUrl.trim() });
+        patches.push({ path: "leaderboard.backgroundPath", value: leaderboardBackgroundPath.trim() || "assets/leaderboard/background.png" });
+        patches.push({ path: "leaderboard.backgroundOverlay", value: Math.max(0, Math.min(0.9, Number(leaderboardOverlay || 0.55))) });
+        patches.push({ path: "leaderboard.backgroundBlur", value: Math.max(0, Math.min(18, Number(leaderboardBlur || 0))) });
+        patches.push({ path: "leaderboard.backgroundDarken", value: Math.max(0, Math.min(0.85, Number(leaderboardDarken || 0.45))) });
+        patches.push({ path: "leaderboard.backgroundFit", value: "cover" });
+        patches.push({ path: "leaderboard.imageTheme", value: "desa_tulus_dark" });
+        patches.push({ path: "leaderboard.color", value: "#FACC15" });
+        patches.push({ path: "leaderboard.fallbackArrow", value: "➜" });
+        patches.push({ path: "leaderboard.footer", value: "Pak RW • Desa Tulus Leaderboard" });
       }
       if (slug === "motm") {
         patches.push({ path: "level.cycleResetAtPoints", value: motmThreshold });
@@ -316,6 +354,40 @@ export function ManagePage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const uploadLeaderboardBackground = async (file: File) => {
+    setLeaderboardUploading(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Gagal membaca file background."));
+        reader.readAsDataURL(file);
+      });
+      const result = await api.uploadLeaderboardBackground(file.name, dataUrl);
+      setLeaderboardBackgroundMode("upload");
+      setLeaderboardBackgroundPath(result.path || "assets/leaderboard/background.png");
+      setLeaderboardUseImage(true);
+      setDirty(true);
+      await refresh();
+      notify(`Background leaderboard berhasil diupload${result.width && result.height ? ` (${result.width}x${result.height})` : ""}.`);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : String(error), "error");
+    } finally {
+      setLeaderboardUploading(false);
+    }
+  };
+
+  const resetLeaderboardBackground = () => {
+    setLeaderboardUseImage(true);
+    setLeaderboardBackgroundMode("default");
+    setLeaderboardBackgroundUrl("");
+    setLeaderboardBackgroundPath("assets/leaderboard/background.png");
+    setLeaderboardOverlay(0.55);
+    setLeaderboardBlur(0);
+    setLeaderboardDarken(0.45);
+    setDirty(true);
   };
 
   const runBoostAction = async (action: "start" | "stop") => {
@@ -471,6 +543,7 @@ export function ManagePage() {
 
           {slug === "loket" ? <Card className="full-span-card"><CardHeader title="Loket Pak RW" description="Panel loket sekarang memakai dropdown/select menu seperti contoh. Semua teks, gambar, kategori, dan pilihan bisa diedit." /><div className="form-grid two-columns"><div className="form-field"><label>Judul panel</label><input value={loketPanelTitle} onChange={(event) => { setLoketPanelTitle(event.target.value); setDirty(true); }} /></div><div className="form-field"><label>Placeholder dropdown</label><input value={loketSelectPlaceholder} onChange={(event) => { setLoketSelectPlaceholder(event.target.value); setDirty(true); }} /><small className="field-helper">Teks yang muncul di menu pilihan Loket.</small></div><div className="form-field"><label>Image / banner embed Loket</label><input value={loketImageUrl} onChange={(event) => { setLoketImageUrl(event.target.value); setDirty(true); }} placeholder="https://..." /><small className="field-helper">Pakai URL gambar dari Discord CDN atau hosting gambar.</small></div><div className="form-field"><label>Thumbnail kanan embed</label><input value={loketThumbnailUrl} onChange={(event) => { setLoketThumbnailUrl(event.target.value); setDirty(true); }} placeholder="https://..." /></div><div className="form-field"><label>Nama kategori otomatis default</label><input value={loketCategoryName} onChange={(event) => { setLoketCategoryName(event.target.value); setDirty(true); }} /></div><div className="form-field"><label>Prefix nama channel default</label><input value={loketChannelPrefix} onChange={(event) => { setLoketChannelPrefix(event.target.value); setDirty(true); }} /><small className="field-helper">Contoh hasil: loket-warga-bekiw.</small></div><div className="form-field"><label>Label claim</label><input value={loketClaimLabel} onChange={(event) => { setLoketClaimLabel(event.target.value); setDirty(true); }} /></div><div className="form-field"><label>Label close</label><input value={loketCloseLabel} onChange={(event) => { setLoketCloseLabel(event.target.value); setDirty(true); }} /></div></div><div className="form-field"><label>Pilihan dropdown Loket JSON</label><textarea rows={10} value={loketOptionsJson} onChange={(event) => { setLoketOptionsJson(event.target.value); setDirty(true); }} /><small className="field-helper">Isi array JSON. Field: id, emoji, label, description, channelPrefix, categoryName, categoryId opsional.</small></div><div className="boost-option-list"><div className="boost-option-row"><div><strong>Buat thread catatan</strong><small>Opsional. Channel loket sudah privat; thread hanya untuk catatan tambahan.</small></div><Toggle checked={loketAutoThread} onChange={(value) => { setLoketAutoThread(value); setDirty(true); }} label="Thread otomatis" /></div><div className="boost-option-row"><div><strong>Log transcript ringkas</strong><small>Saat ditutup, Pak RW kirim catatan ringkas ke channel log.</small></div><Toggle checked={loketTranscript} onChange={(value) => { setLoketTranscript(value); setDirty(true); }} label="Log aktif" /></div></div><div className="info-panel"><Info size={19} /><p>Panel Loket tampil seperti contoh: embed utama, daftar pilihan, lalu dropdown. Setiap pilihan bisa punya kategori sendiri, jadi channel loket tertata rapi per jenis.</p></div></Card> : null}
           {slug === "top-aktif" || slug === "papan-aktif" ? <Card><CardHeader title="Jadwal leaderboard" description="Scheduler core bot tidak diubah; dashboard hanya menyimpan setting yang didukung." /><div className="form-grid two-columns"><div className="form-field"><label>Jumlah peringkat</label><input type="number" min={3} max={25} value={topLimit} onChange={(event) => { setTopLimit(Number(event.target.value)); setDirty(true); }} /></div><div className="form-field"><label>Jam post WIB</label><input type="number" min={0} max={23} value={postHour} onChange={(event) => { setPostHour(Number(event.target.value)); setDirty(true); }} /><small className="field-helper">Gunakan 0 untuk pukul 00.00 WIB.</small></div></div></Card> : null}
+          {slug === "papan-aktif" ? <Card className="full-span-card"><CardHeader title="Leaderboard Image Background" description="Atur image leaderboard 1200×900. Data poin/level/MOTM tidak diubah; ini hanya tampilan background dan render image." action={<Button variant="secondary" icon={<RefreshCcw size={16} />} onClick={resetLeaderboardBackground}>Reset default</Button>} /><div className="settings-list"><div className="setting-row"><div><strong>Enable image leaderboard</strong><span>Kirim embed + attachment leaderboard.png. Jika gagal, embed teks tetap dikirim.</span></div><Toggle checked={leaderboardUseImage} onChange={(value) => { setLeaderboardUseImage(value); setDirty(true); }} label="Image leaderboard" /></div></div><div className="form-grid two-columns"><div className="form-field"><label>Background mode</label><select value={leaderboardBackgroundMode} onChange={(event) => { setLeaderboardBackgroundMode(event.target.value); setDirty(true); }}><option value="default">Default dark gradient</option><option value="url">URL gambar</option><option value="upload">Upload dashboard</option></select><small className="field-helper">Default selalu aman kalau URL/upload gagal.</small></div><div className="form-field"><label>Path upload aktif</label><input value={leaderboardBackgroundPath} onChange={(event) => { setLeaderboardBackgroundPath(event.target.value); setDirty(true); }} placeholder="assets/leaderboard/background.png" /><small className="field-helper">Dipakai saat mode Upload.</small></div><div className="form-field form-field-full"><label>Background URL</label><input value={leaderboardBackgroundUrl} onChange={(event) => { setLeaderboardBackgroundUrl(event.target.value); setDirty(true); }} placeholder="https://..." /><small className="field-helper">Dipakai saat mode URL. Kalau kosong/error, fallback ke gradient.</small></div><div className="form-field"><label>Overlay darkness: {leaderboardOverlay}</label><input type="range" min={0} max={0.9} step={0.05} value={leaderboardOverlay} onChange={(event) => { setLeaderboardOverlay(Number(event.target.value)); setDirty(true); }} /><small className="field-helper">Default 0.55 supaya teks putih tetap kebaca.</small></div><div className="form-field"><label>Darken: {leaderboardDarken}</label><input type="range" min={0} max={0.85} step={0.05} value={leaderboardDarken} onChange={(event) => { setLeaderboardDarken(Number(event.target.value)); setDirty(true); }} /><small className="field-helper">Tambahan gelap di atas background custom.</small></div><div className="form-field"><label>Blur: {leaderboardBlur}px</label><input type="range" min={0} max={18} step={1} value={leaderboardBlur} onChange={(event) => { setLeaderboardBlur(Number(event.target.value)); setDirty(true); }} /><small className="field-helper">Blur background saja, teks tetap tajam.</small></div></div><div className="ktp-upload-grid"><label className="ktp-upload-box"><FileImage size={20}/><strong>Upload background image</strong><span>PNG/JPG/WebP maksimal 8 MB</span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => event.target.files?.[0] && uploadLeaderboardBackground(event.target.files[0])} />{leaderboardUploading ? <em>Mengunggah...</em> : null}</label><div className="ktp-upload-box" role="button" tabIndex={0} onClick={() => window.open(`/api/dashboard/leaderboard/preview.png?ts=${Date.now()}`, "_blank")}><FileImage size={20}/><strong>Preview image leaderboard</strong><span>Buka preview PNG dari data leaderboard asli.</span><em>Klik untuk preview</em></div></div><div className="info-panel"><Info size={19} /><p>Render image wajib menampilkan title, subtitle, list ranking 1–10, avatar, nama, panah statis ➜, poin, podium top 3, dan footer Pak RW. GIF arrow tetap dipakai di embed teks, bukan di PNG.</p></div></Card> : null}
           {slug === "motm" ? <Card><CardHeader title="Threshold MOTM" description="Lifetime point tetap lanjut dan tidak ikut reset." /><div className="form-field"><label>Target poin siklus</label><input type="number" min={1000} value={motmThreshold} onChange={(event) => { setMotmThreshold(Number(event.target.value)); setDirty(true); }} /><small className="field-helper">Default DESA TULUS: 100.000 poin.</small></div></Card> : null}
           {slug === "boost-poin" ? <>
             <Card className="full-span-card boost-overview-card">
