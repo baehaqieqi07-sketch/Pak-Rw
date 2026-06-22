@@ -539,6 +539,14 @@ async function drawRankingList(ctx, guild, sorted) {
   }
 }
 
+// Compatibility safety: beberapa deployment lama masih memanggil drawKtpGrid.
+// Jangan hapus dulu. Fungsi ini diarahkan ke layout podium supaya tidak error
+// "drawKtpGrid is not defined" dan image tetap tampil.
+async function drawKtpGrid(ctx, guild, sorted) {
+  await drawPodium(ctx, guild, sorted);
+  await drawRankingList(ctx, guild, sorted);
+}
+
 function drawFooter(ctx, cfg) {
   fillRoundRect(ctx, 70, 845, 1060, 36, 14, "rgba(15, 23, 42, 0.66)", "rgba(148, 163, 184, 0.16)", 1);
   drawSafeText(ctx, cfg.footer || "Pak RW • Desa Tulus Leaderboard", 92, 864, { font: font(14, "800"), color: "#CBD5E1", maxWidth: 480 });
@@ -554,12 +562,13 @@ async function generateLeaderboardImage(guild, topUsers = [], leaderboardConfig 
   try {
     const hydratedUsers = await hydrateLeaderboardUsers(guild, topUsers);
     if (process.env.PAKRW_DEBUG_LEADERBOARD === "1") {
-      console.log(`[LEADERBOARD_IMAGE] render ktp total=${hydratedUsers.length} first=${hydratedUsers[0]?.displayName || "-"}`);
+      console.log(`[LEADERBOARD_IMAGE] render podium total=${hydratedUsers.length} first=${hydratedUsers[0]?.displayName || "-"}`);
     }
 
     await drawBackground(ctx, cfg);
     drawHeader(ctx, guild, cfg, hydratedUsers.length);
-    await drawKtpGrid(ctx, guild, hydratedUsers);
+    await drawPodium(ctx, guild, hydratedUsers);
+    await drawRankingList(ctx, guild, hydratedUsers);
     drawFooter(ctx, cfg);
 
     return canvas.toBuffer("image/png");
@@ -571,7 +580,7 @@ async function generateLeaderboardImage(guild, topUsers = [], leaderboardConfig 
     await drawBackground(fallbackCtx, cfg);
     drawHeader(fallbackCtx, guild, cfg, 0);
     fillRoundRect(fallbackCtx, 80, 180, 1040, 420, 28, "rgba(30, 41, 59, 0.9)", "rgba(148, 163, 184, 0.22)", 2);
-    drawSafeText(fallbackCtx, "KTP LEADERBOARD SEDANG DIPROSES", 120, 260, { font: font(38, "900"), color: "#F8FAFC", maxWidth: 900 });
+    drawSafeText(fallbackCtx, "PODIUM LEADERBOARD SEDANG DIPROSES", 120, 260, { font: font(38, "900"), color: "#F8FAFC", maxWidth: 900 });
     drawSafeText(fallbackCtx, "Data warga aman. Gambar akan dibuat ulang otomatis.", 120, 320, { font: font(24, "700"), color: "#CBD5E1", maxWidth: 900 });
     drawFooter(fallbackCtx, cfg);
     return fallbackCanvas.toBuffer("image/png");
@@ -595,5 +604,6 @@ module.exports = {
   drawCircleAvatar,
   drawCoverImage,
   drawBackground,
+  drawKtpGrid,
   safeLoadImage
 };
