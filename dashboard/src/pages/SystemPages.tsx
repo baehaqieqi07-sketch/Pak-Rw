@@ -17,7 +17,7 @@ export function ActivityPage() {
 }
 
 const channelBindings = [
-  ["welcome.channelId", "Welcome", "Channel sambutan warga baru"], ["rulesChannelId", "Aturan Desa", "Channel aturan"], ["chatWargaChannelId", "Chat Warga", "Channel percakapan utama"], ["ticketChannelId", "Ticket", "Channel bantuan"], ["loket.panelChannelId", "Loket Panel", "Channel panel loket bantuan"], ["loket.categoryId", "Kategori Loket", "Kategori ruang loket"], ["loket.logChannelId", "Log Loket", "Channel log loket"], ["aiChannelId", "AI Pak RW", "Channel tanya Pak RW"], ["curhatChannelId", "Curhat", "Channel curhat warga"], ["anonymousCurhatChannelId", "Curhat Anonim", "Channel curhat anonim"], ["suggestionChannelId", "Saran", "Channel kotak saran"], ["levelChannelId", "Level", "Channel level warga"], ["cekPoinChannelId", "Cek Poin", "Channel cek poin"], ["topActive.channelId", "Top Aktif", "Channel leaderboard bulanan"], ["leaderboardAktif.channelId", "Papan Aktif", "Channel leaderboard lifetime"], ["mabar.channelId", "Cari Mabar", "Channel panel mabar"], ["ktpSystem.channelId", "KTP Warga", "Channel privat pembuatan KTP"], ["afkVoice.channelId", "AFK Voice 24/7", "Voice channel tempat Pak RW berjaga"], ["boostPoin.channelId", "Boost Poin", "Channel event boost poin"]
+  ["welcome.channelId", "Welcome", "Channel sambutan warga baru"], ["rulesChannelId", "Aturan Desa", "Channel aturan"], ["chatWargaChannelId", "Chat Warga", "Channel percakapan utama"], ["ticketChannelId", "Ticket", "Channel bantuan"], ["aiChannelId", "AI Pak RW", "Channel tanya Pak RW"], ["curhatChannelId", "Curhat", "Channel curhat warga"], ["anonymousCurhatChannelId", "Curhat Anonim", "Channel curhat anonim"], ["suggestionChannelId", "Saran", "Channel kotak saran"], ["levelChannelId", "Level", "Channel level warga"], ["cekPoinChannelId", "Cek Poin", "Channel cek poin"], ["topActive.channelId", "Top Aktif", "Channel leaderboard bulanan"], ["leaderboardAktif.channelId", "Papan Aktif", "Channel leaderboard lifetime"], ["mabar.channelId", "Cari Mabar", "Channel panel mabar"], ["ktpSystem.channelId", "KTP Warga", "Channel privat pembuatan KTP"], ["afkVoice.channelId", "AFK Voice 24/7", "Voice channel tempat Pak RW berjaga"], ["boostPoin.channelId", "Boost Poin", "Channel event boost poin"]
 ] as const;
 
 const roleBindings = [
@@ -77,7 +77,7 @@ export function BackupPage() {
 
 export function SettingsPage() {
   const { data, refresh, notify } = useDashboard();
-  const embedEntries = useMemo(() => Object.entries(data.embeds || {}).filter(([key]) => key !== "dashboard"), [data.embeds]);
+  const embedEntries = useMemo(() => Object.entries(data.embeds || {}).filter(([key]) => key !== "dashboard" && !key.toLowerCase().includes("loket")), [data.embeds]);
   const buildColorMap = () => Object.fromEntries(embedEntries.map(([key, value]: any) => [key, String((value as any)?.color || data.config.embedColor || "#7DBD77")]));
   const initial = useMemo(() => ({
     serverName: data.config.serverName || "DESA TULUS",

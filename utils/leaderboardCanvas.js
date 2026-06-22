@@ -4,14 +4,12 @@ const { createCanvas, loadImage } = require("@napi-rs/canvas");
 
 const WIDTH = 1200;
 const HEIGHT = 900;
-const FALLBACK_AVATAR = "https://cdn.discordapp.com/embed/avatars/0.png";
 const FALLBACK_ARROW = "➜";
 const PROJECT_ROOT = path.resolve(__dirname, "..");
 
 function formatPoints(value) {
   const number = Number(value || 0);
   if (!Number.isFinite(number)) return "0";
-
   return new Intl.NumberFormat("id-ID", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2
@@ -24,17 +22,19 @@ function getPointValue(item) {
   return Number.isFinite(number) ? number : 0;
 }
 
-function getUserName(item) {
-  return String(item?.displayName || item?.globalName || item?.username || item?.name || item?.tag || "Warga Desa").replace(/\s+/g, " ").trim() || "Warga Desa";
-}
-
 function getUserId(item) {
   return String(item?.userId || item?.id || item?.memberId || item?.discordId || item?.discordID || item?.user_id || "").trim();
 }
 
+function getUserName(item) {
+  return String(item?.displayName || item?.globalName || item?.username || item?.name || item?.tag || "Warga Desa")
+    .replace(/\s+/g, " ")
+    .trim() || "Warga Desa";
+}
+
 function getAvatarURL(guild, item) {
   const direct = item?.avatarURL || item?.avatarUrl || item?.avatar || item?.displayAvatarURL;
-  if (direct && /^https?:\/\//i.test(String(direct))) return direct;
+  if (direct && /^https?:\/\//i.test(String(direct))) return String(direct);
 
   const userId = getUserId(item);
   try {
@@ -43,7 +43,7 @@ function getAvatarURL(guild, item) {
     const url = cachedMember?.displayAvatarURL?.({ extension: "png", size: 256 }) || cachedUser?.displayAvatarURL?.({ extension: "png", size: 256 });
     if (url) return url;
   } catch {
-    // fallback below
+    // fallback handled by drawCircleAvatar
   }
 
   return null;
@@ -70,16 +70,66 @@ function normalizeLeaderboardUsers(topUsers = []) {
     .slice(0, 10);
 }
 
+async function hydrateLeaderboardUsers(guild, topUsers = []) {
+  const normalizedUsers = normalizeLeaderboardUsers(topUsers);
+  console.log("[LEADERBOARD_IMAGE] normalized:", normalizedUsers);
+  console.log("[LEADERBOARD_IMAGE] normalized total:", normalizedUsers.length);
+  console.log("[LEADERBOARD_IMAGE] normalized first:", normalizedUsers[0] || null);
+
+  const hydrated = [];
+  for (const item of normalizedUsers) {
+    let displayName = item.displayName || "Warga Desa";
+    let username = item.username || displayName;
+    let avatarURL = item.avatarURL || null;
+
+    if (item.userId && guild?.members?.fetch) {
+      const member = await guild.members.fetch(item.userId).catch(() => null);
+      if (member) {
+        displayName = member.displayName || member.user?.globalName || member.user?.username || displayName;
+        username = member.user?.username || username || displayName;
+        avatarURL = member.user?.displayAvatarURL?.({ extension: "png", size: 256 }) || member.displayAvatarURL?.({ extension: "png", size: 256 }) || avatarURL;
+      }
+    }
+
+    hydrated.push({ ...item, displayName, username, avatarURL });
+  }
+
+  console.log("[LEADERBOARD_IMAGE] hydrated total:", hydrated.length);
+  console.log("[LEADERBOARD_IMAGE] hydrated first:", hydrated[0] || null);
+  return hydrated;
+}
+
 function fitText(ctx, text, maxWidth) {
   const clean = String(text || "Warga Desa").replace(/\s+/g, " ").trim() || "Warga Desa";
-  if (ctx.measureText(clean).width <= maxWidth) return clean;
+  if (!maxWidth || ctx.measureText(clean).width <= maxWidth) return clean;
 
   let output = clean;
   while (output.length > 0 && ctx.measureText(`${output}...`).width > maxWidth) {
     output = output.slice(0, -1);
   }
-
   return output.length > 0 ? `${output}...` : "...";
+}
+
+function drawSafeText(ctx, text, x, y, options = {}) {
+  const {
+    font = "bold 18px Arial, Sans",
+    color = "#F8FAFC",
+    align = "left",
+    baseline = "middle",
+    maxWidth = null
+  } = options;
+
+  const safeText = String(text ?? "").trim() || "—";
+
+  ctx.save();
+  ctx.globalAlpha = 1;
+  ctx.font = font;
+  ctx.fillStyle = color;
+  ctx.textAlign = align;
+  ctx.textBaseline = baseline;
+  const output = maxWidth ? fitText(ctx, safeText, maxWidth) : safeText;
+  ctx.fillText(output, x, y);
+  ctx.restore();
 }
 
 function drawRoundRect(ctx, x, y, w, h, r) {
@@ -91,64 +141,6 @@ function drawRoundRect(ctx, x, y, w, h, r) {
   ctx.arcTo(x, y + h, x, y, radius);
   ctx.arcTo(x, y, x + w, y, radius);
   ctx.closePath();
-}
-
-function drawStaticArrow(ctx, x, y, color = "#38BDF8") {
-  ctx.save();
-  ctx.globalAlpha = 1;
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineWidth = 3;
-  ctx.lineCap = "round";
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(x + 22, y);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(x + 22, y);
-  ctx.lineTo(x + 14, y - 7);
-  ctx.lineTo(x + 14, y + 7);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-}
-
-function drawMedalBadge(ctx, rank, cx, cy, color) {
-  ctx.save();
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc(cx, cy, 20, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = rank === 1 ? "#0F172A" : "#111827";
-  ctx.font = "bold 19px Arial, Sans";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(String(rank), cx, cy + 1);
-  ctx.textAlign = "left";
-  ctx.textBaseline = "alphabetic";
-  ctx.restore();
-}
-
-function drawTrophyIcon(ctx, x, y) {
-  ctx.save();
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = "#FACC15";
-  drawRoundRect(ctx, x + 10, y + 8, 34, 26, 8);
-  ctx.fill();
-  ctx.strokeStyle = "#FACC15";
-  ctx.lineWidth = 5;
-  ctx.beginPath();
-  ctx.arc(x + 10, y + 20, 10, Math.PI * 0.75, Math.PI * 1.35);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(x + 44, y + 20, 10, Math.PI * 1.65, Math.PI * 0.25);
-  ctx.stroke();
-  ctx.fillStyle = "#F59E0B";
-  ctx.fillRect(x + 24, y + 34, 6, 17);
-  drawRoundRect(ctx, x + 13, y + 50, 28, 7, 4);
-  ctx.fill();
-  ctx.restore();
 }
 
 function safeLocalAssetPath(input = "") {
@@ -193,22 +185,22 @@ async function drawCircleAvatar(ctx, image, x, y, size, borderColor = "rgba(248,
     fallbackGradient.addColorStop(1, "#0F172A");
     ctx.fillStyle = fallbackGradient;
     ctx.fillRect(x, y, size, size);
-    ctx.fillStyle = "#CBD5E1";
-    ctx.font = `bold ${Math.max(16, Math.floor(size * 0.42))}px Arial, Sans`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(String(initial || "W").trim().slice(0, 1).toUpperCase(), x + size / 2, y + size / 2 + 1);
-    ctx.textAlign = "left";
-    ctx.textBaseline = "alphabetic";
+    drawSafeText(ctx, String(initial || "W").slice(0, 1).toUpperCase(), x + size / 2, y + size / 2 + 1, {
+      font: `bold ${Math.max(16, Math.floor(size * 0.42))}px Arial, Sans`,
+      color: "#CBD5E1",
+      align: "center"
+    });
   }
 
   ctx.restore();
+  ctx.save();
   ctx.globalAlpha = 1;
   ctx.strokeStyle = borderColor;
   ctx.lineWidth = borderWidth;
   ctx.beginPath();
   ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
   ctx.stroke();
+  ctx.restore();
 }
 
 function drawCoverImage(ctx, img, x, y, w, h) {
@@ -244,11 +236,15 @@ function clampNumber(value, fallback, min, max) {
 function normalizeLeaderboardConfig(config = {}) {
   const source = config && typeof config === "object" ? config : {};
   const backgroundMode = ["default", "url", "upload"].includes(String(source.backgroundMode || "")) ? String(source.backgroundMode) : "default";
+  const backgroundUploadPath = String(source.backgroundUploadPath || source.backgroundPath || "assets/leaderboard/background.png").trim();
   return {
+    enabled: source.enabled !== false,
     useImage: source.useImage !== false,
+    useQuoteFormat: source.useQuoteFormat !== false,
     backgroundMode,
     backgroundUrl: String(source.backgroundUrl || "").trim(),
-    backgroundPath: String(source.backgroundPath || "assets/leaderboard/background.png").trim(),
+    backgroundPath: backgroundUploadPath,
+    backgroundUploadPath,
     backgroundOverlay: clampNumber(source.backgroundOverlay, 0.55, 0, 0.9),
     backgroundBlur: clampNumber(source.backgroundBlur, 0, 0, 18),
     backgroundDarken: clampNumber(source.backgroundDarken, 0.45, 0, 0.85),
@@ -256,7 +252,10 @@ function normalizeLeaderboardConfig(config = {}) {
     imageTheme: String(source.imageTheme || "desa_tulus_dark").trim() || "desa_tulus_dark",
     color: String(source.color || "#FACC15").trim() || "#FACC15",
     fallbackArrow: String(source.fallbackArrow || FALLBACK_ARROW).trim() || FALLBACK_ARROW,
-    footer: String(source.footer || "Pak RW • Desa Tulus Leaderboard").trim() || "Pak RW • Desa Tulus Leaderboard"
+    footer: String(source.footer || "Pak RW • Desa Tulus Leaderboard").trim() || "Pak RW • Desa Tulus Leaderboard",
+    title: String(source.title || "🏆 TOP AKTIF WARGA SEPANJANG WAKTU").trim() || "🏆 TOP AKTIF WARGA SEPANJANG WAKTU",
+    updateTime: String(source.updateTime || "00:00").trim() || "00:00",
+    timezone: String(source.timezone || "Asia/Jakarta").trim() || "Asia/Jakarta"
   };
 }
 
@@ -270,7 +269,7 @@ async function drawBackground(ctx, config = {}) {
 
   let customSource = "";
   if (cfg.backgroundMode === "url" && cfg.backgroundUrl) customSource = cfg.backgroundUrl;
-  if (cfg.backgroundMode === "upload") customSource = cfg.backgroundPath || "assets/leaderboard/background.png";
+  if (cfg.backgroundMode === "upload") customSource = cfg.backgroundUploadPath || cfg.backgroundPath || "assets/leaderboard/background.png";
 
   const customBackground = customSource ? await safeLoadImage(customSource) : null;
   if (customBackground) {
@@ -304,32 +303,100 @@ async function drawBackground(ctx, config = {}) {
     ctx.restore();
   }
 
+  ctx.save();
   ctx.globalAlpha = 1;
   const overlay = Math.max(cfg.backgroundOverlay, cfg.backgroundDarken);
   ctx.fillStyle = `rgba(15, 23, 42, ${overlay})`;
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
-  ctx.fillStyle = "#F8FAFC";
+  ctx.restore();
 }
 
-function drawHeader(ctx, guild) {
+function drawTrophyIcon(ctx, x, y) {
+  ctx.save();
   ctx.globalAlpha = 1;
-  drawTrophyIcon(ctx, 60, 43);
-  ctx.fillStyle = "#F8FAFC";
-  ctx.font = "bold 46px Arial, Sans";
-  ctx.fillText("TOP AKTIF WARGA", 125, 82);
-
-  ctx.fillStyle = "#CBD5E1";
-  ctx.font = "22px Arial, Sans";
-  const serverName = guild?.name || "Desa Tulus";
-  ctx.fillText(`${serverName} Leaderboard • Update 00.00 WIB`, 62, 116);
+  ctx.fillStyle = "#FACC15";
+  drawRoundRect(ctx, x + 10, y + 8, 34, 26, 8);
+  ctx.fill();
+  ctx.strokeStyle = "#FACC15";
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.arc(x + 10, y + 20, 10, Math.PI * 0.75, Math.PI * 1.35);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(x + 44, y + 20, 10, Math.PI * 1.65, Math.PI * 0.25);
+  ctx.stroke();
+  ctx.fillStyle = "#F59E0B";
+  ctx.fillRect(x + 24, y + 34, 6, 17);
+  drawRoundRect(ctx, x + 13, y + 50, 28, 7, 4);
+  ctx.fill();
+  ctx.restore();
 }
 
-async function drawList(ctx, guild, sorted, cfg) {
-  const x = 60;
-  const y = 145;
-  const w = 640;
-  const h = 690;
+function drawStaticArrow(ctx, x, y, color = "#38BDF8") {
+  ctx.save();
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 4;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + 25, y);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x + 25, y);
+  ctx.lineTo(x + 15, y - 8);
+  ctx.lineTo(x + 15, y + 8);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
 
+function drawMedalBadge(ctx, rank, cx, cy, color) {
+  ctx.save();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 20, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  drawSafeText(ctx, String(rank), cx, cy + 1, {
+    font: "bold 19px Arial, Sans",
+    color: rank === 1 ? "#0F172A" : "#111827",
+    align: "center"
+  });
+}
+
+function drawHeader(ctx, guild, cfg) {
+  drawTrophyIcon(ctx, 60, 43);
+  drawSafeText(ctx, "TOP AKTIF WARGA", 125, 82, {
+    font: "bold 46px Arial, Sans",
+    color: "#F8FAFC"
+  });
+
+  const serverName = guild?.name || "Desa Tulus";
+  const updateTime = String(cfg.updateTime || "00:00").replace(":", ".");
+  drawSafeText(ctx, `${serverName} Leaderboard • Update ${updateTime} WIB`, 62, 116, {
+    font: "22px Arial, Sans",
+    color: "#CBD5E1"
+  });
+}
+
+async function drawList(ctx, guild, sorted) {
+  const x = 60;
+  const y = 150;
+  const w = 660;
+  const h = 680;
+  const rowX = 90;
+  const rowStartY = 230;
+  const rowW = 600;
+  const rowH = 52;
+  const gap = 10;
+  const rankColors = ["#FACC15", "#CBD5E1", "#F59E0B"];
+
+  ctx.save();
   ctx.globalAlpha = 1;
   ctx.fillStyle = "rgba(30, 41, 59, 0.88)";
   drawRoundRect(ctx, x, y, w, h, 28);
@@ -338,80 +405,70 @@ async function drawList(ctx, guild, sorted, cfg) {
   ctx.lineWidth = 2;
   drawRoundRect(ctx, x, y, w, h, 28);
   ctx.stroke();
+  ctx.restore();
 
-  ctx.fillStyle = "#F8FAFC";
-  ctx.font = "bold 28px Arial, Sans";
-  ctx.fillText("🏆 Peringkat Warga", x + 30, y + 48);
-
-  const rowX = 90;
-  const rowStartY = 220;
-  const rowW = 580;
-  const rowH = 56;
-  const gap = 5;
-  const rankColors = ["#FACC15", "#CBD5E1", "#F59E0B"];
-
-  if (!sorted.length) {
-    for (let i = 0; i < 10; i += 1) {
-      const rowY = rowStartY + i * (rowH + gap);
-      ctx.fillStyle = "rgba(51, 65, 85, 0.55)";
-      drawRoundRect(ctx, rowX, rowY, rowW, rowH, 16);
-      ctx.fill();
-      ctx.fillStyle = "#CBD5E1";
-      ctx.font = "bold 18px Arial, Sans";
-      ctx.fillText(`#${i + 1}`, rowX + 14, rowY + 35);
-      ctx.font = "18px Arial, Sans";
-      ctx.fillText("Belum ada data warga", rowX + 112, rowY + 35);
-    }
-    return;
-  }
+  drawSafeText(ctx, "PERINGKAT WARGA", x + 30, y + 46, {
+    font: "bold 28px Arial, Sans",
+    color: "#F8FAFC"
+  });
 
   for (let i = 0; i < 10; i += 1) {
     const item = sorted[i];
     const rowY = rowStartY + i * (rowH + gap);
 
+    ctx.save();
     ctx.globalAlpha = 1;
     ctx.fillStyle = "rgba(51, 65, 85, 0.55)";
     drawRoundRect(ctx, rowX, rowY, rowW, rowH, 16);
     ctx.fill();
+    ctx.strokeStyle = "rgba(148, 163, 184, 0.14)";
+    ctx.lineWidth = 1;
+    drawRoundRect(ctx, rowX, rowY, rowW, rowH, 16);
+    ctx.stroke();
+    ctx.restore();
+
+    const rankColor = rankColors[i] || "#38BDF8";
+    drawSafeText(ctx, `#${i + 1}`, rowX + 15, rowY + 27, {
+      font: "bold 18px Arial, Sans",
+      color: rankColor
+    });
 
     if (!item) {
-      ctx.fillStyle = "#CBD5E1";
-      ctx.font = "bold 18px Arial, Sans";
-      ctx.fillText(`#${i + 1}`, rowX + 14, rowY + 35);
-      ctx.font = "18px Arial, Sans";
-      ctx.fillText("Belum ada", rowX + 112, rowY + 35);
+      await drawCircleAvatar(ctx, null, rowX + 62, rowY + 7, 38, "rgba(248, 250, 252, 0.24)", 3, "W");
+      drawSafeText(ctx, "Belum ada", rowX + 112, rowY + 27, { font: "bold 18px Arial, Sans", color: "#CBD5E1", maxWidth: 250 });
+      drawStaticArrow(ctx, rowX + 370, rowY + 27, "#38BDF8");
+      drawSafeText(ctx, "0 poin", rowX + rowW - 20, rowY + 27, { font: "bold 17px Arial, Sans", color: "#F8FAFC", align: "right" });
       continue;
     }
 
-    ctx.fillStyle = rankColors[i] || "#38BDF8";
-    ctx.font = "bold 18px Arial, Sans";
-    ctx.fillText(`#${i + 1}`, rowX + 14, rowY + 35);
-
     const name = getUserName(item);
     const avatar = await loadAvatar(guild, item);
-    await drawCircleAvatar(ctx, avatar, rowX + 60, rowY + 9, 38, rankColors[i] || "rgba(248, 250, 252, 0.38)", i < 3 ? 4 : 3, name);
+    await drawCircleAvatar(ctx, avatar, rowX + 62, rowY + 7, 38, rankColor, i < 3 ? 4 : 3, name);
 
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = "#F8FAFC";
-    ctx.font = "bold 18px Arial, Sans";
-    ctx.fillText(fitText(ctx, name, 250), rowX + 112, rowY + 35);
+    drawSafeText(ctx, name, rowX + 112, rowY + 27, {
+      font: "bold 18px Arial, Sans",
+      color: "#F8FAFC",
+      maxWidth: 250
+    });
 
-    drawStaticArrow(ctx, rowX + 365, rowY + 31, "#38BDF8");
+    drawStaticArrow(ctx, rowX + 370, rowY + 27, "#38BDF8");
 
-    const pointsText = `${formatPoints(getPointValue(item))} poin`;
-    ctx.fillStyle = "#F8FAFC";
-    ctx.font = "bold 17px Arial, Sans";
-    const pointsWidth = ctx.measureText(pointsText).width;
-    ctx.fillText(pointsText, rowX + rowW - pointsWidth - 18, rowY + 35);
+    drawSafeText(ctx, `${formatPoints(getPointValue(item))} poin`, rowX + rowW - 20, rowY + 27, {
+      font: "bold 17px Arial, Sans",
+      color: "#F8FAFC",
+      align: "right",
+      maxWidth: 190
+    });
   }
 }
 
 async function drawPodium(ctx, guild, sorted) {
-  const areaX = 735;
-  const areaY = 145;
-  const areaW = 405;
-  const areaH = 690;
+  const areaX = 755;
+  const areaY = 150;
+  const areaW = 385;
+  const areaH = 680;
 
+  ctx.save();
   ctx.globalAlpha = 1;
   ctx.fillStyle = "rgba(30, 41, 59, 0.88)";
   drawRoundRect(ctx, areaX, areaY, areaW, areaH, 30);
@@ -420,101 +477,104 @@ async function drawPodium(ctx, guild, sorted) {
   ctx.lineWidth = 2;
   drawRoundRect(ctx, areaX, areaY, areaW, areaH, 30);
   ctx.stroke();
+  ctx.restore();
 
-  ctx.fillStyle = "#F8FAFC";
-  ctx.font = "bold 30px Arial, Sans";
-  ctx.fillText("Podium Top 3", areaX + 34, areaY + 52);
+  drawSafeText(ctx, "Podium Top 3", areaX + 34, areaY + 50, {
+    font: "bold 30px Arial, Sans",
+    color: "#F8FAFC"
+  });
 
   async function drawPodiumUser(item, rank, cx, avatarY, avatarSize, color) {
-    ctx.textAlign = "center";
-    const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : "🥉";
+    const cardW = rank === 1 ? 250 : 165;
+    const cardH = rank === 1 ? 230 : 202;
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = rank === 1 ? "rgba(250, 204, 21, 0.09)" : "rgba(51, 65, 85, 0.42)";
+    drawRoundRect(ctx, cx - cardW / 2, avatarY - 42, cardW, cardH, 24);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(148, 163, 184, 0.18)";
+    ctx.lineWidth = 1;
+    drawRoundRect(ctx, cx - cardW / 2, avatarY - 42, cardW, cardH, 24);
+    ctx.stroke();
+    ctx.restore();
 
-    if (!item) {
-      ctx.fillStyle = "rgba(51, 65, 85, 0.55)";
-      drawRoundRect(ctx, cx - avatarSize / 2 - 16, avatarY - 22, avatarSize + 32, avatarSize + 108, 24);
-      ctx.fill();
-      drawMedalBadge(ctx, rank, cx, avatarY - 24, color);
-      await drawCircleAvatar(ctx, null, cx - avatarSize / 2, avatarY, avatarSize, color, rank === 1 ? 5 : 4, "W");
-      ctx.fillStyle = "#CBD5E1";
-      ctx.font = "bold 18px Arial, Sans";
-      ctx.fillText("Belum ada", cx, avatarY + avatarSize + 32);
-      ctx.fillText("0 poin", cx, avatarY + avatarSize + 60);
-      ctx.textAlign = "left";
-      return;
-    }
+    drawMedalBadge(ctx, rank, cx, avatarY - 22, color);
 
-    const name = getUserName(item);
-    const avatar = await loadAvatar(guild, item);
-
-    drawMedalBadge(ctx, rank, cx, avatarY - 24, color);
-
+    const name = item ? getUserName(item) : "Belum ada";
+    const avatar = item ? await loadAvatar(guild, item) : null;
     await drawCircleAvatar(ctx, avatar, cx - avatarSize / 2, avatarY, avatarSize, color, rank === 1 ? 5 : 4, name);
 
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = "#F8FAFC";
-    ctx.font = rank === 1 ? "bold 23px Arial, Sans" : "bold 20px Arial, Sans";
-    ctx.fillText(fitText(ctx, name, rank === 1 ? 210 : 154), cx, avatarY + avatarSize + 34);
+    drawSafeText(ctx, name, cx, avatarY + avatarSize + 32, {
+      font: rank === 1 ? "bold 23px Arial, Sans" : "bold 20px Arial, Sans",
+      color: "#F8FAFC",
+      align: "center",
+      maxWidth: rank === 1 ? 215 : 155
+    });
 
-    ctx.fillStyle = color;
-    ctx.font = rank === 1 ? "bold 21px Arial, Sans" : "bold 18px Arial, Sans";
-    ctx.fillText(`${formatPoints(getPointValue(item))} poin`, cx, avatarY + avatarSize + (rank === 1 ? 52 : 63));
-    ctx.textAlign = "left";
+    drawSafeText(ctx, `${formatPoints(item ? getPointValue(item) : 0)} poin`, cx, avatarY + avatarSize + (rank === 1 ? 57 : 60), {
+      font: rank === 1 ? "bold 21px Arial, Sans" : "bold 18px Arial, Sans",
+      color,
+      align: "center",
+      maxWidth: rank === 1 ? 220 : 160
+    });
   }
 
-  await drawPodiumUser(sorted[0], 1, 935, 245, 135, "#FACC15");
-  await drawPodiumUser(sorted[1], 2, 850, 475, 105, "#CBD5E1");
-  await drawPodiumUser(sorted[2], 3, 1020, 475, 105, "#F59E0B");
+  await drawPodiumUser(sorted[0], 1, 948, 245, 135, "#FACC15");
+  await drawPodiumUser(sorted[1], 2, 860, 485, 105, "#CBD5E1");
+  await drawPodiumUser(sorted[2], 3, 1035, 485, 105, "#F59E0B");
 
+  ctx.save();
+  ctx.globalAlpha = 1;
   ctx.fillStyle = "rgba(56, 189, 248, 0.18)";
-  drawRoundRect(ctx, areaX + 36, areaY + 608, 333, 50, 16);
+  drawRoundRect(ctx, areaX + 36, areaY + 602, 313, 50, 16);
   ctx.fill();
+  ctx.restore();
 
-  ctx.fillStyle = "#CBD5E1";
-  ctx.font = "18px Arial, Sans";
-  ctx.fillText("Pak RW • Desa Tulus Leaderboard", areaX + 70, areaY + 640);
+  drawSafeText(ctx, "Pak RW • Desa Tulus Leaderboard", areaX + areaW / 2, areaY + 628, {
+    font: "18px Arial, Sans",
+    color: "#CBD5E1",
+    align: "center",
+    maxWidth: 290
+  });
 }
 
 async function generateLeaderboardImage(guild, topUsers = [], leaderboardConfig = {}) {
-  console.log("[LEADERBOARD_IMAGE] raw top users:", topUsers);
-  console.log("[LEADERBOARD_IMAGE] total users:", Array.isArray(topUsers) ? topUsers.length : "not array");
-  console.log("[LEADERBOARD_IMAGE] first user:", Array.isArray(topUsers) ? topUsers[0] : null);
+  console.log("[LEADERBOARD_IMAGE] raw topUsers:", topUsers);
+  console.log("[LEADERBOARD_IMAGE] is array:", Array.isArray(topUsers));
+  console.log("[LEADERBOARD_IMAGE] total:", Array.isArray(topUsers) ? topUsers.length : 0);
+  console.log("[LEADERBOARD_IMAGE] first:", Array.isArray(topUsers) ? topUsers[0] : null);
 
   const cfg = normalizeLeaderboardConfig(leaderboardConfig);
+  const canvas = createCanvas(WIDTH, HEIGHT);
+  const ctx = canvas.getContext("2d");
+
   try {
-    const canvas = createCanvas(WIDTH, HEIGHT);
-    const ctx = canvas.getContext("2d");
-
     await drawBackground(ctx, cfg);
-    drawHeader(ctx, guild);
+    drawHeader(ctx, guild, cfg);
 
-    const sorted = normalizeLeaderboardUsers(topUsers);
+    const hydratedUsers = await hydrateLeaderboardUsers(guild, topUsers);
 
-    await drawList(ctx, guild, sorted, cfg);
-    await drawPodium(ctx, guild, sorted);
+    await drawList(ctx, guild, hydratedUsers, cfg);
+    await drawPodium(ctx, guild, hydratedUsers);
 
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = "rgba(203, 213, 225, 0.86)";
-    ctx.font = "18px Arial, Sans";
-    ctx.fillText(cfg.footer || "Pak RW • Desa Tulus Leaderboard", 60, 870);
+    drawSafeText(ctx, cfg.footer || "Pak RW • Desa Tulus Leaderboard", 60, 870, {
+      font: "18px Arial, Sans",
+      color: "rgba(203, 213, 225, 0.86)",
+      maxWidth: 480
+    });
 
     return canvas.toBuffer("image/png");
   } catch (error) {
     console.error("[LEADERBOARD_CANVAS_ERROR]", error?.message || error);
 
-    const canvas = createCanvas(WIDTH, HEIGHT);
-    const ctx = canvas.getContext("2d");
-    await drawBackground(ctx, cfg);
-
-    ctx.fillStyle = "#F8FAFC";
-    ctx.font = "bold 48px Arial, Sans";
-    ctx.fillText("🏆 TOP AKTIF WARGA", 60, 90);
-
-    ctx.fillStyle = "#CBD5E1";
-    ctx.font = "26px Arial, Sans";
-    ctx.fillText("Leaderboard sedang diproses ulang.", 60, 170);
-    ctx.fillText("Coba lagi sebentar ya.", 60, 210);
-
-    return canvas.toBuffer("image/png");
+    const fallbackCanvas = createCanvas(WIDTH, HEIGHT);
+    const fallbackCtx = fallbackCanvas.getContext("2d");
+    await drawBackground(fallbackCtx, cfg);
+    drawSafeText(fallbackCtx, "🏆 TOP AKTIF WARGA", 60, 90, { font: "bold 48px Arial, Sans", color: "#F8FAFC" });
+    drawSafeText(fallbackCtx, "Leaderboard sedang diproses ulang.", 60, 170, { font: "26px Arial, Sans", color: "#CBD5E1" });
+    drawSafeText(fallbackCtx, "Coba lagi sebentar ya.", 60, 210, { font: "26px Arial, Sans", color: "#CBD5E1" });
+    drawSafeText(fallbackCtx, cfg.footer || "Pak RW • Desa Tulus Leaderboard", 60, 870, { font: "18px Arial, Sans", color: "#CBD5E1" });
+    return fallbackCanvas.toBuffer("image/png");
   }
 }
 
@@ -524,11 +584,13 @@ module.exports = {
   FALLBACK_ARROW,
   generateLeaderboardImage,
   normalizeLeaderboardUsers,
+  hydrateLeaderboardUsers,
   normalizeLeaderboardConfig,
   formatPoints,
   getPointValue,
   getUserName,
   fitText,
+  drawSafeText,
   drawRoundRect,
   drawCircleAvatar,
   drawCoverImage,

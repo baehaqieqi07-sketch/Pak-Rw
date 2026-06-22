@@ -39,7 +39,8 @@
     "thumbnailMode": "user",
     "channelId": "1504495053224284400",
     "mode": "text",
-    "useEmbed": false
+    "useEmbed": false,
+    "delayMs": 5500
   },
   "ai": {
     "cooldownMs": 12000,
@@ -503,7 +504,8 @@
       "previewMustMatchDiscord": true,
       "imageUrl": "",
       "mode": "text",
-      "useEmbed": false
+      "useEmbed": false,
+      "delayMs": 5500
     },
     "papanAktif": {
       "color": "#7DBD77",
@@ -1023,7 +1025,8 @@
     "logsHealth": true,
     "backupCenter": true,
     "serverIdExporter": true,
-    "ktpWarga": true
+    "ktpWarga": true,
+    "loket": false
   },
   "dashboardRoleDisplay": {
     "enabled": true,
@@ -1175,7 +1178,7 @@
       "Discord Manager"
     ]
   },
-  "version": "10.10.86",
+  "version": "10.10.113",
   "bigBot": {
     "releaseName": "Pak RW KTP Warga dan AFK Voice Stabil"
   },
@@ -1461,6 +1464,7 @@
     "title": "🏆 TOP AKTIF WARGA SEPANJANG WAKTU",
     "footer": "Pak RW • Desa Tulus Leaderboard",
     "channelId": "1516167288066281672",
-    "messageId": ""
+    "messageId": "",
+    "backgroundUploadPath": "assets/leaderboard/background.png"
   }
 }

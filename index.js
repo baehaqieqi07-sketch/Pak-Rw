@@ -43,7 +43,7 @@ const {
   getLevelRoleBaseName
 } = require("./level/levelRoleTiers");
 
-const { generateLeaderboardImage, normalizeLeaderboardUsers } = require("./utils/leaderboardCanvas");
+const { generateLeaderboardImage, normalizeLeaderboardUsers, hydrateLeaderboardUsers } = require("./utils/leaderboardCanvas");
 
 const ARROW_EMOJI = "<a:Animated_Arrow_Bluelite:1512751559140839576>";
 const FALLBACK_ARROW = "➜";
@@ -357,6 +357,14 @@ const DESA_TULUS_WELCOME_MESSAGE = [
   "{memberTulusRole}"
 ].join("\n");
 const DESA_TULUS_WELCOME_TITLE = "";
+const DESA_TULUS_WELCOME_DELAY_MS = 5500;
+const LOKET_DISABLED_MESSAGE = "Fitur Loket Desa sudah dinonaktifkan dari Pak RW. Data lama tetap aman/legacy, tapi panel, command, tombol, modal, dan dashboard Loket tidak aktif lagi.";
+
+function getWelcomeDelayMs(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return DESA_TULUS_WELCOME_DELAY_MS;
+  return Math.max(0, Math.min(30000, Math.round(number)));
+}
 
 function isLegacyWelcomeText(value = "") {
   const raw = String(value || "").replace(/\s+/g, " ").trim().toLowerCase();
@@ -373,7 +381,8 @@ function applySafeEmbedDisplayMigrations(data = {}) {
   next.welcome.enabled = next.welcome.enabled !== false;
   next.welcome.memberRoleId = String(next.welcome.memberRoleId || next.welcome.memberTulusRoleId || next.memberTulusRoleId || DESA_TULUS_WARGA_ROLE_ID).trim();
   next.welcome.memberRoleName = next.welcome.memberRoleName || "Warga";
-  // v10.10.111: welcome Pak RW wajib text biasa, bukan embed.
+  next.welcome.delayMs = getWelcomeDelayMs(next.welcome.delayMs);
+  // v10.10.112: welcome Pak RW wajib text biasa + delay supaya user baru sempat terlihat/load di server.
   next.welcome.message = DESA_TULUS_WELCOME_MESSAGE;
   next.welcome.title = "";
   next.welcome.content = "";
@@ -391,6 +400,13 @@ function applySafeEmbedDisplayMigrations(data = {}) {
   welcomeEmbed.imageUrl = "";
   welcomeEmbed.useEmbed = false;
   welcomeEmbed.mode = "text";
+
+  // v10.10.113: Loket Desa dihapus dari fitur aktif. Data lama tidak dihapus, hanya diabaikan agar tidak reset.
+  next.loket = next.loket && typeof next.loket === "object" ? next.loket : {};
+  next.loket.enabled = false;
+  next.loket.legacyIgnored = true;
+  next.features = next.features && typeof next.features === "object" ? next.features : {};
+  next.features.loket = false;
 
   next.suggestion = next.suggestion && typeof next.suggestion === "object" ? next.suggestion : {};
   next.suggestion.enabled = next.suggestion.enabled !== false;
@@ -6181,7 +6197,7 @@ function renderMaxtonMegaControl(req, saved = false, error = "") {
   const topCfg = { ...getTopActiveConfig(), ...(cfg.topActive || {}) };
   const texts = cfg.texts || {};
   const maxtonEmbedKeys = Object.keys(cfg.embeds || {})
-    .filter((key) => key !== "dashboard" && cfg.embeds[key] && typeof cfg.embeds[key] === "object")
+    .filter((key) => key !== "dashboard" && !key.toLowerCase().includes("loket") && cfg.embeds[key] && typeof cfg.embeds[key] === "object")
     .sort((a, b) => a.localeCompare(b));
   const allEmbedsJson = JSON.stringify(Object.fromEntries(maxtonEmbedKeys.map((key) => [key, cfg.embeds[key]])), null, 2);
   const maxtonTextKeys = Object.keys(texts || {}).sort((a, b) => a.localeCompare(b));
@@ -6278,9 +6294,6 @@ function renderMaxtonMegaControl(req, saved = false, error = "") {
           ${maxtonChannelSelect(guild, "leaderboardActiveChannelId", "Channel Leaderboard Aktif / Papan Aktif", topCfg.leaderboardActiveChannelId || "", "text")}
           ${maxtonChannelSelect(guild, "boostChannelId", "Channel Boost / Juragan", cfg.juragan.boostChannelId, "text")}
           ${maxtonChannelSelect(guild, "ticketChannelId", "Channel Ticket Lama", cfg.ticketChannelId, "text")}
-          ${maxtonChannelSelect(guild, "loketPanelChannelId", "Channel Panel Loket", cfg.loket?.panelChannelId || "", "text")}
-          ${maxtonChannelSelect(guild, "loketCategoryId", "Kategori Loket", cfg.loket?.categoryId || "", "category")}
-          ${maxtonChannelSelect(guild, "loketLogChannelId", "Channel Log Loket", cfg.loket?.logChannelId || "", "text")}
           ${maxtonChannelSelect(guild, "logChannelId", "Channel Log", cfg.logChannelId, "text")}
           ${maxtonChannelSelect(guild, "rulesChannelId", "Channel Rules", cfg.rulesChannelId, "text")}
           ${maxtonChannelSelect(guild, "infoChannelId", "Channel Info", cfg.infoChannelId, "text")}
@@ -6297,7 +6310,6 @@ function renderMaxtonMegaControl(req, saved = false, error = "") {
           ${maxtonRoleSelect(guild, "level100RoleId", "Role Level 100", cfg.level100RoleId)}
           ${maxtonRoleSelect(guild, "memberOfTheMonthRoleId", "Role Member Of The Month", topCfg.memberOfTheMonthRoleId)}
           ${maxtonRoleSelect(guild, "welcomeMemberRoleId", "Role Welcome / Warga", cfg.welcome?.memberRoleId || cfg.memberTulusRoleId || cfg.wargaRoleId || "")}
-          ${maxtonRoleSelect(guild, "loketStaffRoleId", "Role Pengurus Loket", cfg.loket?.staffRoleId || "")}
           ${configInput("level100RoleDurationDays", "Durasi Role Level 100 (hari)", cfg.level100RoleDurationDays ?? 30, "number")}
         ${checkboxInput("levelAutoLevelRole", "Auto Level Role On-Demand Aktif", cfg.levelSystem?.autoLevelRole !== false)}
         ${configInput("levelMaxLevel", "Level Maksimal", cfg.levelSystem?.maxLevel || 1000, "number")}
@@ -6318,7 +6330,6 @@ function renderMaxtonMegaControl(req, saved = false, error = "") {
           <div class="mega-check">${checkboxInput("juraganEnabled", "Juragan / Boost Aktif", cfg.juragan.enabled !== false)}</div>
           <div class="mega-check">${checkboxInput("suggestionEnabled", "Suggestion Aktif", cfg.suggestion.enabled !== false)}</div>
           <div class="mega-check">${checkboxInput("suggestionButtonOnResult", "Tombol Saran Ikut di Setiap Saran", cfg.suggestion.buttonOnResult !== false)}</div>
-          <div class="mega-check">${checkboxInput("loketEnabled", "Loket Bantuan Aktif", cfg.loket?.enabled !== false)}</div>
           <div class="mega-check">${checkboxInput("levelAutoLevelRole", "Auto Level Role On-Demand", cfg.levelSystem?.autoLevelRole !== false)}</div>
           <div class="mega-check">${checkboxInput("sendSuggestionPanelOnReady", "Kirim Panel Saran saat Ready", cfg.panels.sendSuggestionPanelOnReady === true)}</div>
           <div class="mega-check">${checkboxInput("topActiveEnabled", "Top Aktif Aktif", topCfg.enabled !== false)}</div>
@@ -6425,12 +6436,6 @@ function renderMaxtonMegaControl(req, saved = false, error = "") {
           ${configInput("welcomeImageUrl", "Image Welcome URL (nonaktif, welcome text biasa)", cfg.welcome.imageUrl || "")}
           ${configInput("suggestionTitle", "Judul Panel Saran", cfg.suggestion.title || "📬 Kotak Saran DESA TULUS")}
           ${configInput("suggestionButtonText", "Teks Tombol Saran", cfg.suggestion.buttonText || "📬 Kirim Saran")}
-          ${configInput("loketPanelTitle", "Judul Panel Loket", cfg.loket?.panelTitle || "🏛️ LOKET DESA TULUS")}
-          ${configInput("loketSelectPlaceholder", "Placeholder Dropdown Loket", cfg.loket?.selectPlaceholder || "Pilih jenis loket yang kamu butuhkan")}
-          ${configInput("loketImageUrl", "Image/Banner Loket URL", cfg.loket?.imageUrl || "")}
-          ${configInput("loketThumbnailUrl", "Thumbnail Loket URL", cfg.loket?.thumbnailUrl || "")}
-          ${configInput("loketCategoryName", "Nama Category Loket", cfg.loket?.categoryName || "🏛️｜LOKET DESA TULUS")}
-          ${configInput("loketChannelPrefix", "Prefix Channel Loket", cfg.loket?.channelPrefix || "loket")}
           ${configInput("dashboardBrandTitle", "Dashboard Brand Title", dash.brandTitle || "Pak RW")}
           ${configInput("dashboardBrandSubtitle", "Dashboard Brand Subtitle", dash.brandSubtitle || "Pak RW Control")}
           ${configInput("dashboardHomeTitle", "Dashboard Home Title", dash.homeTitle || "Pak RW Control")}
@@ -6439,10 +6444,9 @@ function renderMaxtonMegaControl(req, saved = false, error = "") {
           ${configInput("dashboardSaveSuccess", "Text Sukses Simpan Dashboard", texts.dashboardSaveSuccess || "✅ Dashboard Pak RW berhasil disimpan. Semua setting langsung live reload ke bot.")}
           ${configInput("newTextKey", "Tambah Text Baru (key, opsional)", "")}
         </div>
+        ${configInput("welcomeDelayMs", "Delay Kirim Welcome (ms)", String(getWelcomeDelayMs(cfg.welcome?.delayMs)), "number")}
         ${textareaInput("welcomeMessage", "Isi Welcome Message", cfg.welcome.message || "", 8)}
         ${textareaInput("suggestionDescription", "Deskripsi Panel Saran", cfg.suggestion.description || "Klik tombol di bawah untuk mengirim kritik atau saran. Setelah terkirim, warga bisa memberi tanggapan lewat reaction dan thread.", 5)}
-        ${textareaInput("loketPanelDescription", "Deskripsi Panel Loket", cfg.loket?.panelDescription || "Pilih jenis loket dari menu di bawah. Setelah memilih, isi keperluan kamu dan Pak RW akan membuat ruang bantuan privat khusus untuk kamu.", 5)}
-        ${textareaInput("loketOptionsJson", "Pilihan Dropdown Loket JSON", JSON.stringify(cfg.loket?.options || [], null, 2), 10)}
         ${textareaInput("dashboardHomeSubtitle", "Dashboard Home Subtitle", dash.homeSubtitle || "", 4)}
         ${textareaInput("dashboardHelpText", "Text Bantuan di Atas Dashboard", texts.dashboardHelpText || "Pilih menu, ubah isi yang kamu mau, lalu klik Simpan Semua.", 4)}
         ${textareaInput("levelUpTopActiveTitle", "Judul Notifikasi Level-Up Top Aktif", texts.levelUpTopActiveTitle || "🆙 Warga Naik Level + Masuk Top Aktif", 3)}
@@ -6662,31 +6666,16 @@ function applyMaxtonControlPost(body = {}) {
   cfg.welcome.useEmbed = false;
   cfg.welcome.memberRoleId = body.welcomeMemberRoleId || cfg.welcome.memberRoleId || "";
   cfg.welcome.memberRoleName = cfg.welcome.memberRoleName || "Member Tulus";
+  cfg.welcome.delayMs = getWelcomeDelayMs(body.welcomeDelayMs ?? cfg.welcome.delayMs);
   cfg.welcome.message = body.welcomeMessage || cfg.welcome.message || DESA_TULUS_WELCOME_MESSAGE;
   cfg.suggestion.enabled = bool("suggestionEnabled");
   cfg.suggestion.title = body.suggestionTitle || cfg.suggestion.title || "📬 Kotak Saran DESA TULUS";
   cfg.suggestion.description = body.suggestionDescription || cfg.suggestion.description || "Klik tombol di bawah untuk mengirim kritik atau saran. Setelah terkirim, warga bisa memberi tanggapan lewat reaction dan thread.";
   cfg.suggestion.buttonText = body.suggestionButtonText || cfg.suggestion.buttonText || "📬 Kirim Saran";
   cfg.suggestion.buttonOnResult = body.suggestionButtonOnResult === "on";
-  cfg.loket = cfg.loket || {};
-  cfg.loket.enabled = body.loketEnabled === "on";
-  cfg.loket.panelMode = "select";
-  cfg.loket.panelChannelId = body.loketPanelChannelId || cfg.loket.panelChannelId || "";
-  cfg.loket.categoryId = body.loketCategoryId || cfg.loket.categoryId || "";
-  cfg.loket.staffRoleId = body.loketStaffRoleId || cfg.loket.staffRoleId || "";
-  cfg.loket.logChannelId = body.loketLogChannelId || cfg.loket.logChannelId || "";
-  cfg.loket.panelTitle = body.loketPanelTitle || cfg.loket.panelTitle || "🏛️ LOKET DESA TULUS";
-  cfg.loket.panelDescription = body.loketPanelDescription || cfg.loket.panelDescription || "Pilih jenis loket dari menu di bawah. Setelah memilih, isi keperluan kamu dan Pak RW akan membuat ruang bantuan privat khusus untuk kamu.";
-  cfg.loket.selectPlaceholder = body.loketSelectPlaceholder || cfg.loket.selectPlaceholder || "Pilih jenis loket yang kamu butuhkan";
-  cfg.loket.imageUrl = body.loketImageUrl || cfg.loket.imageUrl || "";
-  cfg.loket.thumbnailUrl = body.loketThumbnailUrl || cfg.loket.thumbnailUrl || "";
-  cfg.loket.categoryName = body.loketCategoryName || cfg.loket.categoryName || "🏛️｜LOKET DESA TULUS";
-  cfg.loket.channelPrefix = body.loketChannelPrefix || cfg.loket.channelPrefix || "loket";
-  cfg.loket.claimLabel = body.loketClaimLabel || cfg.loket.claimLabel || "Ambil Loket";
-  cfg.loket.closeLabel = body.loketCloseLabel || cfg.loket.closeLabel || "Tutup Loket";
-  cfg.loket.autoThreadEnabled = body.loketAutoThreadEnabled === "on";
-  cfg.loket.transcriptEnabled = body.loketTranscriptEnabled !== "off";
-  if (body.loketOptionsJson) { try { cfg.loket.options = JSON.parse(body.loketOptionsJson); } catch (err) { console.log("LOKET OPTIONS JSON ERROR:", err.message); } }
+  cfg.loket = cfg.loket && typeof cfg.loket === "object" ? cfg.loket : {};
+  cfg.loket.enabled = false;
+  cfg.loket.legacyIgnored = true;
   cfg.levelSystem = cfg.levelSystem || {};
   cfg.levelSystem.enabled = true;
   cfg.levelSystem.maxLevel = 1000;
@@ -8942,28 +8931,6 @@ function renderModulesPage(req, saved = false, error = "") {
       </div>
       ${textareaInput("suggestionDescription", "Deskripsi Panel Saran", cfg.suggestion?.description || "", 5)}
 
-
-      <h3 style="margin-top:28px">🏛️ Loket Bantuan Settings</h3>
-      <p class="section-note">Panel Loket dropdown/select menu wajib bisa diedit dari dashboard. Ini bukan ticket lama, namanya Loket Pak RW DESA TULUS.</p>
-      <div class="formgrid">
-        ${checkboxInput("loketEnabled", "Loket Aktif", cfg.loket?.enabled !== false)}
-        ${maxtonChannelSelect(guild, "loketPanelChannelId", "Channel Panel Loket", cfg.loket?.panelChannelId || "", "text")}
-        ${maxtonChannelSelect(guild, "loketCategoryId", "Kategori Loket", cfg.loket?.categoryId || "", "category")}
-        ${maxtonRoleSelect(guild, "loketStaffRoleId", "Role Pengurus Loket", cfg.loket?.staffRoleId || "")}
-        ${maxtonChannelSelect(guild, "loketLogChannelId", "Channel Log Loket", cfg.loket?.logChannelId || "", "text")}
-        ${configInput("loketPanelTitle", "Judul Panel Loket", cfg.loket?.panelTitle || "🏛️ LOKET DESA TULUS")}
-        ${configInput("loketSelectPlaceholder", "Placeholder Dropdown", cfg.loket?.selectPlaceholder || "Pilih jenis loket yang kamu butuhkan")}
-        ${configInput("loketImageUrl", "Image/Banner Loket URL", cfg.loket?.imageUrl || "")}
-        ${configInput("loketThumbnailUrl", "Thumbnail Loket URL", cfg.loket?.thumbnailUrl || "")}
-        ${configInput("loketCategoryName", "Nama Category Otomatis", cfg.loket?.categoryName || "🏛️｜LOKET DESA TULUS")}
-        ${configInput("loketChannelPrefix", "Prefix Channel Loket", cfg.loket?.channelPrefix || "loket")}
-        ${configInput("loketClaimLabel", "Label Tombol Ambil", cfg.loket?.claimLabel || "Ambil Loket")}
-        ${configInput("loketCloseLabel", "Label Tombol Tutup", cfg.loket?.closeLabel || "Tutup Loket")}
-        ${checkboxInput("loketAutoThreadEnabled", "Buat Thread Catatan Loket", cfg.loket?.autoThreadEnabled === true)}
-        ${checkboxInput("loketTranscriptEnabled", "Log Transcript Ringkas", cfg.loket?.transcriptEnabled !== false)}
-      </div>
-      ${textareaInput("loketPanelDescription", "Deskripsi Panel Loket", cfg.loket?.panelDescription || "Pilih jenis loket dari menu di bawah. Setelah memilih, isi keperluan kamu dan Pak RW akan membuat ruang bantuan privat khusus untuk kamu.", 5)}
-      ${textareaInput("loketOptionsJson", "Pilihan Dropdown Loket (JSON)", JSON.stringify(cfg.loket?.options || [], null, 2), 10)}
 
       <h3 style="margin-top:28px">📌 Other Channel IDs</h3>
       <div class="formgrid">
@@ -11498,7 +11465,7 @@ const pakRwDashboardAllowedRoots = new Set([
   "logChannelId", "donaturRoleId", "level100RoleId", "welcome", "ai", "curhat", "anonymousCurhat",
   "suggestion", "level", "levelSystem", "topActive", "leaderboardAktif", "papanAktif", "boostPoin", "mabar",
   "juragan", "donatur", "features", "commandPermissions", "embeds", "dashboard", "panels", "mentions",
-  "mentionPlaceholders", "placeholderLibrary", "texts", "serverIdExporter", "ktpSystem", "afkVoice", "loket", "leaderboard"
+  "mentionPlaceholders", "placeholderLibrary", "texts", "serverIdExporter", "ktpSystem", "afkVoice", "leaderboard"
 ]);
 
 function isSafeDashboardPath(input = "") {
@@ -11733,9 +11700,10 @@ app.post("/api/dashboard/leaderboard/upload", requireDashboardAuth, async (req, 
     cfg.leaderboard = cfg.leaderboard && typeof cfg.leaderboard === "object" ? cfg.leaderboard : {};
     cfg.leaderboard.backgroundMode = "upload";
     cfg.leaderboard.backgroundPath = relativePath;
+    cfg.leaderboard.backgroundUploadPath = relativePath;
     cfg.leaderboard.backgroundOverlay = Number.isFinite(Number(cfg.leaderboard.backgroundOverlay)) ? cfg.leaderboard.backgroundOverlay : 0.55;
     cfg.leaderboard.backgroundDarken = Number.isFinite(Number(cfg.leaderboard.backgroundDarken)) ? cfg.leaderboard.backgroundDarken : 0.45;
-    cfg.version = "10.10.109";
+    cfg.version = "10.10.113";
     writeConfigFile(cfg);
     appendDashboardActivity("leaderboard", "Background leaderboard diunggah", `${savedName} (${image.width}x${image.height})`);
     syncLiveConfig(readConfigFile());
@@ -11771,7 +11739,7 @@ app.put("/api/dashboard/settings", requireDashboardAuth, (req, res) => {
       if (!isSafeDashboardPath(pathText)) return res.status(400).json({ ok: false, error: `Path config tidak diizinkan: ${pathText}` });
       setDashboardPath(cfg, pathText, patch.value);
     }
-    cfg.version = "10.10.109";
+    cfg.version = "10.10.113";
     writeConfigFile(cfg);
     appendDashboardActivity("settings", "Setting dashboard disimpan", `${patches.length} field diperbarui melalui adapter aman.`);
     if (levelRoleConfigChanged) {
@@ -11791,7 +11759,7 @@ app.put("/api/dashboard/embed/:key", requireDashboardAuth, (req, res) => {
     const cfg = readConfigFile();
     cfg.embeds = cfg.embeds || {};
     cfg.embeds[key] = mergeDashboardEmbed(cfg.embeds[key] || {}, req.body?.embed || {});
-    cfg.version = "10.10.109";
+    cfg.version = "10.10.113";
     writeConfigFile(cfg);
     appendDashboardActivity("embed", "Template embed disimpan", `Template ${key} diperbarui dari Embed Builder.`);
     return res.json({ ok: true, embed: cfg.embeds[key] });
@@ -11878,7 +11846,7 @@ app.put("/api/afk-voice/config", requireDashboardAuth, async (req, res) => {
       if (!valid.ok) return res.status(400).json({ success: false, message: valid.message, errorCode: valid.errorCode });
     }
     cfg.afkVoice = next;
-    cfg.version = "10.10.109";
+    cfg.version = "10.10.113";
     writeConfigFile(cfg);
     appendDashboardActivity("afk-voice", "AFK Voice diperbarui", next.enabled ? `Channel voice ${next.channelId} diterapkan.` : "Fitur dinonaktifkan.");
 
@@ -11920,7 +11888,7 @@ app.post("/api/afk-voice/disconnect", requireDashboardAuth, async (req, res) => 
   if (!checkActionRateLimit()) return res.status(429).json({ success: false, message: "Tunggu sebentar sebelum memutus koneksi.", errorCode: "RATE_LIMITED" });
   const cfg = readConfigFile();
   cfg.afkVoice = { ...(cfg.afkVoice || {}), enabled: false, updatedAt: new Date().toISOString(), updatedBy: "dashboard" };
-  cfg.version = "10.10.109";
+  cfg.version = "10.10.113";
   writeConfigFile(cfg);
   const result = await disconnectAfkVoice({ disable: true });
   return res.json(result);
@@ -13539,25 +13507,9 @@ app.post("/modules", requireDashboardAuth, (req, res) => {
     cfg.suggestion.buttonText = req.body.suggestionButtonText || "📬 Kirim Saran";
     cfg.suggestion.buttonOnResult = req.body.suggestionButtonOnResult === "on";
 
-    cfg.loket = cfg.loket || {};
-    cfg.loket.enabled = req.body.loketEnabled === "on";
-    cfg.loket.panelMode = "select";
-    cfg.loket.panelChannelId = req.body.loketPanelChannelId || cfg.loket.panelChannelId || "";
-    cfg.loket.categoryId = req.body.loketCategoryId || cfg.loket.categoryId || "";
-    cfg.loket.staffRoleId = req.body.loketStaffRoleId || cfg.loket.staffRoleId || "";
-    cfg.loket.logChannelId = req.body.loketLogChannelId || cfg.loket.logChannelId || "";
-    cfg.loket.panelTitle = req.body.loketPanelTitle || "🏛️ LOKET DESA TULUS";
-    cfg.loket.panelDescription = req.body.loketPanelDescription || "Pilih jenis loket dari menu di bawah. Setelah memilih, isi keperluan kamu dan Pak RW akan membuat ruang bantuan privat khusus untuk kamu.";
-    cfg.loket.selectPlaceholder = req.body.loketSelectPlaceholder || "Pilih jenis loket yang kamu butuhkan";
-    cfg.loket.imageUrl = req.body.loketImageUrl || "";
-    cfg.loket.thumbnailUrl = req.body.loketThumbnailUrl || "";
-    cfg.loket.categoryName = req.body.loketCategoryName || "🏛️｜LOKET DESA TULUS";
-    cfg.loket.channelPrefix = req.body.loketChannelPrefix || "loket";
-    cfg.loket.claimLabel = req.body.loketClaimLabel || "Ambil Loket";
-    cfg.loket.closeLabel = req.body.loketCloseLabel || "Tutup Loket";
-    cfg.loket.autoThreadEnabled = req.body.loketAutoThreadEnabled === "on";
-    cfg.loket.transcriptEnabled = req.body.loketTranscriptEnabled !== "off";
-    if (req.body.loketOptionsJson) { try { cfg.loket.options = JSON.parse(req.body.loketOptionsJson); } catch (err) { console.log("LOKET OPTIONS JSON ERROR:", err.message); } }
+    cfg.loket = cfg.loket && typeof cfg.loket === "object" ? cfg.loket : {};
+    cfg.loket.enabled = false;
+    cfg.loket.legacyIgnored = true;
 
     cfg.levelSystem = cfg.levelSystem || {};
     cfg.levelSystem.enabled = true;
@@ -16047,15 +15999,16 @@ function buildLeaderboardActiveEmbed(guild, topUsers = null, reason = "update", 
 async function buildLeaderboardActivePayload(guild, reason = "update") {
   const cfg = getTopActiveConfig();
   const rawRows = getLeaderboardActiveRows(guild.id, cfg.leaderboardActiveTopLimit, guild.ownerId);
-  const rows = normalizeLeaderboardUsers(rawRows);
+  const rows = await hydrateLeaderboardUsers(guild, normalizeLeaderboardUsers(rawRows));
   let files = [];
   let imageOk = false;
 
-  console.log("[LEADERBOARD_IMAGE] raw top users:", rawRows);
-  console.log("[LEADERBOARD_IMAGE] total users:", Array.isArray(rawRows) ? rawRows.length : "not array");
-  console.log("[LEADERBOARD_IMAGE] first user:", Array.isArray(rawRows) ? rawRows[0] : null);
+  console.log("[LEADERBOARD_IMAGE] raw topUsers:", rawRows);
+  console.log("[LEADERBOARD_IMAGE] is array:", Array.isArray(rawRows));
+  console.log("[LEADERBOARD_IMAGE] total:", Array.isArray(rawRows) ? rawRows.length : 0);
+  console.log("[LEADERBOARD_IMAGE] first:", Array.isArray(rawRows) ? rawRows[0] : null);
 
-  if (cfg.leaderboardUseImage !== false) {
+  if (cfg.leaderboardUseImage !== false && config.leaderboard?.useImage !== false) {
     try {
       const imageBuffer = await generateLeaderboardImage(guild, rows, config.leaderboard || {});
       if (imageBuffer && Buffer.isBuffer(imageBuffer) && imageBuffer.length > 1000) {
@@ -18739,14 +18692,25 @@ client.on(Events.GuildMemberAdd, async (member) => {
       return;
     }
 
+    // Delay aman supaya member baru sudah sempat muncul/ter-load di Discord, role sudah kebaca,
+    // dan pesan welcome text biasa tidak terkirim terlalu cepat.
+    const welcomeDelayMs = getWelcomeDelayMs(config.welcome?.delayMs);
+    if (welcomeDelayMs > 0) await waitLevelRoleBatch(welcomeDelayMs);
+
+    const freshMember = await member.guild.members.fetch(member.id).catch(() => member);
+    if (!freshMember || freshMember.partial) {
+      console.log("WELCOME: member baru belum bisa dibaca setelah delay, welcome dibatalkan supaya tidak salah kirim.");
+      return;
+    }
+
     const welcomeData = {
-      user: `${member}`,
-      username: member.user.username,
-      displayName: member.displayName || member.user.globalName || member.user.username,
-      userId: member.id,
+      user: `${freshMember}`,
+      username: freshMember.user.username,
+      displayName: freshMember.displayName || freshMember.user.globalName || freshMember.user.username,
+      userId: freshMember.id,
       server: config.serverName || member.guild.name,
       serverName: config.serverName || member.guild.name,
-      memberCount: `${member.guild.memberCount}`,
+      memberCount: `${freshMember.guild.memberCount}`,
       memberRole: welcomeMemberRoleTag(),
       memberTulusRole: welcomeMemberRoleTag(),
       rulesChannel: channelTag(config.rulesChannelId, "#aturan-desa"),
@@ -18772,7 +18736,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
     await safeSend(channel, {
       content: welcomeText || applyTemplate(defaultWelcomeMessage, welcomeData),
       allowedMentions: {
-        users: [member.id],
+        users: [freshMember.id],
         roles: parseDiscordId(config.welcome?.memberRoleId || config.memberTulusRoleId || config.wargaRoleId || DESA_TULUS_WARGA_ROLE_ID) ? [parseDiscordId(config.welcome?.memberRoleId || config.memberTulusRoleId || config.wargaRoleId || DESA_TULUS_WARGA_ROLE_ID)] : []
       }
     });
@@ -21462,17 +21426,7 @@ client.on(Events.MessageCreate, async (message) => {
 
 
       if (cmd === "loket" || cmd === "loketpanel" || cmd === "kirimpaneloket") {
-        const sub = String(args[0] || "panel").toLowerCase();
-        if (sub === "panel" || cmd === "loketpanel" || cmd === "kirimpaneloket") {
-          if (!message.member.permissions.has(PermissionsBitField.Flags.ManageGuild) && !canManageLoket(message.member)) {
-            return safeReply(message, "Command panel loket khusus pengurus/server staff.");
-          }
-          const cfg = loketConfig();
-          const target = getTextChannel(message.guild, cfg.panelChannelId) || message.channel;
-          await sendLoketPanel(target);
-          return safeReply(message, `✅ Panel Loket Pak RW sudah dikirim ke ${target}.`);
-        }
-        return safeReply(message, "🏛️ Untuk membuka loket, klik tombol **Buka Loket** di panel Loket Pak RW.");
+        return safeReply(message, LOKET_DISABLED_MESSAGE);
       }
 
       if (cmd === "mongodb" || cmd === "mongo" || cmd === "db") {
@@ -21777,7 +21731,6 @@ client.on(Events.MessageCreate, async (message) => {
           "• 🤖 Tanya Pak RW — AI natural ikut gaya bahasa user",
           "• ☁️ Curhat & Curhat Anonim — panel, thread, balasan anonim",
           "• 💡 Saran — panel + reaction dan thread tanggapan",
-          "• 🏛️ Loket — ruang bantuan privat, claim, close, dan log",
           "• 👋 Welcome — pesan warga baru",
           "• 💎 Juragan — boost role, embed, akses khusus, bonus poin",
           "• 💸 Donatur — role sementara otomatis dari nominal",
@@ -22337,12 +22290,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     if (interaction.isStringSelectMenu() && interaction.customId === "loket_select") {
-      return handleLoketSelect(interaction);
+      return interaction.reply({ content: LOKET_DISABLED_MESSAGE, flags: 64 }).catch(() => null);
     }
 
     if (interaction.isButton()) {
       if (interaction.customId.startsWith("loket_")) {
-        if (await handleLoketButton(interaction)) return;
+        return interaction.reply({ content: LOKET_DISABLED_MESSAGE, flags: 64 }).catch(() => null);
       }
 
       if (interaction.customId === "curhat_anonim_open" || interaction.customId === "open_anonim_curhat") {
@@ -22446,7 +22399,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
     }
     if (interaction.isModalSubmit() && interaction.customId.startsWith("loket_open_modal")) {
-      return openLoketFromInteraction(interaction);
+      return interaction.reply({ content: LOKET_DISABLED_MESSAGE, flags: 64 }).catch(() => null);
     }
 
     if (interaction.isModalSubmit() && interaction.customId === "anonim_curhat_modal") {

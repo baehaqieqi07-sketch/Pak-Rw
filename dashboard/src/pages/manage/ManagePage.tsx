@@ -48,12 +48,6 @@ const TARGETS: Record<string, Binding[]> = {
   curhat: [{ key: "curhatChannel", path: "curhatChannelId", kind: "channel", label: "Channel Curhat", helper: "Tempat panel dan balasan curhat warga.", required: true }],
   "curhat-anonim": [{ key: "anonymousCurhat", path: "anonymousCurhatChannelId", kind: "channel", label: "Channel Curhat Anonim", helper: "Identitas warga tidak ditampilkan pada pesan publik.", required: true }],
   saran: [{ key: "suggestionChannel", path: "suggestionChannelId", kind: "channel", label: "Channel Saran & Voting", helper: "Tempat saran warga diposting dan diberi reaction.", required: true }],
-  loket: [
-    { key: "loketPanelChannel", path: "loket.panelChannelId", kind: "channel", label: "Channel Panel Loket", helper: "Tempat panel Buka Loket dikirim.", required: true, accept: "text" },
-    { key: "loketCategory", path: "loket.categoryId", kind: "channel", label: "Kategori Loket", helper: "Kategori untuk channel loket privat. Kosongkan agar Pak RW membuat kategori otomatis.", accept: "any" },
-    { key: "loketStaffRole", path: "loket.staffRoleId", kind: "role", label: "Role Pengurus Loket", helper: "Role staff yang bisa melihat, claim, dan menutup loket.", required: true },
-    { key: "loketLogChannel", path: "loket.logChannelId", kind: "channel", label: "Channel Log Loket", helper: "Tempat catatan buka/tutup loket dikirim.", accept: "text" }
-  ],
   level: [
     { key: "levelChannel", path: "levelSystem.levelChannelId", kind: "channel", label: "Channel Level", helper: "Semua notifikasi kenaikan level dikirim ke channel ini.", required: true }
   ],
@@ -129,23 +123,12 @@ export function ManagePage() {
   const [aiMaxTokens, setAiMaxTokens] = useState(460);
   const [welcomeTitle, setWelcomeTitle] = useState("");
   const [welcomeMessage, setWelcomeMessage] = useState("Wilujeung sumping, {user}!\n\nAkhirnya mampir juga ke {server}\nDisini tempatnya ngobrol santai, saling kenal, curhat, bercanda, dan jadi bagian dari warga Desa Tulus.\n\nJangan sungkan buat mulai ngobrol ya. Semoga betah disini!\n{memberTulusRole}");
+  const [welcomeDelayMs, setWelcomeDelayMs] = useState(5500);
   const [welcomeContent, setWelcomeContent] = useState("");
   const [suggestionTitle, setSuggestionTitle] = useState("📬 Kotak Saran DESA TULUS");
   const [suggestionDescription, setSuggestionDescription] = useState("Klik tombol di bawah untuk mengirim kritik atau saran. Setelah terkirim, warga bisa memberi tanggapan lewat reaction dan thread.");
   const [suggestionButtonText, setSuggestionButtonText] = useState("📬 Kirim Saran");
   const [suggestionButtonOnResult, setSuggestionButtonOnResult] = useState(true);
-  const [loketPanelTitle, setLoketPanelTitle] = useState("🏛️ Loket Bantuan DESA TULUS");
-  const [loketButtonLabel, setLoketButtonLabel] = useState("Buka Loket");
-  const [loketSelectPlaceholder, setLoketSelectPlaceholder] = useState("Pilih jenis loket yang kamu butuhkan");
-  const [loketImageUrl, setLoketImageUrl] = useState("");
-  const [loketThumbnailUrl, setLoketThumbnailUrl] = useState("");
-  const [loketOptionsJson, setLoketOptionsJson] = useState("[]");
-  const [loketCategoryName, setLoketCategoryName] = useState("🏛️｜LOKET DESA TULUS");
-  const [loketChannelPrefix, setLoketChannelPrefix] = useState("loket");
-  const [loketCloseLabel, setLoketCloseLabel] = useState("Tutup Loket");
-  const [loketClaimLabel, setLoketClaimLabel] = useState("Ambil Loket");
-  const [loketAutoThread, setLoketAutoThread] = useState(false);
-  const [loketTranscript, setLoketTranscript] = useState(true);
   const [autoLevelRole, setAutoLevelRole] = useState(true);
   const [motmThreshold, setMotmThreshold] = useState(100000);
   const [boostMultiplier, setBoostMultiplier] = useState(10);
@@ -160,7 +143,7 @@ export function ManagePage() {
   const [boostActionLoading, setBoostActionLoading] = useState<"start" | "stop" | "">("");
 
   const bindings = useMemo(() => TARGETS[slug] || [], [slug]);
-  const availableEmbedKeys = useMemo(() => Object.keys(data.embeds || {}).filter((key) => key !== "dashboard"), [data.embeds]);
+  const availableEmbedKeys = useMemo(() => Object.keys(data.embeds || {}).filter((key) => key !== "dashboard" && !key.toLowerCase().includes("loket")), [data.embeds]);
   const primaryChannelId = bindings.find((binding) => binding.kind === "channel") ? targets[bindings.find((binding) => binding.kind === "channel")!.key] || "" : "";
   const requiredBindings = bindings.filter((binding) => binding.required);
   const completedRequired = requiredBindings.filter((binding) => Boolean(targets[binding.key])).length;
@@ -206,23 +189,12 @@ export function ManagePage() {
     setAiMaxTokens(Number(readPath(cfg, "ai.maxTokens") || 460));
     setWelcomeTitle("");
     setWelcomeMessage(String(readPath(cfg, "welcome.message") || "Wilujeung sumping, {user}!\n\nAkhirnya mampir juga ke {server}\nDisini tempatnya ngobrol santai, saling kenal, curhat, bercanda, dan jadi bagian dari warga Desa Tulus.\n\nJangan sungkan buat mulai ngobrol ya. Semoga betah disini!\n{memberTulusRole}"));
+    setWelcomeDelayMs(Number(readPath(cfg, "welcome.delayMs") || 5500));
     setWelcomeContent(String(readPath(cfg, "welcome.content") || ""));
     setSuggestionTitle(String(readPath(cfg, "suggestion.title") || "📬 Kotak Saran DESA TULUS"));
     setSuggestionDescription(String(readPath(cfg, "suggestion.description") || "Klik tombol di bawah untuk mengirim kritik atau saran. Setelah terkirim, warga bisa memberi tanggapan lewat reaction dan thread."));
     setSuggestionButtonText(String(readPath(cfg, "suggestion.buttonText") || "📬 Kirim Saran"));
     setSuggestionButtonOnResult(readPath(cfg, "suggestion.buttonOnResult") !== false);
-    setLoketPanelTitle(String(readPath(cfg, "loket.panelTitle") || "🏛️ Loket Bantuan DESA TULUS"));
-    setLoketButtonLabel(String(readPath(cfg, "loket.buttonLabel") || "Buka Loket"));
-    setLoketSelectPlaceholder(String(readPath(cfg, "loket.selectPlaceholder") || "Pilih jenis loket yang kamu butuhkan"));
-    setLoketImageUrl(String(readPath(cfg, "loket.imageUrl") || ""));
-    setLoketThumbnailUrl(String(readPath(cfg, "loket.thumbnailUrl") || ""));
-    setLoketOptionsJson(JSON.stringify(readPath(cfg, "loket.options") || [], null, 2));
-    setLoketCategoryName(String(readPath(cfg, "loket.categoryName") || "🏛️｜LOKET DESA TULUS"));
-    setLoketChannelPrefix(String(readPath(cfg, "loket.channelPrefix") || "loket"));
-    setLoketCloseLabel(String(readPath(cfg, "loket.closeLabel") || "Tutup Loket"));
-    setLoketClaimLabel(String(readPath(cfg, "loket.claimLabel") || "Ambil Loket"));
-    setLoketAutoThread(readPath(cfg, "loket.autoThreadEnabled") === true);
-    setLoketTranscript(readPath(cfg, "loket.transcriptEnabled") !== false);
     setAutoLevelRole(readPath(cfg, "levelSystem.autoLevelRole") !== false);
     setMotmThreshold(Number(readPath(cfg, "level.cycleResetAtPoints") || readPath(cfg, "topActive.pointsThreshold") || 100000));
     setBoostMultiplier(Number(readPath(cfg, "boostPoin.multiplier") || 10));
@@ -303,6 +275,7 @@ export function ManagePage() {
       if (slug === "welcome") {
         patches.push({ path: "welcome.title", value: "" });
         patches.push({ path: "welcome.message", value: welcomeMessage });
+        patches.push({ path: "welcome.delayMs", value: Math.max(0, Math.min(30000, Number(welcomeDelayMs || 5500))) });
         patches.push({ path: "welcome.content", value: "" });
         patches.push({ path: "welcome.imageUrl", value: "" });
         patches.push({ path: "welcome.mode", value: "text" });
@@ -321,21 +294,6 @@ export function ManagePage() {
         patches.push({ path: "suggestion.buttonOnResult", value: suggestionButtonOnResult });
         patches.push({ path: "embeds.suggestionResult.title", value: "📬 Kritik & Saran Baru" });
         patches.push({ path: "embeds.suggestionResult.description", value: "**👤 Pengirim:**\n{user}\n\n**💬 Isi Saran:**\n{content}" });
-      }
-      if (slug === "loket") {
-        patches.push({ path: "loket.panelTitle", value: loketPanelTitle });
-        patches.push({ path: "loket.panelMode", value: "select" });
-        patches.push({ path: "loket.buttonLabel", value: loketButtonLabel });
-        patches.push({ path: "loket.selectPlaceholder", value: loketSelectPlaceholder });
-        patches.push({ path: "loket.imageUrl", value: loketImageUrl });
-        patches.push({ path: "loket.thumbnailUrl", value: loketThumbnailUrl });
-        try { patches.push({ path: "loket.options", value: JSON.parse(loketOptionsJson || "[]") }); } catch { throw new Error("JSON pilihan dropdown Loket belum valid."); }
-        patches.push({ path: "loket.categoryName", value: loketCategoryName });
-        patches.push({ path: "loket.channelPrefix", value: loketChannelPrefix });
-        patches.push({ path: "loket.closeLabel", value: loketCloseLabel });
-        patches.push({ path: "loket.claimLabel", value: loketClaimLabel });
-        patches.push({ path: "loket.autoThreadEnabled", value: loketAutoThread });
-        patches.push({ path: "loket.transcriptEnabled", value: loketTranscript });
       }
       if (slug === "boost-poin") {
         const safeMultiplier = Math.max(1, Math.min(100, Number(boostMultiplier || 1)));
@@ -525,9 +483,10 @@ export function ManagePage() {
           {slug === "welcome" ? <Card className="full-span-card"><CardHeader title="Welcome DESA TULUS" description="Welcome sekarang text biasa / context. Tidak pakai embed, image, thumbnail, author, atau footer." />
             <div className="form-grid-two">
               <div className="form-field"><label>Mode Welcome</label><input value="Text biasa / context tanpa embed" readOnly /></div>
+              <div className="form-field"><label>Delay kirim welcome (ms)</label><input type="number" min="0" max="30000" value={welcomeDelayMs} onChange={(event) => { setWelcomeDelayMs(Number(event.target.value || 5500)); setDirty(true); }} /></div>
             </div>
             <div className="form-field"><label>Pesan Welcome Text</label><textarea rows={7} value={welcomeMessage} onChange={(event) => { setWelcomeMessage(event.target.value); setDirty(true); }} /></div>
-            <div className="info-panel"><Info size={19} /><p>Placeholder yang dipakai: {"{user}"}, {"{server}"}, dan {"{memberTulusRole}"}. Role Warga dipilih di tab Channel & Role.</p></div>
+            <div className="info-panel"><Info size={19} /><p>Default delay 5500 ms supaya user baru sempat kelihatan/ter-load di server sebelum Pak RW kirim welcome. Placeholder yang dipakai: {"{user}"}, {"{server}"}, dan {"{memberTulusRole}"}. Role Warga dipilih di tab Channel & Role.</p></div>
           </Card> : null}
           {slug === "saran" ? <Card className="full-span-card"><CardHeader title="Kotak Saran + Tombol Ikut Terus" description="Tombol Kirim Saran muncul di panel dan ikut lagi di setiap saran baru." />
             <div className="form-grid-two">
@@ -546,7 +505,6 @@ export function ManagePage() {
           {slug === "level" ? <Card className="full-span-card"><CardHeader title="Auto Level Role" description="Role dibuat otomatis saat ada warga yang mendapat tier. Tidak perlu pilih role manual." action={<StatusBadge label={autoLevelRole ? "Aktif" : "Nonaktif"} tone={autoLevelRole ? "success" : "neutral"} />} /><div className="boost-option-list"><div className="boost-option-row"><div><strong>Role level otomatis</strong><small>Ketika level berubah, Pak RW membuat role yang dibutuhkan saja, memberi warna default/no color, mencabut role lama, dan menghapus role kosong.</small></div><Toggle checked={autoLevelRole} onChange={(value) => { setAutoLevelRole(value); setDirty(true); }} label="Auto Level Role" /></div></div><div className="info-panel"><ShieldCheck size={19} /><p>Level maksimal dikunci di <strong>1000</strong>. Role <strong>Karuhun Desa (Lvl. Max)</strong> hanya dibuat saat ada warga mencapai Level 1000. Role otomatis diletakkan di atas Warga agar warna nama tetap mengikuti role Warga.</p></div></Card> : null}
           {slug === "ai" ? <Card><CardHeader title="AI hemat OpenRouter" description="Pengaturan aman yang sudah didukung core bot." /><div className="form-grid two-columns"><div className="form-field"><label>Model utama</label><input value={aiModel} onChange={(event) => { setAiModel(event.target.value); setDirty(true); }} /><small className="field-helper">Gunakan openai/gpt-4o-mini untuk mode hemat.</small></div><div className="form-field"><label>Max token</label><input type="number" min={100} max={1000} value={aiMaxTokens} onChange={(event) => { setAiMaxTokens(Number(event.target.value)); setDirty(true); }} /><small className="field-helper">Batas aman rekomendasi: 300–600.</small></div></div></Card> : null}
 
-          {slug === "loket" ? <Card className="full-span-card"><CardHeader title="Loket Pak RW" description="Panel loket sekarang memakai dropdown/select menu seperti contoh. Semua teks, gambar, kategori, dan pilihan bisa diedit." /><div className="form-grid two-columns"><div className="form-field"><label>Judul panel</label><input value={loketPanelTitle} onChange={(event) => { setLoketPanelTitle(event.target.value); setDirty(true); }} /></div><div className="form-field"><label>Placeholder dropdown</label><input value={loketSelectPlaceholder} onChange={(event) => { setLoketSelectPlaceholder(event.target.value); setDirty(true); }} /><small className="field-helper">Teks yang muncul di menu pilihan Loket.</small></div><div className="form-field"><label>Image / banner embed Loket</label><input value={loketImageUrl} onChange={(event) => { setLoketImageUrl(event.target.value); setDirty(true); }} placeholder="https://..." /><small className="field-helper">Pakai URL gambar dari Discord CDN atau hosting gambar.</small></div><div className="form-field"><label>Thumbnail kanan embed</label><input value={loketThumbnailUrl} onChange={(event) => { setLoketThumbnailUrl(event.target.value); setDirty(true); }} placeholder="https://..." /></div><div className="form-field"><label>Nama kategori otomatis default</label><input value={loketCategoryName} onChange={(event) => { setLoketCategoryName(event.target.value); setDirty(true); }} /></div><div className="form-field"><label>Prefix nama channel default</label><input value={loketChannelPrefix} onChange={(event) => { setLoketChannelPrefix(event.target.value); setDirty(true); }} /><small className="field-helper">Contoh hasil: loket-warga-bekiw.</small></div><div className="form-field"><label>Label claim</label><input value={loketClaimLabel} onChange={(event) => { setLoketClaimLabel(event.target.value); setDirty(true); }} /></div><div className="form-field"><label>Label close</label><input value={loketCloseLabel} onChange={(event) => { setLoketCloseLabel(event.target.value); setDirty(true); }} /></div></div><div className="form-field"><label>Pilihan dropdown Loket JSON</label><textarea rows={10} value={loketOptionsJson} onChange={(event) => { setLoketOptionsJson(event.target.value); setDirty(true); }} /><small className="field-helper">Isi array JSON. Field: id, emoji, label, description, channelPrefix, categoryName, categoryId opsional.</small></div><div className="boost-option-list"><div className="boost-option-row"><div><strong>Buat thread catatan</strong><small>Opsional. Channel loket sudah privat; thread hanya untuk catatan tambahan.</small></div><Toggle checked={loketAutoThread} onChange={(value) => { setLoketAutoThread(value); setDirty(true); }} label="Thread otomatis" /></div><div className="boost-option-row"><div><strong>Log transcript ringkas</strong><small>Saat ditutup, Pak RW kirim catatan ringkas ke channel log.</small></div><Toggle checked={loketTranscript} onChange={(value) => { setLoketTranscript(value); setDirty(true); }} label="Log aktif" /></div></div><div className="info-panel"><Info size={19} /><p>Panel Loket tampil seperti contoh: embed utama, daftar pilihan, lalu dropdown. Setiap pilihan bisa punya kategori sendiri, jadi channel loket tertata rapi per jenis.</p></div></Card> : null}
           {slug === "top-aktif" || slug === "papan-aktif" ? <Card><CardHeader title="Jadwal leaderboard" description="Scheduler core bot tidak diubah; dashboard hanya menyimpan setting yang didukung." /><div className="form-grid two-columns"><div className="form-field"><label>Jumlah peringkat</label><input type="number" min={3} max={25} value={topLimit} onChange={(event) => { setTopLimit(Number(event.target.value)); setDirty(true); }} /></div><div className="form-field"><label>Jam post WIB</label><input type="number" min={0} max={23} value={postHour} onChange={(event) => { setPostHour(Number(event.target.value)); setDirty(true); }} /><small className="field-helper">Gunakan 0 untuk pukul 00.00 WIB.</small></div></div></Card> : null}
           {slug === "papan-aktif" ? <Card className="full-span-card"><CardHeader title="Leaderboard Image Background" description="Atur image leaderboard 1200×900. Data poin/level/MOTM tidak diubah; ini hanya tampilan background dan render image." action={<Button variant="secondary" icon={<RefreshCcw size={16} />} onClick={resetLeaderboardBackground}>Reset default</Button>} /><div className="settings-list"><div className="setting-row"><div><strong>Enable image leaderboard</strong><span>Kirim embed + attachment leaderboard.png. Jika gagal, embed teks tetap dikirim.</span></div><Toggle checked={leaderboardUseImage} onChange={(value) => { setLeaderboardUseImage(value); setDirty(true); }} label="Image leaderboard" /></div></div><div className="form-grid two-columns"><div className="form-field"><label>Background mode</label><select value={leaderboardBackgroundMode} onChange={(event) => { setLeaderboardBackgroundMode(event.target.value); setDirty(true); }}><option value="default">Default dark gradient</option><option value="url">URL gambar</option><option value="upload">Upload dashboard</option></select><small className="field-helper">Default selalu aman kalau URL/upload gagal.</small></div><div className="form-field"><label>Path upload aktif</label><input value={leaderboardBackgroundPath} onChange={(event) => { setLeaderboardBackgroundPath(event.target.value); setDirty(true); }} placeholder="assets/leaderboard/background.png" /><small className="field-helper">Dipakai saat mode Upload.</small></div><div className="form-field form-field-full"><label>Background URL</label><input value={leaderboardBackgroundUrl} onChange={(event) => { setLeaderboardBackgroundUrl(event.target.value); setDirty(true); }} placeholder="https://..." /><small className="field-helper">Dipakai saat mode URL. Kalau kosong/error, fallback ke gradient.</small></div><div className="form-field"><label>Overlay darkness: {leaderboardOverlay}</label><input type="range" min={0} max={0.9} step={0.05} value={leaderboardOverlay} onChange={(event) => { setLeaderboardOverlay(Number(event.target.value)); setDirty(true); }} /><small className="field-helper">Default 0.55 supaya teks putih tetap kebaca.</small></div><div className="form-field"><label>Darken: {leaderboardDarken}</label><input type="range" min={0} max={0.85} step={0.05} value={leaderboardDarken} onChange={(event) => { setLeaderboardDarken(Number(event.target.value)); setDirty(true); }} /><small className="field-helper">Tambahan gelap di atas background custom.</small></div><div className="form-field"><label>Blur: {leaderboardBlur}px</label><input type="range" min={0} max={18} step={1} value={leaderboardBlur} onChange={(event) => { setLeaderboardBlur(Number(event.target.value)); setDirty(true); }} /><small className="field-helper">Blur background saja, teks tetap tajam.</small></div></div><div className="ktp-upload-grid"><label className="ktp-upload-box"><FileImage size={20}/><strong>Upload background image</strong><span>PNG/JPG/WebP maksimal 8 MB</span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => event.target.files?.[0] && uploadLeaderboardBackground(event.target.files[0])} />{leaderboardUploading ? <em>Mengunggah...</em> : null}</label><div className="ktp-upload-box" role="button" tabIndex={0} onClick={() => window.open(`/api/dashboard/leaderboard/preview.png?ts=${Date.now()}`, "_blank")}><FileImage size={20}/><strong>Preview image leaderboard</strong><span>Buka preview PNG dari data leaderboard asli.</span><em>Klik untuk preview</em></div></div><div className="info-panel"><Info size={19} /><p>Render image wajib menampilkan title, subtitle, list ranking 1–10, avatar, nama, panah statis ➜, poin, podium top 3, dan footer Pak RW. GIF arrow tetap dipakai di embed teks, bukan di PNG.</p></div></Card> : null}
           {slug === "motm" ? <Card><CardHeader title="Threshold MOTM" description="Lifetime point tetap lanjut dan tidak ikut reset." /><div className="form-field"><label>Target poin siklus</label><input type="number" min={1000} value={motmThreshold} onChange={(event) => { setMotmThreshold(Number(event.target.value)); setDirty(true); }} /><small className="field-helper">Default DESA TULUS: 100.000 poin.</small></div></Card> : null}
