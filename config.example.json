@@ -28,8 +28,8 @@
   "welcome": {
     "enabled": true,
     "sendToChatWarga": true,
-    "title": "Wilujeung sumping, {displayName}!",
-    "message": "Wilujeung sumping, **{user}!** akhirnya mampir juga ke {server}. Di sini tempatnya ngobrol santai, saling kenal, curhat, bercanda, dan jadi bagian dari warga Desa Tulus. Jangan sungkan buat mulai ngobrol ya. Semoga betah di sini {memberTulusRole}",
+    "title": "",
+    "message": "Wilujeung sumping, {user}!\n\nAkhirnya mampir juga ke {server}\nDisini tempatnya ngobrol santai, saling kenal, curhat, bercanda, dan jadi bagian dari warga Desa Tulus.\n\nJangan sungkan buat mulai ngobrol ya. Semoga betah disini!\n{memberTulusRole}",
     "style": "desa_tulus_indonesia_jelas_wilujeung_sumping",
     "dashboardHelp": "Welcome sinkron dashboard baru: channel welcome, role Member Tulus, rules, chat warga, ticket, content, embed, image, preview, dan test send.",
     "content": "",
@@ -37,7 +37,9 @@
     "memberRoleName": "Warga",
     "imageUrl": "",
     "thumbnailMode": "user",
-    "channelId": "1504495053224284400"
+    "channelId": "1504495053224284400",
+    "mode": "text",
+    "useEmbed": false
   },
   "ai": {
     "cooldownMs": 12000,
@@ -546,11 +548,11 @@
     },
     "welcome": {
       "color": "#7DBD77",
-      "content": "",
+      "content": "Wilujeung sumping, {user}!\n\nAkhirnya mampir juga ke {server}\nDisini tempatnya ngobrol santai, saling kenal, curhat, bercanda, dan jadi bagian dari warga Desa Tulus.\n\nJangan sungkan buat mulai ngobrol ya. Semoga betah disini!\n{memberTulusRole}",
       "authorName": "DESA TULUS • Warga Baru",
       "authorIcon": "",
-      "title": "Wilujeung sumping, {displayName}!",
-      "description": "Wilujeung sumping, **{user}!** akhirnya mampir juga ke {server}. Di sini tempatnya ngobrol santai, saling kenal, curhat, bercanda, dan jadi bagian dari warga Desa Tulus. Jangan sungkan buat mulai ngobrol ya. Semoga betah di sini {memberTulusRole}",
+      "title": "",
+      "description": "",
       "thumbnail": "avatar",
       "image": "",
       "footer": "DESA TULUS • Tempat warga baik berkumpul",
@@ -558,7 +560,10 @@
       "fields": [],
       "dashboardGroup": "Welcome Warga",
       "dashboardEditable": true,
-      "previewMustMatchDiscord": true
+      "previewMustMatchDiscord": true,
+      "imageUrl": "",
+      "mode": "text",
+      "useEmbed": false
     },
     "papanAktif": {
       "color": "#7DBD77",

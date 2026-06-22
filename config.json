@@ -28,16 +28,18 @@
   "welcome": {
     "enabled": true,
     "sendToChatWarga": true,
-    "title": "🏡 Wilujeung Sumping Warga Anyar! {displayName}",
-    "message": "Sambut warga anyar barudak {memberTulusRole}\n\nPak RW menyambut {user} sebagai bagian dari DESA TULUS. Semoga betah, rukun, dan saling menghargai.\n\n📌 Baca aturan desa: {rulesChannel}\n💬 Kenalan di chat warga: {chatWargaChannel}\n🎫 Butuh bantuan? Buka ticket: {ticketChannel}\n\nKamu warga ke-{memberCount} di desa ini. Wilujeung sumping, semoga betah di lembur urang 🤍",
+    "title": "",
+    "message": "Wilujeung sumping, {user}!\n\nAkhirnya mampir juga ke {server}\nDisini tempatnya ngobrol santai, saling kenal, curhat, bercanda, dan jadi bagian dari warga Desa Tulus.\n\nJangan sungkan buat mulai ngobrol ya. Semoga betah disini!\n{memberTulusRole}",
     "style": "desa_tulus_indonesia_jelas_wilujeung_sumping",
     "dashboardHelp": "Welcome sinkron dashboard baru: channel welcome, role Member Tulus, rules, chat warga, ticket, content, embed, image, preview, dan test send.",
-    "content": "🤍 Sambut warga anyar barudak {user} {memberTulusRole}",
+    "content": "",
     "memberRoleId": "",
-    "memberRoleName": "Member Tulus",
+    "memberRoleName": "Warga",
     "imageUrl": "",
     "thumbnailMode": "user",
-    "channelId": "1504495053224284400"
+    "channelId": "1504495053224284400",
+    "mode": "text",
+    "useEmbed": false
   },
   "ai": {
     "cooldownMs": 12000,
@@ -486,11 +488,11 @@
     },
     "welcome": {
       "color": "#7DBD77",
-      "content": "🤍 Sambut warga anyar barudak {user} {memberTulusRole}",
+      "content": "Wilujeung sumping, {user}!\n\nAkhirnya mampir juga ke {server}\nDisini tempatnya ngobrol santai, saling kenal, curhat, bercanda, dan jadi bagian dari warga Desa Tulus.\n\nJangan sungkan buat mulai ngobrol ya. Semoga betah disini!\n{memberTulusRole}",
       "authorName": "DESA TULUS • Warga Baru",
       "authorIcon": "",
-      "title": "🏡 Wilujeung Sumping Warga Anyar! {displayName}",
-      "description": "Sambut warga anyar barudak {memberTulusRole}\n\nPak RW menyambut {user} sebagai bagian dari DESA TULUS. Semoga betah, rukun, dan saling menghargai.\n\n📌 Baca aturan desa: {rulesChannel}\n💬 Kenalan di chat warga: {chatWargaChannel}\n🎫 Butuh bantuan? Buka ticket: {ticketChannel}\n\nKamu warga ke-{memberCount} di desa ini. Wilujeung sumping, semoga betah di lembur urang 🤍",
+      "title": "",
+      "description": "",
       "thumbnail": "avatar",
       "image": "",
       "footer": "DESA TULUS • Tempat warga baik berkumpul",
@@ -498,7 +500,10 @@
       "fields": [],
       "dashboardGroup": "Welcome Warga",
       "dashboardEditable": true,
-      "previewMustMatchDiscord": true
+      "previewMustMatchDiscord": true,
+      "imageUrl": "",
+      "mode": "text",
+      "useEmbed": false
     },
     "papanAktif": {
       "color": "#7DBD77",

@@ -127,8 +127,8 @@ export function ManagePage() {
   const [leaderboardUploading, setLeaderboardUploading] = useState(false);
   const [aiModel, setAiModel] = useState("openai/gpt-4o-mini");
   const [aiMaxTokens, setAiMaxTokens] = useState(460);
-  const [welcomeTitle, setWelcomeTitle] = useState("Wilujeung sumping, {displayName}!");
-  const [welcomeMessage, setWelcomeMessage] = useState("Wilujeung sumping, **{user}!** akhirnya mampir juga ke {server}. Di sini tempatnya ngobrol santai, saling kenal, curhat, bercanda, dan jadi bagian dari warga Desa Tulus. Jangan sungkan buat mulai ngobrol ya. Semoga betah di sini {memberTulusRole}");
+  const [welcomeTitle, setWelcomeTitle] = useState("");
+  const [welcomeMessage, setWelcomeMessage] = useState("Wilujeung sumping, {user}!\n\nAkhirnya mampir juga ke {server}\nDisini tempatnya ngobrol santai, saling kenal, curhat, bercanda, dan jadi bagian dari warga Desa Tulus.\n\nJangan sungkan buat mulai ngobrol ya. Semoga betah disini!\n{memberTulusRole}");
   const [welcomeContent, setWelcomeContent] = useState("");
   const [suggestionTitle, setSuggestionTitle] = useState("📬 Kotak Saran DESA TULUS");
   const [suggestionDescription, setSuggestionDescription] = useState("Klik tombol di bawah untuk mengirim kritik atau saran. Setelah terkirim, warga bisa memberi tanggapan lewat reaction dan thread.");
@@ -204,8 +204,8 @@ export function ManagePage() {
     setLeaderboardDarken(Number(leaderboardCfg.backgroundDarken ?? 0.45));
     setAiModel(String(readPath(cfg, "ai.openRouterModel") || "openai/gpt-4o-mini"));
     setAiMaxTokens(Number(readPath(cfg, "ai.maxTokens") || 460));
-    setWelcomeTitle(String(readPath(cfg, "welcome.title") || "Wilujeung sumping, {displayName}!"));
-    setWelcomeMessage(String(readPath(cfg, "welcome.message") || "Wilujeung sumping, **{user}!** akhirnya mampir juga ke {server}. Di sini tempatnya ngobrol santai, saling kenal, curhat, bercanda, dan jadi bagian dari warga Desa Tulus. Jangan sungkan buat mulai ngobrol ya. Semoga betah di sini {memberTulusRole}"));
+    setWelcomeTitle("");
+    setWelcomeMessage(String(readPath(cfg, "welcome.message") || "Wilujeung sumping, {user}!\n\nAkhirnya mampir juga ke {server}\nDisini tempatnya ngobrol santai, saling kenal, curhat, bercanda, dan jadi bagian dari warga Desa Tulus.\n\nJangan sungkan buat mulai ngobrol ya. Semoga betah disini!\n{memberTulusRole}"));
     setWelcomeContent(String(readPath(cfg, "welcome.content") || ""));
     setSuggestionTitle(String(readPath(cfg, "suggestion.title") || "📬 Kotak Saran DESA TULUS"));
     setSuggestionDescription(String(readPath(cfg, "suggestion.description") || "Klik tombol di bawah untuk mengirim kritik atau saran. Setelah terkirim, warga bisa memberi tanggapan lewat reaction dan thread."));
@@ -301,12 +301,18 @@ export function ManagePage() {
         patches.push({ path: "ai.maxTokens", value: aiMaxTokens });
       }
       if (slug === "welcome") {
-        patches.push({ path: "welcome.title", value: welcomeTitle });
+        patches.push({ path: "welcome.title", value: "" });
         patches.push({ path: "welcome.message", value: welcomeMessage });
-        patches.push({ path: "welcome.content", value: welcomeContent });
-        patches.push({ path: "embeds.welcome.title", value: welcomeTitle });
-        patches.push({ path: "embeds.welcome.description", value: welcomeMessage });
-        patches.push({ path: "embeds.welcome.content", value: welcomeContent });
+        patches.push({ path: "welcome.content", value: "" });
+        patches.push({ path: "welcome.imageUrl", value: "" });
+        patches.push({ path: "welcome.mode", value: "text" });
+        patches.push({ path: "welcome.useEmbed", value: false });
+        patches.push({ path: "embeds.welcome.title", value: "" });
+        patches.push({ path: "embeds.welcome.description", value: "" });
+        patches.push({ path: "embeds.welcome.content", value: welcomeMessage });
+        patches.push({ path: "embeds.welcome.image", value: "" });
+        patches.push({ path: "embeds.welcome.mode", value: "text" });
+        patches.push({ path: "embeds.welcome.useEmbed", value: false });
       }
       if (slug === "saran") {
         patches.push({ path: "suggestion.title", value: suggestionTitle });
@@ -516,12 +522,11 @@ export function ManagePage() {
               <div><span className="summary-dot is-ok" /><div><strong>Template embed</strong><small>{embedKey || "Tidak menggunakan template"}</small></div></div>
             </div>
           </Card>
-          {slug === "welcome" ? <Card className="full-span-card"><CardHeader title="Welcome DESA TULUS" description="Ini yang akan tampil di Discord. Simpan dari sini supaya config lama tidak menang lagi." />
+          {slug === "welcome" ? <Card className="full-span-card"><CardHeader title="Welcome DESA TULUS" description="Welcome sekarang text biasa / context. Tidak pakai embed, image, thumbnail, author, atau footer." />
             <div className="form-grid-two">
-              <div className="form-field"><label>Judul Welcome</label><input value={welcomeTitle} onChange={(event) => { setWelcomeTitle(event.target.value); setDirty(true); }} /></div>
-              <div className="form-field"><label>Content di luar embed</label><input value={welcomeContent} placeholder="Kosongkan agar tidak dobel mention" onChange={(event) => { setWelcomeContent(event.target.value); setDirty(true); }} /></div>
+              <div className="form-field"><label>Mode Welcome</label><input value="Text biasa / context tanpa embed" readOnly /></div>
             </div>
-            <div className="form-field"><label>Pesan Welcome</label><textarea rows={5} value={welcomeMessage} onChange={(event) => { setWelcomeMessage(event.target.value); setDirty(true); }} /></div>
+            <div className="form-field"><label>Pesan Welcome Text</label><textarea rows={7} value={welcomeMessage} onChange={(event) => { setWelcomeMessage(event.target.value); setDirty(true); }} /></div>
             <div className="info-panel"><Info size={19} /><p>Placeholder yang dipakai: {"{user}"}, {"{server}"}, dan {"{memberTulusRole}"}. Role Warga dipilih di tab Channel & Role.</p></div>
           </Card> : null}
           {slug === "saran" ? <Card className="full-span-card"><CardHeader title="Kotak Saran + Tombol Ikut Terus" description="Tombol Kirim Saran muncul di panel dan ikut lagi di setiap saran baru." />

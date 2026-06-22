@@ -347,8 +347,16 @@ function readConfigFile() {
 }
 
 const DESA_TULUS_WARGA_ROLE_ID = "1504495052695797857";
-const DESA_TULUS_WELCOME_MESSAGE = "Wilujeung sumping, **{user}!** akhirnya mampir juga ke {server}. Di sini tempatnya ngobrol santai, saling kenal, curhat, bercanda, dan jadi bagian dari warga Desa Tulus. Jangan sungkan buat mulai ngobrol ya. Semoga betah di sini {memberTulusRole}";
-const DESA_TULUS_WELCOME_TITLE = "Wilujeung sumping, {displayName}!";
+const DESA_TULUS_WELCOME_MESSAGE = [
+  "Wilujeung sumping, {user}!",
+  "",
+  "Akhirnya mampir juga ke {server}",
+  "Disini tempatnya ngobrol santai, saling kenal, curhat, bercanda, dan jadi bagian dari warga Desa Tulus.",
+  "",
+  "Jangan sungkan buat mulai ngobrol ya. Semoga betah disini!",
+  "{memberTulusRole}"
+].join("\n");
+const DESA_TULUS_WELCOME_TITLE = "";
 
 function isLegacyWelcomeText(value = "") {
   const raw = String(value || "").replace(/\s+/g, " ").trim().toLowerCase();
@@ -365,17 +373,24 @@ function applySafeEmbedDisplayMigrations(data = {}) {
   next.welcome.enabled = next.welcome.enabled !== false;
   next.welcome.memberRoleId = String(next.welcome.memberRoleId || next.welcome.memberTulusRoleId || next.memberTulusRoleId || DESA_TULUS_WARGA_ROLE_ID).trim();
   next.welcome.memberRoleName = next.welcome.memberRoleName || "Warga";
-  // v10.10.107: paksa format welcome DESA TULUS supaya config lama/dashboard lama tidak menang lagi.
+  // v10.10.111: welcome Pak RW wajib text biasa, bukan embed.
   next.welcome.message = DESA_TULUS_WELCOME_MESSAGE;
-  next.welcome.title = DESA_TULUS_WELCOME_TITLE;
-  if (!String(next.welcome.content || "").trim() || String(next.welcome.content || "").trim() === "{memberTulusRole}") next.welcome.content = "";
+  next.welcome.title = "";
+  next.welcome.content = "";
+  next.welcome.imageUrl = "";
+  next.welcome.mode = "text";
+  next.welcome.useEmbed = false;
   next.memberTulusRoleId = String(next.memberTulusRoleId || next.welcome.memberRoleId || DESA_TULUS_WARGA_ROLE_ID).trim();
   next.wargaRoleId = String(next.wargaRoleId || next.welcome.memberRoleId || DESA_TULUS_WARGA_ROLE_ID).trim();
 
   const welcomeEmbed = next.embeds.welcome = next.embeds.welcome && typeof next.embeds.welcome === "object" ? next.embeds.welcome : {};
-  welcomeEmbed.description = DESA_TULUS_WELCOME_MESSAGE;
-  if (!String(welcomeEmbed.title || "").trim() || /Wilujeung Sumping Warga Anyar|🏡/i.test(String(welcomeEmbed.title || ""))) welcomeEmbed.title = DESA_TULUS_WELCOME_TITLE;
-  if (!String(welcomeEmbed.content || "").trim() || String(welcomeEmbed.content || "").trim() === "{memberTulusRole}") welcomeEmbed.content = "";
+  welcomeEmbed.content = DESA_TULUS_WELCOME_MESSAGE;
+  welcomeEmbed.title = "";
+  welcomeEmbed.description = "";
+  welcomeEmbed.image = "";
+  welcomeEmbed.imageUrl = "";
+  welcomeEmbed.useEmbed = false;
+  welcomeEmbed.mode = "text";
 
   next.suggestion = next.suggestion && typeof next.suggestion === "object" ? next.suggestion : {};
   next.suggestion.enabled = next.suggestion.enabled !== false;
@@ -6405,9 +6420,9 @@ function renderMaxtonMegaControl(req, saved = false, error = "") {
         <h3>✍️ Semua Text Center</h3>
         <p class="section-note">Semua text penting dibuat bisa diedit dari dashboard. Ada field simpel, daftar text otomatis dari config, tambah text baru, dan JSON semua text. Placeholder aman: {user}, {username}, {server}, {memberRole}, {rulesChannel}, {chatWargaChannel}, {ticketChannel}, {role}, {month}, {total}, {chat}, {voice}, {level}, {rank}, {memberCount}, {expiredText}.</p>
         <div class="formgrid">
-          ${configInput("welcomeTitle", "Judul Welcome", cfg.welcome.title || DESA_TULUS_WELCOME_TITLE)}
-          ${configInput("welcomeContent", "Teks di Atas Embed Welcome", cfg.welcome.content || "")}
-          ${configInput("welcomeImageUrl", "Image Welcome URL (opsional)", cfg.welcome.imageUrl || "")}
+          ${configInput("welcomeTitle", "Judul Welcome (tidak dipakai, welcome sekarang text biasa)", cfg.welcome.title || "")}
+          ${configInput("welcomeContent", "Content tambahan (tidak dipakai, kosongkan)", cfg.welcome.content || "")}
+          ${configInput("welcomeImageUrl", "Image Welcome URL (nonaktif, welcome text biasa)", cfg.welcome.imageUrl || "")}
           ${configInput("suggestionTitle", "Judul Panel Saran", cfg.suggestion.title || "📬 Kotak Saran DESA TULUS")}
           ${configInput("suggestionButtonText", "Teks Tombol Saran", cfg.suggestion.buttonText || "📬 Kirim Saran")}
           ${configInput("loketPanelTitle", "Judul Panel Loket", cfg.loket?.panelTitle || "🏛️ LOKET DESA TULUS")}
@@ -6640,9 +6655,11 @@ function applyMaxtonControlPost(body = {}) {
 
   cfg.welcome.enabled = bool("welcomeEnabled");
   cfg.welcome.sendToChatWarga = bool("welcomeSendToChatWarga");
-  cfg.welcome.title = body.welcomeTitle || cfg.welcome.title || DESA_TULUS_WELCOME_TITLE;
-  cfg.welcome.content = body.welcomeContent || cfg.welcome.content || "";
-  cfg.welcome.imageUrl = body.welcomeImageUrl || cfg.welcome.imageUrl || "";
+  cfg.welcome.title = "";
+  cfg.welcome.content = "";
+  cfg.welcome.imageUrl = "";
+  cfg.welcome.mode = "text";
+  cfg.welcome.useEmbed = false;
   cfg.welcome.memberRoleId = body.welcomeMemberRoleId || cfg.welcome.memberRoleId || "";
   cfg.welcome.memberRoleName = cfg.welcome.memberRoleName || "Member Tulus";
   cfg.welcome.message = body.welcomeMessage || cfg.welcome.message || DESA_TULUS_WELCOME_MESSAGE;
@@ -7992,8 +8009,8 @@ function defaultEmbedTemplateRegistry() {
       lastMessageId: "",
       sourceChannelId: "",
       sourceMessageId: "",
-      content: cfg.welcome.content || "🤍 Sambut warga anyar barudak {user} {memberRole}",
-      embed: { title: cfg.welcome.title || "🏡 Wilujeung Sumping Warga Anyar! {displayName}", description: cfg.welcome.message || "", color: hexToIntColor(cfg.embedColor || "#FFFFFF"), image: cfg.welcome.imageUrl ? { url: cfg.welcome.imageUrl } : undefined },
+      content: cfg.welcome.message || DESA_TULUS_WELCOME_MESSAGE,
+      embed: null,
       components: [],
       lastEditedAt: "",
       lastSentAt: "",
@@ -12255,7 +12272,8 @@ app.post("/embed-sync/send", requireDashboardAuth, async (req, res) => {
     if (!channelId) return res.status(400).send(renderEmbedSyncPage(req, { importedTemplate: template, selectedName: template.name, error: "Pilih target channel dulu sebelum kirim ke Discord." }));
     const channel = await guild.channels.fetch(channelId).catch(() => null);
     if (!channel || !channel.send) return res.status(404).send(renderEmbedSyncPage(req, { importedTemplate: template, selectedName: template.name, error: "Channel tidak ditemukan atau bot tidak punya izin mengirim pesan." }));
-    const payload = { content: template.content || undefined, embeds: [templateToEmbedBuilder(template)] };
+    const payload = { content: template.content || undefined };
+    if (template.embed) payload.embeds = [templateToEmbedBuilder(template)];
     if (Array.isArray(template.components) && template.components.length) payload.components = template.components;
     const sent = await channel.send(payload);
     template.defaultChannelId = channel.id;
@@ -12285,7 +12303,7 @@ app.post("/embed-sync/update", requireDashboardAuth, async (req, res) => {
     const message = await channel.messages.fetch(messageId).catch(() => null);
     if (!message) return res.status(404).send(renderEmbedSyncPage(req, { importedTemplate: template, selectedName: template.name, error: "Message ID tidak ditemukan. Tidak ada pesan baru yang dikirim." }));
     if (message.author?.id !== client.user?.id) return res.status(403).send(renderEmbedSyncPage(req, { importedTemplate: template, selectedName: template.name, error: "Bot hanya bisa update pesan yang dikirim oleh Pak RW sendiri." }));
-    const payload = { content: template.content || null, embeds: [templateToEmbedBuilder(template)] };
+    const payload = { content: template.content || null, embeds: template.embed ? [templateToEmbedBuilder(template)] : [] };
     if (Array.isArray(template.components) && template.components.length) payload.components = template.components;
     await message.edit(payload);
     template.defaultChannelId = channel.id;
@@ -13478,13 +13496,18 @@ app.post("/modules", requireDashboardAuth, (req, res) => {
     cfg.welcome = cfg.welcome || {};
     cfg.welcome.enabled = req.body.welcomeEnabled === "on";
     cfg.welcome.sendToChatWarga = req.body.welcomeSendToChatWarga === "on";
-    cfg.welcome.title = req.body.welcomeTitle || DESA_TULUS_WELCOME_TITLE;
-    cfg.welcome.content = req.body.welcomeContent || "";
+    cfg.welcome.title = "";
+    cfg.welcome.content = "";
+    cfg.welcome.imageUrl = "";
+    cfg.welcome.mode = "text";
+    cfg.welcome.useEmbed = false;
     cfg.welcome.memberRoleId = req.body.welcomeMemberRoleId || cfg.welcome.memberRoleId || cfg.memberTulusRoleId || cfg.wargaRoleId || DESA_TULUS_WARGA_ROLE_ID;
     cfg.welcome.memberRoleName = "Warga";
     cfg.memberTulusRoleId = cfg.welcome.memberRoleId;
     cfg.wargaRoleId = cfg.welcome.memberRoleId;
     cfg.welcome.message = req.body.welcomeMessage || DESA_TULUS_WELCOME_MESSAGE;
+    cfg.welcome.mode = "text";
+    cfg.welcome.useEmbed = false;
 
     cfg.juragan = cfg.juragan || {};
     cfg.juragan.enabled = req.body.juraganEnabled === "on";
@@ -18740,32 +18763,19 @@ client.on(Events.GuildMemberAdd, async (member) => {
     };
 
     const defaultWelcomeMessage = DESA_TULUS_WELCOME_MESSAGE;
-    const description = applyTemplate(
+    const welcomeText = applyTemplate(
       normalizeWelcomeText(config.welcome.message, defaultWelcomeMessage),
       welcomeData
-    );
-    const welcomeTitle = applyTemplate(normalizeWelcomeText(config.welcome.title, DESA_TULUS_WELCOME_TITLE), welcomeData);
-    const welcomeContent = applyTemplate(normalizeWelcomeText(config.welcome.content, ""), welcomeData);
+    ).trim();
 
-    const embed = new EmbedBuilder()
-      .setColor(defaultEmbedColorInt())
-      .setAuthor({
-        name: `${config.serverName || "DESA TULUS"} • Warga Baru`,
-        iconURL: member.user.displayAvatarURL({ dynamic: true })
-      })
-      .setTitle(welcomeTitle)
-      .setDescription(description)
-      .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 512 }))
-      .setFooter({ text: makeOTFooter("DESA TULUS • Tempat warga baik berkumpul") })
-      .setTimestamp();
-
-    if (config.welcome.imageUrl) {
-      embed.setImage(applyTemplate(config.welcome.imageUrl, welcomeData));
-    }
-
-    const welcomePayload = { embeds: [embed] };
-    if (String(welcomeContent || "").trim()) welcomePayload.content = welcomeContent;
-    await safeSend(channel, welcomePayload);
+    // Welcome Pak RW sekarang wajib context/text biasa. Tidak pakai embed, thumbnail, image, atau author embed.
+    await safeSend(channel, {
+      content: welcomeText || applyTemplate(defaultWelcomeMessage, welcomeData),
+      allowedMentions: {
+        users: [member.id],
+        roles: parseDiscordId(config.welcome?.memberRoleId || config.memberTulusRoleId || config.wargaRoleId || DESA_TULUS_WARGA_ROLE_ID) ? [parseDiscordId(config.welcome?.memberRoleId || config.memberTulusRoleId || config.wargaRoleId || DESA_TULUS_WARGA_ROLE_ID)] : []
+      }
+    });
 
   } catch (err) {
     console.log("WELCOME ERROR:", err);
