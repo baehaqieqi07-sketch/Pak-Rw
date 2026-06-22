@@ -15944,8 +15944,7 @@ function formatLeaderboardQuote(topUsers = []) {
 
   if (!Array.isArray(topUsers) || topUsers.length === 0) {
     return [
-      ">>> 🏆 **Peringkat Warga:**",
-      "Belum ada warga yang masuk peringkat.",
+      ">>> Belum ada warga yang masuk peringkat.",
       "Mulai aktif ngobrol untuk masuk leaderboard."
     ].join("\n");
   }
@@ -15957,8 +15956,7 @@ function formatLeaderboardQuote(topUsers = []) {
 
   if (!sorted.length) {
     return [
-      ">>> 🏆 **Peringkat Warga:**",
-      "Belum ada warga yang masuk peringkat.",
+      ">>> Belum ada warga yang masuk peringkat.",
       "Mulai aktif ngobrol untuk masuk leaderboard."
     ].join("\n");
   }
@@ -15967,10 +15965,10 @@ function formatLeaderboardQuote(topUsers = []) {
     const rank = rankEmojis[index] || `${index + 1}.`;
     const userText = getLeaderboardUserText(item);
     const points = formatLeaderboardPoint(getLeaderboardPointValue(item));
-    return `${rank} ${userText} ${arrow} **${points} poin**`;
+    return `${rank} ${userText} ${arrow} ${points} poin`;
   });
 
-  return `>>> 🏆 **Peringkat Warga:**\n${lines.join("\n")}`;
+  return `>>> ${lines.join("\n")}`;
 }
 
 function getLeaderboardActiveRows(guildId, limit = 10, ownerId = "") {
@@ -15994,22 +15992,21 @@ function getLeaderboardActiveRows(guildId, limit = 10, ownerId = "") {
 function buildLeaderboardActiveEmbed(guild, topUsers = null, reason = "update", imageOk = false, imageName = "leaderboard.png") {
   const cfg = getTopActiveConfig();
   const rows = normalizeLeaderboardUsers(Array.isArray(topUsers) ? topUsers : getLeaderboardActiveRows(guild.id, cfg.leaderboardActiveTopLimit, guild.ownerId));
-  const serverName = config.serverName || guild.name || "DESA TULUS";
   const template = config.embeds?.papanAktif || {};
-  const title = applyTemplate(normalizeLeaderboardActiveTitle(config.leaderboard?.title || cfg.leaderboardActiveTitleTemplate || template.title), { server: serverName });
-  const updateText = "Update otomatis setiap hari pukul **00.00 WIB**";
+  const title = "🏆 TOP AKTIF WARGA SEPANJANG WAKTU";
+  const updateText = "Update otomatis setiap hari pukul 00.00 WIB";
   const leaderboardText = formatLeaderboardQuote(rows);
-  const description = `${updateText}\n\n${leaderboardText}`.slice(0, 4000);
+  const description = `${updateText}\n\n🏆 Peringkat Warga:\n${leaderboardText}`.slice(0, 4000);
   const colorHex = String(config.leaderboard?.color || "#FACC15").trim();
 
   const embed = new EmbedBuilder()
     .setColor(/^#[0-9A-Fa-f]{6}$/.test(colorHex) ? colorHex : "#FACC15")
-    .setTitle(title || "🏆 TOP AKTIF WARGA SEPANJANG WAKTU")
+    .setTitle(title)
     .setDescription(description || [
-      "Update otomatis setiap hari pukul **00.00 WIB**",
+      "Update otomatis setiap hari pukul 00.00 WIB",
       "",
-      ">>> 🏆 **Peringkat Warga:**",
-      "Belum ada warga yang masuk peringkat.",
+      "🏆 Peringkat Warga:",
+      ">>> Belum ada warga yang masuk peringkat.",
       "Mulai aktif ngobrol untuk masuk leaderboard."
     ].join("\n"))
     .setFooter({ text: makeOTFooter(config.leaderboard?.footer || cfg.leaderboardActiveFooter || template.footer || "Pak RW • Desa Tulus Leaderboard"), iconURL: template.footerIcon || OT_FOOTER_ICON_URL })
@@ -16027,9 +16024,9 @@ async function buildLeaderboardActivePayload(guild, reason = "update") {
   const rows = await hydrateLeaderboardUsers(guild, normalizeLeaderboardUsers(rawRows));
   let files = [];
   let imageOk = false;
-  const imageName = `leaderboard-ktp-${Date.now()}.png`; // legacy cache key: attachment://leaderboard.png
+  const imageName = `leaderboard-podium-${Date.now()}.png`; // dynamic cache key agar Discord tidak pakai image lama; legacy token: attachment://leaderboard.png
 
-  console.log(`[LEADERBOARD_IMAGE] KTP render request raw=${Array.isArray(rawRows) ? rawRows.length : 0} hydrated=${rows.length} first=${rows[0]?.displayName || "-"} points=${rows[0]?.points || 0}`);
+  console.log(`[LEADERBOARD_IMAGE] REFINED_PODIUM render request raw=${Array.isArray(rawRows) ? rawRows.length : 0} hydrated=${rows.length} first=${rows[0]?.displayName || "-"} points=${rows[0]?.points || 0}`);
   if (process.env.PAKRW_DEBUG_LEADERBOARD === "1") {
     logLeaderboardDebug("raw topUsers", rawRows);
     logLeaderboardDebug("hydrated", rows);
