@@ -9,7 +9,7 @@ Update kecil dan aman.
   - Header list: `🏆 Peringkat Warga:`
   - Quote `>>>` hanya dipakai di awal daftar ranking.
   - Poin tidak dibold supaya tampil clean.
-- Arrow tetap memakai emoji config `<a:Desa_Tulus2:1518502350363430932>` dengan fallback `➜`.
+- Arrow tetap memakai emoji config `<a:Animated_Arrow_Bluelite:1512751559140839576>` dengan fallback `➜`.
 - Nama user tetap pakai mention Discord jika ada `userId`, supaya tampil sebagai @nama user di Discord.
 - Attachment image diganti cache key dari `leaderboard-ktp` ke `leaderboard-podium`.
 

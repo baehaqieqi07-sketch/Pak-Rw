@@ -17,7 +17,7 @@ Fokus update ini hanya tampilan Leaderboard / Papan Aktif lifetime Pak RW.
 - Leaderboard lifetime sekarang mengirim embed teks rapi + image PNG otomatis.
 - Embed memakai multiline quote `>>>` satu kali di awal daftar ranking.
 - Pemisah user dan poin memakai emoji GIF:
-  `<a:Desa_Tulus2:1518502350363430932>`
+  `<a:Animated_Arrow_Bluelite:1512751559140839576>`
 - Format poin memakai format Indonesia, maksimal 2 desimal.
 - Ranking maksimal 10 warga.
 - Fallback aman kalau data kosong.

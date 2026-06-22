@@ -11,7 +11,7 @@ Fokus update ini: memperbaiki total image leaderboard agar tidak kosong, menamba
 - Jika data hanya punya `userId`, bot mencoba hydrate dari Discord member untuk ambil `displayName` dan avatar.
 - List ranking 1–10 sekarang menampilkan rank, avatar/fallback, nama, panah biru, dan poin.
 - Podium top 3 sekarang menampilkan medal, avatar/fallback, nama, dan poin.
-- Footer image tetap: `<a:Desa_Tulus2:1518502350363430932> <a:Desa_Tulus2:1518502350363430932> DESA TULUS |`.
+- Footer image tetap: `Pak RW • Desa Tulus Leaderboard`.
 - Jika avatar/background gagal, bot fallback aman dan tidak crash.
 
 ### 2. Background leaderboard dari dashboard/config

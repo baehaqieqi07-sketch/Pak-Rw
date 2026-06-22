@@ -71,10 +71,10 @@ const roleTokens: Record<string, string> = {
 };
 
 const knownEmojiShortcodes: Record<string, string> = {
-  rocket_animated: "<a:Desa_Tulus2:1518502350363430932>",
-  bar_chart: "<a:Desa_Tulus2:1518502350363430932>",
-  Chart_Increasing: "<a:Desa_Tulus2:1518502350363430932>",
-  Animated_Arrow_Bluelite: "<a:Desa_Tulus2:1518502350363430932>",
+  rocket_animated: "<a:rocket_animated:1512884173453529288>",
+  bar_chart: "<a:bar_chart:1516453838117277829>",
+  Chart_Increasing: "<a:Chart_Increasing:1516454160684290219>",
+  Animated_Arrow_Bluelite: "<a:Animated_Arrow_Bluelite:1512751559140839576>",
   Desa_Tulus: "<a:Desa_Tulus2:1518502350363430932>"
 };
 

@@ -339,7 +339,7 @@ function normalizeLeaderboardConfig(config = {}) {
     imageTheme: String(source.imageTheme || "desa_tulus_ktp").trim() || "desa_tulus_ktp",
     color: String(source.color || "#FACC15").trim() || "#FACC15",
     fallbackArrow: String(source.fallbackArrow || FALLBACK_ARROW).trim() || FALLBACK_ARROW,
-    footer: String(source.footer || "<a:Desa_Tulus2:1518502350363430932> <a:Desa_Tulus2:1518502350363430932> DESA TULUS |").trim() || "<a:Desa_Tulus2:1518502350363430932> <a:Desa_Tulus2:1518502350363430932> DESA TULUS |",
+    footer: String(source.footer || "Pak RW • Desa Tulus Leaderboard").trim() || "Pak RW • Desa Tulus Leaderboard",
     title: String(source.title || "TOP AKTIF WARGA SEPANJANG WAKTU").trim() || "TOP AKTIF WARGA SEPANJANG WAKTU",
     updateTime: String(source.updateTime || "00:00").trim() || "00:00",
     timezone: String(source.timezone || "Asia/Jakarta").trim() || "Asia/Jakarta"
@@ -612,7 +612,7 @@ async function drawKtpGrid(ctx, guild, sorted) {
 function drawFooter(ctx, cfg) {
   // Footer dibuat simple, sejajar dengan card lain, tidak terlalu panjang/mepet bawah.
   fillRoundRect(ctx, 96, 836, 1008, 32, 15, "rgba(15, 23, 42, 0.68)", "rgba(148, 163, 184, 0.09)", 1);
-  drawSafeText(ctx, cfg.footer || "<a:Desa_Tulus2:1518502350363430932> <a:Desa_Tulus2:1518502350363430932> DESA TULUS |", 120, 853, {
+  drawSafeText(ctx, cfg.footer || "Pak RW • Desa Tulus Leaderboard", 120, 853, {
     font: font(12, "800"),
     color: "#CBD5E1",
     maxWidth: 430

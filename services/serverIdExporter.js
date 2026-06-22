@@ -247,7 +247,7 @@ async function handleRwIdCommand(message, config) {
       { name: 'Media', value: String(payload.counts.media), inline: true },
       { name: 'Stage', value: String(payload.counts.stage), inline: true },
       { name: 'Role', value: String(payload.counts.roles), inline: true }
-    ).setFooter({ text: '<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Pak RW' }).setTimestamp();
+    ).setFooter({ text: 'DESA TULUS • Pak RW' }).setTimestamp();
     if (loading) await loading.edit({ content: cfg.successMessage || '', embeds: [embed] }).catch(() => {}); else await message.channel.send({ embeds: [embed] });
     await sendLog(message, config, payload.counts);
   } catch (error) {

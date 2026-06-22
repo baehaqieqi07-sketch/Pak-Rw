@@ -103,7 +103,7 @@ export function SettingsPage() {
         { path: "embedColor", value: values.embedColor },
         { path: "embeds.suggestionResult.title", value: values.suggestionTitle },
         { path: "embeds.suggestionResult.description", value: values.suggestionDescription },
-        { path: "embeds.suggestionResult.footer", value: "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Kritik & Saran Warga" }
+        { path: "embeds.suggestionResult.footer", value: "DESA TULUS • Kritik & Saran Warga" }
       ];
       Object.entries(embedColors).forEach(([key, value]) => patches.push({ path: `embeds.${key}.color`, value }));
       await api.savePatches(patches);
@@ -148,7 +148,7 @@ export function KtpWargaPage() {
     panelTitle: "KARTU TANDA PENDUDUK DESA TULUS",
     panelDescription: "Klik tombol **Buat KTP** untuk mengisi data warga. Gunakan nama panggilan dan domisili umum saja—jangan tulis alamat rumah, nomor telepon, kata sandi, atau data pribadi sensitif.",
     buttonLabel: "Buat KTP", resultContent: "🪪 Kartu Tanda Penduduk milik {user}",
-    footerText: "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Ketik rwktp untuk melihat KTP", backgroundPath: "assets/ktp-desa-tulus-background.png",
+    footerText: "DESA TULUS • Ketik rwktp untuk melihat KTP", backgroundPath: "assets/ktp-desa-tulus-background.png",
     backgroundFit: "exact", cardTitle: "KARTU TANDA PENDUDUK", cardSubtitle: "DESA TULUS",
     privacyNote: "KARTU KOMUNITAS DIGITAL • BUKAN DOKUMEN RESMI", logToConsole: true, design: defaultDesign
   };

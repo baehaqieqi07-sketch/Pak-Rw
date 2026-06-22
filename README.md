@@ -96,8 +96,8 @@ Jangan upload `.env`, `node_modules`, `data`, `logs`, `runtime-logs`, atau `back
 
 - Memperbaiki `>>> ` supaya Top Voice, Top Chat, dan Papan Aktif tampil dengan garis kutipan Discord.
 - Mengubah shortcode emoji lama menjadi custom emoji GIF Discord asli.
-- Cek Poin memakai `<a:Desa_Tulus2:1518502350363430932>`.
-- Level Up memakai `<a:Desa_Tulus2:1518502350363430932>` dan `<a:Desa_Tulus2:1518502350363430932>`.
+- Cek Poin memakai `<a:bar_chart:1516453838117277829>`.
+- Level Up memakai `<a:rocket_animated:1512884173453529288>` dan `<a:Chart_Increasing:1516454160684290219>`.
 - Level Up dan Cek Poin tidak lagi memasang thumbnail/image.
 - Preview dashboard menampilkan blockquote dan custom emoji dengan format yang sama seperti Discord.
 
@@ -408,6 +408,6 @@ Welcome default sekarang memakai teks Desa Tulus terbaru dan role Warga ID `1504
 ## v10.10.108 — Leaderboard Premium PNG
 
 Papan Aktif lifetime sekarang memakai embed quote rapi + image PNG otomatis bertema Desa Tulus.
-Ranking maksimal 10 warga, memakai emoji panah `<a:Desa_Tulus2:1518502350363430932>` di embed, dan panah static biru di canvas.
+Ranking maksimal 10 warga, memakai emoji panah `<a:Animated_Arrow_Bluelite:1512751559140839576>` di embed, dan panah static biru di canvas.
 Jika image gagal dirender, Pak RW tetap mengirim embed teks biasa.
 Auto post akan mengedit pesan lama jika `leaderboard.messageId` tersedia supaya channel tidak spam.

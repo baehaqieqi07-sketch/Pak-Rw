@@ -6,10 +6,10 @@ const canvasSource = fs.readFileSync(path.join(__dirname, '..', 'utils', 'leader
 
 const required = [
   'formatLeaderboardQuote',
-  '<a:Desa_Tulus2:1518502350363430932>',
+  '<a:Animated_Arrow_Bluelite:1512751559140839576>',
   'attachment://leaderboard.png',
   'generateLeaderboardImage',
-  '<a:Desa_Tulus2:1518502350363430932> <a:Desa_Tulus2:1518502350363430932> DESA TULUS |',
+  'Pak RW • Desa Tulus Leaderboard',
   'Update otomatis setiap hari pukul **00.00 WIB**',
   'persistLeaderboardActiveMessageId'
 ];
