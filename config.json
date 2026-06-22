@@ -1178,7 +1178,7 @@
       "Discord Manager"
     ]
   },
-  "version": "10.10.114",
+  "version": "10.10.115",
   "bigBot": {
     "releaseName": "Pak RW KTP Warga dan AFK Voice Stabil"
   },
@@ -1447,14 +1447,14 @@
     "enabled": true,
     "useQuoteFormat": true,
     "useImage": true,
-    "backgroundMode": "default",
+    "backgroundMode": "upload",
     "backgroundUrl": "",
     "backgroundPath": "assets/leaderboard/background.png",
     "backgroundOverlay": 0.55,
     "backgroundBlur": 0,
     "backgroundDarken": 0.45,
     "backgroundFit": "cover",
-    "imageTheme": "desa_tulus_dark",
+    "imageTheme": "desa_tulus_ktp",
     "color": "#FACC15",
     "arrowEmoji": "<a:Animated_Arrow_Bluelite:1512751559140839576>",
     "fallbackArrow": "➜",

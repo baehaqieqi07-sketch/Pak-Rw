@@ -1,11 +1,46 @@
 const fs = require("fs");
 const path = require("path");
-const { createCanvas, loadImage } = require("@napi-rs/canvas");
+const { createCanvas, loadImage, GlobalFonts } = require("@napi-rs/canvas");
 
 const WIDTH = 1200;
 const HEIGHT = 900;
 const FALLBACK_ARROW = "➜";
 const PROJECT_ROOT = path.resolve(__dirname, "..");
+const FONT_FAMILY = "PakRwSans";
+let FONT_READY = false;
+
+function setupCanvasFonts() {
+  if (FONT_READY) return true;
+  const candidates = [];
+  try { candidates.push(require.resolve("dejavu-fonts-ttf/ttf/DejaVuSans.ttf")); } catch {}
+  try { candidates.push(require.resolve("dejavu-fonts-ttf/ttf/DejaVuSans-Bold.ttf")); } catch {}
+  candidates.push(
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+    "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf"
+  );
+
+  let registered = 0;
+  for (const file of candidates) {
+    try {
+      if (file && fs.existsSync(file) && GlobalFonts.registerFromPath(file, FONT_FAMILY)) registered += 1;
+    } catch {}
+  }
+
+  try { GlobalFonts.loadSystemFonts(); } catch {}
+  FONT_READY = true;
+  if (process.env.PAKRW_DEBUG_LEADERBOARD === "1") {
+    console.log(`[LEADERBOARD_IMAGE] font bootstrap registered=${registered}`);
+  }
+  return registered > 0;
+}
+setupCanvasFonts();
+
+function font(size, weight = "400") {
+  const safeWeight = String(weight || "400");
+  return `${safeWeight} ${Number(size) || 18}px "${FONT_FAMILY}", "DejaVu Sans", sans-serif`;
+}
 
 function formatPoints(value) {
   const number = Number(value || 0);
@@ -17,19 +52,42 @@ function formatPoints(value) {
 }
 
 function getPointValue(item) {
-  const raw = item?.points ?? item?.point ?? item?.totalPoints ?? item?.totalPoint ?? item?.lifetimeTotal ?? item?.score ?? item?.xp ?? item?.exp ?? 0;
+  const raw = item?.points ?? item?.point ?? item?.totalPoints ?? item?.totalPoint ?? item?.lifetimeTotal ?? item?.monthly?.total ?? item?.score ?? item?.xp ?? item?.exp ?? 0;
   const number = Number(raw);
   return Number.isFinite(number) ? number : 0;
+}
+
+function getNumberField(item, keys = []) {
+  for (const key of keys) {
+    const value = key.split(".").reduce((obj, part) => obj?.[part], item);
+    const number = Number(value);
+    if (Number.isFinite(number) && number > 0) return number;
+  }
+  return 0;
 }
 
 function getUserId(item) {
   return String(item?.userId || item?.id || item?.memberId || item?.discordId || item?.discordID || item?.user_id || "").trim();
 }
 
+function compactDiscordId(id = "") {
+  const value = String(id || "").trim();
+  if (!value) return "ID belum terbaca";
+  if (value.length <= 10) return value;
+  return `${value.slice(0, 4)}••••${value.slice(-4)}`;
+}
+
+function cleanText(text = "", fallback = "Warga Desa") {
+  const value = String(text ?? "").normalize("NFKC").replace(/\s+/g, " ").trim();
+  return value || fallback;
+}
+
 function getUserName(item) {
-  return String(item?.displayName || item?.globalName || item?.username || item?.name || item?.tag || "Warga Desa")
-    .replace(/\s+/g, " ")
-    .trim() || "Warga Desa";
+  return cleanText(item?.displayName || item?.globalName || item?.username || item?.name || item?.tag, "Warga Desa");
+}
+
+function getUsername(item) {
+  return cleanText(item?.username || item?.tag || item?.displayName || item?.name, "warga-desa");
 }
 
 function getAvatarURL(guild, item) {
@@ -42,10 +100,7 @@ function getAvatarURL(guild, item) {
     const cachedUser = cachedMember?.user || (userId ? guild?.client?.users?.cache?.get(String(userId)) : null);
     const url = cachedMember?.displayAvatarURL?.({ extension: "png", size: 256 }) || cachedUser?.displayAvatarURL?.({ extension: "png", size: 256 });
     if (url) return url;
-  } catch {
-    // fallback handled by drawCircleAvatar
-  }
-
+  } catch {}
   return null;
 }
 
@@ -55,17 +110,14 @@ function summarizeLeaderboardDebugRows(rows = [], limit = 3) {
     rank: index + 1,
     userId: getUserId(item),
     displayName: getUserName(item),
+    username: getUsername(item),
     points: getPointValue(item),
     hasAvatar: Boolean(item?.avatarURL || item?.avatarUrl || item?.avatar || item?.displayAvatarURL)
   }));
 }
 
 function logLeaderboardDebug(label, value) {
-  const verbose = String(process.env.PAKRW_VERBOSE_LEADERBOARD_DEBUG || "").trim() === "1";
-  if (verbose) {
-    console.log(`[LEADERBOARD_IMAGE] ${label}:`, value);
-    return;
-  }
+  if (process.env.PAKRW_DEBUG_LEADERBOARD !== "1") return;
   if (Array.isArray(value)) {
     console.log(`[LEADERBOARD_IMAGE] ${label}: total=${value.length}`, summarizeLeaderboardDebugRows(value));
     return;
@@ -75,7 +127,6 @@ function logLeaderboardDebug(label, value) {
 
 function normalizeLeaderboardUsers(topUsers = []) {
   if (!Array.isArray(topUsers)) return [];
-
   return topUsers
     .filter(Boolean)
     .map((item) => {
@@ -87,7 +138,10 @@ function normalizeLeaderboardUsers(topUsers = []) {
         displayName,
         username: item?.username || displayName,
         avatarURL: item?.avatarURL || item?.avatarUrl || item?.avatar || item?.displayAvatarURL || null,
-        points: Number.isFinite(points) ? points : 0
+        points: Number.isFinite(points) ? points : 0,
+        level: Number(item?.level || 0) || 0,
+        chat: getNumberField(item, ["lifetimeChat", "chat", "monthly.chat"]),
+        voice: getNumberField(item, ["lifetimeVoice", "voice", "monthly.voice"])
       };
     })
     .sort((a, b) => b.points - a.points)
@@ -97,8 +151,6 @@ function normalizeLeaderboardUsers(topUsers = []) {
 async function hydrateLeaderboardUsers(guild, topUsers = []) {
   const normalizedUsers = normalizeLeaderboardUsers(topUsers);
   logLeaderboardDebug("normalized", normalizedUsers);
-  console.log("[LEADERBOARD_IMAGE] normalized total:", normalizedUsers.length);
-  logLeaderboardDebug("normalized first", normalizedUsers.slice(0, 1));
 
   const hydrated = [];
   for (const item of normalizedUsers) {
@@ -118,15 +170,16 @@ async function hydrateLeaderboardUsers(guild, topUsers = []) {
     hydrated.push({ ...item, displayName, username, avatarURL });
   }
 
-  console.log("[LEADERBOARD_IMAGE] hydrated total:", hydrated.length);
-  logLeaderboardDebug("hydrated first", hydrated.slice(0, 1));
+  logLeaderboardDebug("hydrated", hydrated);
+  if (process.env.PAKRW_DEBUG_LEADERBOARD === "1") {
+    console.log(`[LEADERBOARD_IMAGE] hydrated total=${hydrated.length} first=${hydrated[0]?.displayName || "-"} points=${hydrated[0]?.points || 0}`);
+  }
   return hydrated;
 }
 
 function fitText(ctx, text, maxWidth) {
-  const clean = String(text || "Warga Desa").replace(/\s+/g, " ").trim() || "Warga Desa";
+  const clean = cleanText(text, "—");
   if (!maxWidth || ctx.measureText(clean).width <= maxWidth) return clean;
-
   let output = clean;
   while (output.length > 0 && ctx.measureText(`${output}...`).width > maxWidth) {
     output = output.slice(0, -1);
@@ -136,18 +189,17 @@ function fitText(ctx, text, maxWidth) {
 
 function drawSafeText(ctx, text, x, y, options = {}) {
   const {
-    font = "bold 18px Arial, Sans",
+    font: fontValue = font(18, "700"),
     color = "#F8FAFC",
     align = "left",
     baseline = "middle",
     maxWidth = null
   } = options;
 
-  const safeText = String(text ?? "").trim() || "—";
-
+  const safeText = cleanText(text, "—");
   ctx.save();
   ctx.globalAlpha = 1;
-  ctx.font = font;
+  ctx.font = fontValue;
   ctx.fillStyle = color;
   ctx.textAlign = align;
   ctx.textBaseline = baseline;
@@ -165,6 +217,20 @@ function drawRoundRect(ctx, x, y, w, h, r) {
   ctx.arcTo(x, y + h, x, y, radius);
   ctx.arcTo(x, y, x + w, y, radius);
   ctx.closePath();
+}
+
+function fillRoundRect(ctx, x, y, w, h, r, fillStyle, strokeStyle = "", lineWidth = 1) {
+  ctx.save();
+  ctx.globalAlpha = 1;
+  drawRoundRect(ctx, x, y, w, h, r);
+  ctx.fillStyle = fillStyle;
+  ctx.fill();
+  if (strokeStyle) {
+    ctx.strokeStyle = strokeStyle;
+    ctx.lineWidth = lineWidth;
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function safeLocalAssetPath(input = "") {
@@ -185,7 +251,7 @@ async function safeLoadImage(source) {
     if (localPath && fs.existsSync(localPath)) return await loadImage(localPath);
     return null;
   } catch (error) {
-    console.log("[LEADERBOARD_IMAGE_LOAD_FALLBACK]", error?.message || error);
+    if (process.env.PAKRW_DEBUG_LEADERBOARD === "1") console.log("[LEADERBOARD_IMAGE_LOAD_FALLBACK]", error?.message || error);
     return null;
   }
 }
@@ -209,14 +275,14 @@ async function drawCircleAvatar(ctx, image, x, y, size, borderColor = "rgba(248,
     fallbackGradient.addColorStop(1, "#0F172A");
     ctx.fillStyle = fallbackGradient;
     ctx.fillRect(x, y, size, size);
-    drawSafeText(ctx, String(initial || "W").slice(0, 1).toUpperCase(), x + size / 2, y + size / 2 + 1, {
-      font: `bold ${Math.max(16, Math.floor(size * 0.42))}px Arial, Sans`,
+    drawSafeText(ctx, cleanText(initial, "W").slice(0, 1).toUpperCase(), x + size / 2, y + size / 2 + 1, {
+      font: font(Math.max(18, Math.floor(size * 0.42)), "800"),
       color: "#CBD5E1",
       align: "center"
     });
   }
-
   ctx.restore();
+
   ctx.save();
   ctx.globalAlpha = 1;
   ctx.strokeStyle = borderColor;
@@ -231,12 +297,10 @@ function drawCoverImage(ctx, img, x, y, w, h) {
   if (!img?.width || !img?.height) return false;
   const imgRatio = img.width / img.height;
   const boxRatio = w / h;
-
   let drawW = w;
   let drawH = h;
   let drawX = x;
   let drawY = y;
-
   if (imgRatio > boxRatio) {
     drawH = h;
     drawW = h * imgRatio;
@@ -246,7 +310,6 @@ function drawCoverImage(ctx, img, x, y, w, h) {
     drawH = w / imgRatio;
     drawY = y - (drawH - h) / 2;
   }
-
   ctx.drawImage(img, drawX, drawY, drawW, drawH);
   return true;
 }
@@ -269,15 +332,15 @@ function normalizeLeaderboardConfig(config = {}) {
     backgroundUrl: String(source.backgroundUrl || "").trim(),
     backgroundPath: backgroundUploadPath,
     backgroundUploadPath,
-    backgroundOverlay: clampNumber(source.backgroundOverlay, 0.55, 0, 0.9),
+    backgroundOverlay: clampNumber(source.backgroundOverlay, 0.52, 0, 0.9),
     backgroundBlur: clampNumber(source.backgroundBlur, 0, 0, 18),
-    backgroundDarken: clampNumber(source.backgroundDarken, 0.45, 0, 0.85),
+    backgroundDarken: clampNumber(source.backgroundDarken, 0.42, 0, 0.85),
     backgroundFit: String(source.backgroundFit || "cover").trim() || "cover",
-    imageTheme: String(source.imageTheme || "desa_tulus_dark").trim() || "desa_tulus_dark",
+    imageTheme: String(source.imageTheme || "desa_tulus_ktp").trim() || "desa_tulus_ktp",
     color: String(source.color || "#FACC15").trim() || "#FACC15",
     fallbackArrow: String(source.fallbackArrow || FALLBACK_ARROW).trim() || FALLBACK_ARROW,
     footer: String(source.footer || "Pak RW • Desa Tulus Leaderboard").trim() || "Pak RW • Desa Tulus Leaderboard",
-    title: String(source.title || "🏆 TOP AKTIF WARGA SEPANJANG WAKTU").trim() || "🏆 TOP AKTIF WARGA SEPANJANG WAKTU",
+    title: String(source.title || "TOP AKTIF WARGA SEPANJANG WAKTU").trim() || "TOP AKTIF WARGA SEPANJANG WAKTU",
     updateTime: String(source.updateTime || "00:00").trim() || "00:00",
     timezone: String(source.timezone || "Asia/Jakarta").trim() || "Asia/Jakarta"
   };
@@ -286,7 +349,8 @@ function normalizeLeaderboardConfig(config = {}) {
 async function drawBackground(ctx, config = {}) {
   const cfg = normalizeLeaderboardConfig(config);
   const gradient = ctx.createLinearGradient(0, 0, WIDTH, HEIGHT);
-  gradient.addColorStop(0, "#0F172A");
+  gradient.addColorStop(0, "#07111F");
+  gradient.addColorStop(0.55, "#0F172A");
   gradient.addColorStop(1, "#111827");
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
@@ -303,25 +367,23 @@ async function drawBackground(ctx, config = {}) {
     ctx.restore();
   } else {
     ctx.save();
-    ctx.globalAlpha = 0.16;
+    ctx.globalAlpha = 0.13;
     ctx.fillStyle = "#38BDF8";
     ctx.beginPath();
-    ctx.arc(930, 140, 220, 0, Math.PI * 2);
+    ctx.arc(990, 105, 240, 0, Math.PI * 2);
     ctx.fill();
-
     ctx.globalAlpha = 0.10;
     ctx.fillStyle = "#22C55E";
     ctx.beginPath();
-    ctx.arc(160, 790, 265, 0, Math.PI * 2);
+    ctx.arc(160, 780, 290, 0, Math.PI * 2);
     ctx.fill();
-
-    ctx.globalAlpha = 0.08;
+    ctx.globalAlpha = 0.07;
     ctx.strokeStyle = "#94A3B8";
     ctx.lineWidth = 1;
-    for (let i = 0; i < 24; i += 1) {
+    for (let i = 0; i < 28; i += 1) {
       ctx.beginPath();
-      ctx.moveTo(80 + i * 52, 0);
-      ctx.lineTo(-120 + i * 52, HEIGHT);
+      ctx.moveTo(70 + i * 48, 0);
+      ctx.lineTo(-130 + i * 48, HEIGHT);
       ctx.stroke();
     }
     ctx.restore();
@@ -330,262 +392,116 @@ async function drawBackground(ctx, config = {}) {
   ctx.save();
   ctx.globalAlpha = 1;
   const overlay = Math.max(cfg.backgroundOverlay, cfg.backgroundDarken);
-  ctx.fillStyle = `rgba(15, 23, 42, ${overlay})`;
+  ctx.fillStyle = `rgba(7, 17, 31, ${overlay})`;
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
   ctx.restore();
 }
 
-function drawTrophyIcon(ctx, x, y) {
-  ctx.save();
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = "#FACC15";
-  drawRoundRect(ctx, x + 10, y + 8, 34, 26, 8);
-  ctx.fill();
-  ctx.strokeStyle = "#FACC15";
-  ctx.lineWidth = 5;
-  ctx.beginPath();
-  ctx.arc(x + 10, y + 20, 10, Math.PI * 0.75, Math.PI * 1.35);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(x + 44, y + 20, 10, Math.PI * 1.65, Math.PI * 0.25);
-  ctx.stroke();
-  ctx.fillStyle = "#F59E0B";
-  ctx.fillRect(x + 24, y + 34, 6, 17);
-  drawRoundRect(ctx, x + 13, y + 50, 28, 7, 4);
-  ctx.fill();
-  ctx.restore();
-}
-
-function drawStaticArrow(ctx, x, y, color = "#38BDF8") {
-  ctx.save();
-  ctx.globalAlpha = 1;
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineWidth = 4;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(x + 25, y);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(x + 25, y);
-  ctx.lineTo(x + 15, y - 8);
-  ctx.lineTo(x + 15, y + 8);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-}
-
-function drawMedalBadge(ctx, rank, cx, cy, color) {
-  ctx.save();
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc(cx, cy, 20, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-
-  drawSafeText(ctx, String(rank), cx, cy + 1, {
-    font: "bold 19px Arial, Sans",
-    color: rank === 1 ? "#0F172A" : "#111827",
-    align: "center"
-  });
-}
-
-function drawHeader(ctx, guild, cfg) {
-  drawTrophyIcon(ctx, 60, 43);
-  drawSafeText(ctx, "TOP AKTIF WARGA", 125, 82, {
-    font: "bold 46px Arial, Sans",
-    color: "#F8FAFC"
-  });
-
+function drawHeader(ctx, guild, cfg, totalRows) {
+  fillRoundRect(ctx, 58, 38, 1084, 84, 26, "rgba(15, 23, 42, 0.78)", "rgba(148, 163, 184, 0.20)", 2);
+  fillRoundRect(ctx, 82, 60, 58, 40, 14, "rgba(250, 204, 21, 0.16)", "rgba(250, 204, 21, 0.42)", 2);
+  drawSafeText(ctx, "RW", 111, 82, { font: font(21, "900"), color: "#FACC15", align: "center" });
+  drawSafeText(ctx, "KARTU LEADERBOARD WARGA", 158, 70, { font: font(34, "900"), color: "#F8FAFC", maxWidth: 600 });
   const serverName = guild?.name || "Desa Tulus";
   const updateTime = String(cfg.updateTime || "00:00").replace(":", ".");
-  drawSafeText(ctx, `${serverName} Leaderboard • Update ${updateTime} WIB`, 62, 116, {
-    font: "22px Arial, Sans",
-    color: "#CBD5E1"
-  });
+  drawSafeText(ctx, `${serverName} • Update ${updateTime} WIB • ${Number(totalRows || 0)} warga`, 160, 100, { font: font(17, "600"), color: "#CBD5E1", maxWidth: 640 });
+
+  fillRoundRect(ctx, 920, 58, 185, 42, 16, "rgba(56, 189, 248, 0.15)", "rgba(56, 189, 248, 0.28)", 1);
+  drawSafeText(ctx, "MODE KTP AKTIF", 1012, 80, { font: font(15, "900"), color: "#38BDF8", align: "center" });
 }
 
-async function drawList(ctx, guild, sorted) {
-  const x = 60;
-  const y = 150;
-  const w = 660;
-  const h = 680;
-  const rowX = 90;
-  const rowStartY = 230;
-  const rowW = 600;
-  const rowH = 52;
-  const gap = 10;
-  const rankColors = ["#FACC15", "#CBD5E1", "#F59E0B"];
+function rankColor(rank) {
+  if (rank === 1) return "#FACC15";
+  if (rank === 2) return "#CBD5E1";
+  if (rank === 3) return "#F59E0B";
+  return "#38BDF8";
+}
+
+function rankLabel(rank) {
+  return `#${String(rank).padStart(2, "0")}`;
+}
+
+async function drawKtpCard(ctx, guild, item, rank, x, y, w, h) {
+  const color = rankColor(rank);
+  const exists = Boolean(item);
+  const name = exists ? getUserName(item) : "Belum ada warga";
+  const username = exists ? getUsername(item) : "aktifkan level untuk tampil";
+  const userId = exists ? getUserId(item) : "";
+  const points = exists ? getPointValue(item) : 0;
+  const level = exists ? Number(item?.level || 0) || 0 : 0;
+  const chat = exists ? getNumberField(item, ["lifetimeChat", "chat", "monthly.chat"]) : 0;
+  const voice = exists ? getNumberField(item, ["lifetimeVoice", "voice", "monthly.voice"]) : 0;
+  const avatar = exists ? await loadAvatar(guild, item) : null;
+
+  const bg = rank <= 3 ? "rgba(30, 41, 59, 0.92)" : "rgba(30, 41, 59, 0.82)";
+  fillRoundRect(ctx, x, y, w, h, 24, bg, "rgba(148, 163, 184, 0.22)", 2);
+  fillRoundRect(ctx, x + 14, y + 14, 72, h - 28, 18, "rgba(15, 23, 42, 0.72)", "rgba(148, 163, 184, 0.12)", 1);
 
   ctx.save();
   ctx.globalAlpha = 1;
-  ctx.fillStyle = "rgba(30, 41, 59, 0.88)";
-  drawRoundRect(ctx, x, y, w, h, 28);
+  ctx.fillStyle = color;
+  drawRoundRect(ctx, x, y, 9, h, 10);
   ctx.fill();
-  ctx.strokeStyle = "rgba(148, 163, 184, 0.25)";
-  ctx.lineWidth = 2;
-  drawRoundRect(ctx, x, y, w, h, 28);
-  ctx.stroke();
   ctx.restore();
 
-  drawSafeText(ctx, "PERINGKAT WARGA", x + 30, y + 46, {
-    font: "bold 28px Arial, Sans",
-    color: "#F8FAFC"
-  });
+  drawSafeText(ctx, rankLabel(rank), x + 50, y + 37, { font: font(20, "900"), color, align: "center" });
+  drawSafeText(ctx, "RANK", x + 50, y + 63, { font: font(11, "800"), color: "#94A3B8", align: "center" });
+
+  await drawCircleAvatar(ctx, avatar, x + 98, y + 25, 72, color, rank <= 3 ? 4 : 3, name);
+
+  drawSafeText(ctx, "KTP WARGA DESA TULUS", x + 188, y + 29, { font: font(12, "900"), color: "#38BDF8", maxWidth: 220 });
+  drawSafeText(ctx, name, x + 188, y + 58, { font: font(23, "900"), color: "#F8FAFC", maxWidth: 180 });
+  drawSafeText(ctx, `@${username}`, x + 188, y + 86, { font: font(14, "700"), color: "#CBD5E1", maxWidth: 150 });
+  drawSafeText(ctx, `ID ${compactDiscordId(userId)}`, x + 188, y + 109, { font: font(12, "700"), color: "#94A3B8", maxWidth: 150 });
+
+  fillRoundRect(ctx, x + w - 178, y + 23, 150, 58, 18, "rgba(15, 23, 42, 0.68)", "rgba(248, 250, 252, 0.10)", 1);
+  drawSafeText(ctx, "TOTAL POIN", x + w - 103, y + 42, { font: font(11, "900"), color: "#94A3B8", align: "center" });
+  drawSafeText(ctx, formatPoints(points), x + w - 103, y + 66, { font: font(22, "900"), color: rank <= 3 ? color : "#F8FAFC", align: "center", maxWidth: 132 });
+
+  fillRoundRect(ctx, x + w - 178, y + 87, 150, 30, 13, "rgba(56, 189, 248, 0.11)", "rgba(56, 189, 248, 0.20)", 1);
+  drawSafeText(ctx, `LEVEL ${level || 0}`, x + w - 103, y + 103, { font: font(13, "900"), color: "#38BDF8", align: "center", maxWidth: 132 });
+}
+
+// drawPodium legacy token: replaced by KTP grid renderer so image is never empty.
+async function drawKtpGrid(ctx, guild, sorted) {
+  const cardW = 520;
+  const cardH = 132;
+  const gapX = 40;
+  const gapY = 10;
+  const startX = 60;
+  const startY = 145;
 
   for (let i = 0; i < 10; i += 1) {
-    const item = sorted[i];
-    const rowY = rowStartY + i * (rowH + gap);
-
-    ctx.save();
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = "rgba(51, 65, 85, 0.55)";
-    drawRoundRect(ctx, rowX, rowY, rowW, rowH, 16);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(148, 163, 184, 0.14)";
-    ctx.lineWidth = 1;
-    drawRoundRect(ctx, rowX, rowY, rowW, rowH, 16);
-    ctx.stroke();
-    ctx.restore();
-
-    const rankColor = rankColors[i] || "#38BDF8";
-    drawSafeText(ctx, `#${i + 1}`, rowX + 15, rowY + 27, {
-      font: "bold 18px Arial, Sans",
-      color: rankColor
-    });
-
-    if (!item) {
-      await drawCircleAvatar(ctx, null, rowX + 62, rowY + 7, 38, "rgba(248, 250, 252, 0.24)", 3, "W");
-      drawSafeText(ctx, "Belum ada", rowX + 112, rowY + 27, { font: "bold 18px Arial, Sans", color: "#CBD5E1", maxWidth: 250 });
-      drawStaticArrow(ctx, rowX + 370, rowY + 27, "#38BDF8");
-      drawSafeText(ctx, "0 poin", rowX + rowW - 20, rowY + 27, { font: "bold 17px Arial, Sans", color: "#F8FAFC", align: "right" });
-      continue;
-    }
-
-    const name = getUserName(item);
-    const avatar = await loadAvatar(guild, item);
-    await drawCircleAvatar(ctx, avatar, rowX + 62, rowY + 7, 38, rankColor, i < 3 ? 4 : 3, name);
-
-    drawSafeText(ctx, name, rowX + 112, rowY + 27, {
-      font: "bold 18px Arial, Sans",
-      color: "#F8FAFC",
-      maxWidth: 250
-    });
-
-    drawStaticArrow(ctx, rowX + 370, rowY + 27, "#38BDF8");
-
-    drawSafeText(ctx, `${formatPoints(getPointValue(item))} poin`, rowX + rowW - 20, rowY + 27, {
-      font: "bold 17px Arial, Sans",
-      color: "#F8FAFC",
-      align: "right",
-      maxWidth: 190
-    });
+    const col = i < 5 ? 0 : 1;
+    const row = i % 5;
+    const x = startX + col * (cardW + gapX);
+    const y = startY + row * (cardH + gapY);
+    await drawKtpCard(ctx, guild, sorted[i], i + 1, x, y, cardW, cardH);
   }
 }
 
-async function drawPodium(ctx, guild, sorted) {
-  const areaX = 755;
-  const areaY = 150;
-  const areaW = 385;
-  const areaH = 680;
-
-  ctx.save();
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = "rgba(30, 41, 59, 0.88)";
-  drawRoundRect(ctx, areaX, areaY, areaW, areaH, 30);
-  ctx.fill();
-  ctx.strokeStyle = "rgba(148, 163, 184, 0.25)";
-  ctx.lineWidth = 2;
-  drawRoundRect(ctx, areaX, areaY, areaW, areaH, 30);
-  ctx.stroke();
-  ctx.restore();
-
-  drawSafeText(ctx, "Podium Top 3", areaX + 34, areaY + 50, {
-    font: "bold 30px Arial, Sans",
-    color: "#F8FAFC"
-  });
-
-  async function drawPodiumUser(item, rank, cx, avatarY, avatarSize, color) {
-    const cardW = rank === 1 ? 250 : 165;
-    const cardH = rank === 1 ? 230 : 202;
-    ctx.save();
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = rank === 1 ? "rgba(250, 204, 21, 0.09)" : "rgba(51, 65, 85, 0.42)";
-    drawRoundRect(ctx, cx - cardW / 2, avatarY - 42, cardW, cardH, 24);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(148, 163, 184, 0.18)";
-    ctx.lineWidth = 1;
-    drawRoundRect(ctx, cx - cardW / 2, avatarY - 42, cardW, cardH, 24);
-    ctx.stroke();
-    ctx.restore();
-
-    drawMedalBadge(ctx, rank, cx, avatarY - 22, color);
-
-    const name = item ? getUserName(item) : "Belum ada";
-    const avatar = item ? await loadAvatar(guild, item) : null;
-    await drawCircleAvatar(ctx, avatar, cx - avatarSize / 2, avatarY, avatarSize, color, rank === 1 ? 5 : 4, name);
-
-    drawSafeText(ctx, name, cx, avatarY + avatarSize + 32, {
-      font: rank === 1 ? "bold 23px Arial, Sans" : "bold 20px Arial, Sans",
-      color: "#F8FAFC",
-      align: "center",
-      maxWidth: rank === 1 ? 215 : 155
-    });
-
-    drawSafeText(ctx, `${formatPoints(item ? getPointValue(item) : 0)} poin`, cx, avatarY + avatarSize + (rank === 1 ? 57 : 60), {
-      font: rank === 1 ? "bold 21px Arial, Sans" : "bold 18px Arial, Sans",
-      color,
-      align: "center",
-      maxWidth: rank === 1 ? 220 : 160
-    });
-  }
-
-  await drawPodiumUser(sorted[0], 1, 948, 245, 135, "#FACC15");
-  await drawPodiumUser(sorted[1], 2, 860, 485, 105, "#CBD5E1");
-  await drawPodiumUser(sorted[2], 3, 1035, 485, 105, "#F59E0B");
-
-  ctx.save();
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = "rgba(56, 189, 248, 0.18)";
-  drawRoundRect(ctx, areaX + 36, areaY + 602, 313, 50, 16);
-  ctx.fill();
-  ctx.restore();
-
-  drawSafeText(ctx, "Pak RW • Desa Tulus Leaderboard", areaX + areaW / 2, areaY + 628, {
-    font: "18px Arial, Sans",
-    color: "#CBD5E1",
-    align: "center",
-    maxWidth: 290
-  });
+function drawFooter(ctx, cfg) {
+  fillRoundRect(ctx, 60, 845, 1080, 36, 14, "rgba(15, 23, 42, 0.66)", "rgba(148, 163, 184, 0.16)", 1);
+  drawSafeText(ctx, cfg.footer || "Pak RW • Desa Tulus Leaderboard", 82, 864, { font: font(14, "800"), color: "#CBD5E1", maxWidth: 480 });
+  drawSafeText(ctx, "Text KTP aktif • nama, ID, poin, level", 1118, 864, { font: font(13, "700"), color: "#94A3B8", align: "right", maxWidth: 450 });
 }
 
 async function generateLeaderboardImage(guild, topUsers = [], leaderboardConfig = {}) {
-  logLeaderboardDebug("raw topUsers", topUsers);
-  console.log("[LEADERBOARD_IMAGE] is array:", Array.isArray(topUsers));
-  console.log("[LEADERBOARD_IMAGE] total:", Array.isArray(topUsers) ? topUsers.length : 0);
-  logLeaderboardDebug("first", Array.isArray(topUsers) ? topUsers.slice(0, 1) : null);
-
+  setupCanvasFonts();
   const cfg = normalizeLeaderboardConfig(leaderboardConfig);
   const canvas = createCanvas(WIDTH, HEIGHT);
   const ctx = canvas.getContext("2d");
 
   try {
-    await drawBackground(ctx, cfg);
-    drawHeader(ctx, guild, cfg);
-
     const hydratedUsers = await hydrateLeaderboardUsers(guild, topUsers);
+    if (process.env.PAKRW_DEBUG_LEADERBOARD === "1") {
+      console.log(`[LEADERBOARD_IMAGE] render ktp total=${hydratedUsers.length} first=${hydratedUsers[0]?.displayName || "-"}`);
+    }
 
-    await drawList(ctx, guild, hydratedUsers, cfg);
-    await drawPodium(ctx, guild, hydratedUsers);
-
-    drawSafeText(ctx, cfg.footer || "Pak RW • Desa Tulus Leaderboard", 60, 870, {
-      font: "18px Arial, Sans",
-      color: "rgba(203, 213, 225, 0.86)",
-      maxWidth: 480
-    });
+    await drawBackground(ctx, cfg);
+    drawHeader(ctx, guild, cfg, hydratedUsers.length);
+    await drawKtpGrid(ctx, guild, hydratedUsers);
+    drawFooter(ctx, cfg);
 
     return canvas.toBuffer("image/png");
   } catch (error) {
@@ -594,10 +510,11 @@ async function generateLeaderboardImage(guild, topUsers = [], leaderboardConfig 
     const fallbackCanvas = createCanvas(WIDTH, HEIGHT);
     const fallbackCtx = fallbackCanvas.getContext("2d");
     await drawBackground(fallbackCtx, cfg);
-    drawSafeText(fallbackCtx, "🏆 TOP AKTIF WARGA", 60, 90, { font: "bold 48px Arial, Sans", color: "#F8FAFC" });
-    drawSafeText(fallbackCtx, "Leaderboard sedang diproses ulang.", 60, 170, { font: "26px Arial, Sans", color: "#CBD5E1" });
-    drawSafeText(fallbackCtx, "Coba lagi sebentar ya.", 60, 210, { font: "26px Arial, Sans", color: "#CBD5E1" });
-    drawSafeText(fallbackCtx, cfg.footer || "Pak RW • Desa Tulus Leaderboard", 60, 870, { font: "18px Arial, Sans", color: "#CBD5E1" });
+    drawHeader(fallbackCtx, guild, cfg, 0);
+    fillRoundRect(fallbackCtx, 80, 180, 1040, 420, 28, "rgba(30, 41, 59, 0.9)", "rgba(148, 163, 184, 0.22)", 2);
+    drawSafeText(fallbackCtx, "KTP LEADERBOARD SEDANG DIPROSES", 120, 260, { font: font(38, "900"), color: "#F8FAFC", maxWidth: 900 });
+    drawSafeText(fallbackCtx, "Data warga aman. Gambar akan dibuat ulang otomatis.", 120, 320, { font: font(24, "700"), color: "#CBD5E1", maxWidth: 900 });
+    drawFooter(fallbackCtx, cfg);
     return fallbackCanvas.toBuffer("image/png");
   }
 }
@@ -619,7 +536,5 @@ module.exports = {
   drawCircleAvatar,
   drawCoverImage,
   drawBackground,
-  drawStaticArrow,
-  drawMedalBadge,
   safeLoadImage
 };

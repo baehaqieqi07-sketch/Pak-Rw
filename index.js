@@ -401,7 +401,7 @@ function applySafeEmbedDisplayMigrations(data = {}) {
   welcomeEmbed.useEmbed = false;
   welcomeEmbed.mode = "text";
 
-  // v10.10.114: Loket Desa dihapus dari fitur aktif. Data lama tidak dihapus, hanya diabaikan agar tidak reset.
+  // v10.10.115: Loket Desa dihapus dari fitur aktif. Data lama tidak dihapus, hanya diabaikan agar tidak reset.
   next.loket = next.loket && typeof next.loket === "object" ? next.loket : {};
   next.loket.enabled = false;
   next.loket.legacyIgnored = true;
@@ -11703,7 +11703,7 @@ app.post("/api/dashboard/leaderboard/upload", requireDashboardAuth, async (req, 
     cfg.leaderboard.backgroundUploadPath = relativePath;
     cfg.leaderboard.backgroundOverlay = Number.isFinite(Number(cfg.leaderboard.backgroundOverlay)) ? cfg.leaderboard.backgroundOverlay : 0.55;
     cfg.leaderboard.backgroundDarken = Number.isFinite(Number(cfg.leaderboard.backgroundDarken)) ? cfg.leaderboard.backgroundDarken : 0.45;
-    cfg.version = "10.10.114";
+    cfg.version = "10.10.115";
     writeConfigFile(cfg);
     appendDashboardActivity("leaderboard", "Background leaderboard diunggah", `${savedName} (${image.width}x${image.height})`);
     syncLiveConfig(readConfigFile());
@@ -11739,7 +11739,7 @@ app.put("/api/dashboard/settings", requireDashboardAuth, (req, res) => {
       if (!isSafeDashboardPath(pathText)) return res.status(400).json({ ok: false, error: `Path config tidak diizinkan: ${pathText}` });
       setDashboardPath(cfg, pathText, patch.value);
     }
-    cfg.version = "10.10.114";
+    cfg.version = "10.10.115";
     writeConfigFile(cfg);
     appendDashboardActivity("settings", "Setting dashboard disimpan", `${patches.length} field diperbarui melalui adapter aman.`);
     if (levelRoleConfigChanged) {
@@ -11759,7 +11759,7 @@ app.put("/api/dashboard/embed/:key", requireDashboardAuth, (req, res) => {
     const cfg = readConfigFile();
     cfg.embeds = cfg.embeds || {};
     cfg.embeds[key] = mergeDashboardEmbed(cfg.embeds[key] || {}, req.body?.embed || {});
-    cfg.version = "10.10.114";
+    cfg.version = "10.10.115";
     writeConfigFile(cfg);
     appendDashboardActivity("embed", "Template embed disimpan", `Template ${key} diperbarui dari Embed Builder.`);
     return res.json({ ok: true, embed: cfg.embeds[key] });
@@ -11846,7 +11846,7 @@ app.put("/api/afk-voice/config", requireDashboardAuth, async (req, res) => {
       if (!valid.ok) return res.status(400).json({ success: false, message: valid.message, errorCode: valid.errorCode });
     }
     cfg.afkVoice = next;
-    cfg.version = "10.10.114";
+    cfg.version = "10.10.115";
     writeConfigFile(cfg);
     appendDashboardActivity("afk-voice", "AFK Voice diperbarui", next.enabled ? `Channel voice ${next.channelId} diterapkan.` : "Fitur dinonaktifkan.");
 
@@ -11888,7 +11888,7 @@ app.post("/api/afk-voice/disconnect", requireDashboardAuth, async (req, res) => 
   if (!checkActionRateLimit()) return res.status(429).json({ success: false, message: "Tunggu sebentar sebelum memutus koneksi.", errorCode: "RATE_LIMITED" });
   const cfg = readConfigFile();
   cfg.afkVoice = { ...(cfg.afkVoice || {}), enabled: false, updatedAt: new Date().toISOString(), updatedBy: "dashboard" };
-  cfg.version = "10.10.114";
+  cfg.version = "10.10.115";
   writeConfigFile(cfg);
   const result = await disconnectAfkVoice({ disable: true });
   return res.json(result);
@@ -15991,7 +15991,7 @@ function getLeaderboardActiveRows(guildId, limit = 10, ownerId = "") {
   return rows.slice(0, Math.max(1, Math.min(10, Number(limit || 10))));
 }
 
-function buildLeaderboardActiveEmbed(guild, topUsers = null, reason = "update", imageOk = false) {
+function buildLeaderboardActiveEmbed(guild, topUsers = null, reason = "update", imageOk = false, imageName = "leaderboard.png") {
   const cfg = getTopActiveConfig();
   const rows = normalizeLeaderboardUsers(Array.isArray(topUsers) ? topUsers : getLeaderboardActiveRows(guild.id, cfg.leaderboardActiveTopLimit, guild.ownerId));
   const serverName = config.serverName || guild.name || "DESA TULUS";
@@ -16017,7 +16017,7 @@ function buildLeaderboardActiveEmbed(guild, topUsers = null, reason = "update", 
 
   const guildIcon = guild?.iconURL?.({ extension: "png", size: 128 });
   if (guildIcon) embed.setThumbnail(guildIcon);
-  if (imageOk) embed.setImage("attachment://leaderboard.png");
+  if (imageOk) embed.setImage(`attachment://${imageName}`);
   return embed;
 }
 
@@ -16027,18 +16027,19 @@ async function buildLeaderboardActivePayload(guild, reason = "update") {
   const rows = await hydrateLeaderboardUsers(guild, normalizeLeaderboardUsers(rawRows));
   let files = [];
   let imageOk = false;
+  const imageName = `leaderboard-ktp-${Date.now()}.png`; // legacy cache key: attachment://leaderboard.png
 
-  logLeaderboardDebug("raw topUsers", rawRows);
-  console.log("[LEADERBOARD_IMAGE] is array:", Array.isArray(rawRows));
-  console.log("[LEADERBOARD_IMAGE] total:", Array.isArray(rawRows) ? rawRows.length : 0);
-  logLeaderboardDebug("first", Array.isArray(rawRows) ? rawRows.slice(0, 1) : null);
-  logLeaderboardDebug("hydrated", rows);
+  console.log(`[LEADERBOARD_IMAGE] KTP render request raw=${Array.isArray(rawRows) ? rawRows.length : 0} hydrated=${rows.length} first=${rows[0]?.displayName || "-"} points=${rows[0]?.points || 0}`);
+  if (process.env.PAKRW_DEBUG_LEADERBOARD === "1") {
+    logLeaderboardDebug("raw topUsers", rawRows);
+    logLeaderboardDebug("hydrated", rows);
+  }
 
   if (cfg.leaderboardUseImage !== false && config.leaderboard?.useImage !== false) {
     try {
       const imageBuffer = await generateLeaderboardImage(guild, rows, config.leaderboard || {});
       if (imageBuffer && Buffer.isBuffer(imageBuffer) && imageBuffer.length > 1000) {
-        files = [new AttachmentBuilder(imageBuffer, { name: "leaderboard.png" })];
+        files = [new AttachmentBuilder(imageBuffer, { name: imageName })];
         imageOk = true;
       }
     } catch (error) {
@@ -16049,8 +16050,9 @@ async function buildLeaderboardActivePayload(guild, reason = "update") {
   }
 
   return {
-    embeds: [buildLeaderboardActiveEmbed(guild, rows, reason, imageOk)],
-    files
+    embeds: [buildLeaderboardActiveEmbed(guild, rows, reason, imageOk, imageName)],
+    files,
+    attachments: imageOk ? [] : undefined
   };
 }
 
