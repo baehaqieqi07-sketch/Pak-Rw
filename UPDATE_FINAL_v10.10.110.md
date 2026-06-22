@@ -9,7 +9,7 @@ Update ini fokus ke **image leaderboard Pak RW / Desa Tulus** saja.
 - Header jelas: `TOP AKTIF WARGA` + subtitle update `00.00 WIB`.
 - List kiri menampilkan ranking 1–10 lengkap: rank, avatar/fallback, nama, panah static biru, dan poin format Indonesia.
 - Podium kanan menampilkan top 3 lengkap: badge rank, avatar/fallback, nama, dan poin.
-- Footer image: `Pak RW • Desa Tulus Leaderboard`.
+- Footer image: `<a:Desa_Tulus2:1518502350363430932> <a:Desa_Tulus2:1518502350363430932> DESA TULUS |`.
 - Data leaderboard dinormalisasi dari berbagai property: `points`, `point`, `totalPoints`, `totalPoint`, `lifetimeTotal`, `score`, `xp`, `exp`.
 - Nama dinormalisasi dari `displayName`, `globalName`, `username`, `name`, `tag`.
 - Avatar error tidak menghentikan render; fallback lingkaran inisial dipakai.

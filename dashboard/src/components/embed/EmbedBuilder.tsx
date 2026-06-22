@@ -228,8 +228,8 @@ export function EmbedBuilder({
     if (!window.confirm("Reset seluruh isi embed ke template kosong DESA TULUS?")) return;
     onChange({
       color: "#7DBD77",
-      authorName: "DESA TULUS • Pak RW",
-      footerText: "DESA TULUS • Pak RW",
+      authorName: "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Pak RW",
+      footerText: "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Pak RW",
       footerIcon: "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless",
       fields: [],
       buttons: []
@@ -254,7 +254,7 @@ export function EmbedBuilder({
           <CardHeader title="Pesan dan isi embed" description="Editor dibuat satu alur: isi teks, pilih data Discord, lihat preview, lalu simpan." />
           <div className="form-grid two-columns">
             <div className="form-field full-span"><div className="field-label-row"><label>Content</label><span>{String(value.content || "").length}/2000</span></div><SmartTextInput as="textarea" maxLength={2000} value={value.content || ""} onChange={(next) => update("content", next)} rows={3} placeholder="Teks di atas embed" picker={picker} mentionSafe /><small className="field-helper">Ketik @ untuk role/member, # untuk channel. Mention akan terkirim asli ke Discord.</small></div>
-            <div className="form-field"><label>Nama author</label><SmartTextInput value={value.authorName || ""} onChange={(next) => update("authorName", next)} placeholder="DESA TULUS • Warga Baru" picker={picker} mentionSafe={false} /></div>
+            <div className="form-field"><label>Nama author</label><SmartTextInput value={value.authorName || ""} onChange={(next) => update("authorName", next)} placeholder="<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Warga Baru" picker={picker} mentionSafe={false} /></div>
             <div className="form-field"><label>Icon author URL</label><input value={value.authorIcon || ""} onChange={(event) => update("authorIcon", event.target.value)} placeholder="https://..." /></div>
             <div className="form-field full-span"><div className="field-label-row"><label>Title</label><span>{String(value.title || "").length}/256</span></div><SmartTextInput maxLength={256} value={value.title || ""} onChange={(next) => update("title", next)} placeholder="Judul embed" picker={picker} mentionSafe={false} /><small className="field-helper">Discord tidak merender mention pada judul. Dashboard otomatis memasukkan nama biasa.</small></div>
             <div className="form-field full-span"><div className="field-label-row"><label>Description</label><span>{String(value.description || "").length}/4096</span></div><SmartTextInput as="textarea" maxLength={4096} value={value.description || ""} onChange={(next) => update("description", next)} rows={10} placeholder="Isi embed" picker={picker} mentionSafe /></div>

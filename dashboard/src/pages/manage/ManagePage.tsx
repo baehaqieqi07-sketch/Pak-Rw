@@ -262,7 +262,7 @@ export function ManagePage() {
         patches.push({ path: "leaderboard.imageTheme", value: "desa_tulus_dark" });
         patches.push({ path: "leaderboard.color", value: "#FACC15" });
         patches.push({ path: "leaderboard.fallbackArrow", value: "➜" });
-        patches.push({ path: "leaderboard.footer", value: "Pak RW • Desa Tulus Leaderboard" });
+        patches.push({ path: "leaderboard.footer", value: "<a:Desa_Tulus2:1518502350363430932> <a:Desa_Tulus2:1518502350363430932> DESA TULUS |" });
       }
       if (slug === "motm") {
         patches.push({ path: "level.cycleResetAtPoints", value: motmThreshold });

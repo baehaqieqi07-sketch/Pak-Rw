@@ -9,17 +9,17 @@
       "lastMessageId": "",
       "sourceChannelId": "",
       "sourceMessageId": "",
-      "content": "<a:Boost:1512485430887714866> {user} resmi menjadi Juragan Desa di DESA TULUS.",
+      "content": "<a:Desa_Tulus2:1518502350363430932> {user} resmi menjadi Juragan Desa di DESA TULUS.",
       "embed": {
-        "title": "<a:Boost:1512485430887714866> SELAMAT DATANG JURAGAN! <a:Boost:1512485430887714866>",
+        "title": "<a:Desa_Tulus2:1518502350363430932> SELAMAT DATANG JURAGAN! <a:Desa_Tulus2:1518502350363430932>",
         "description": "Terima kasih sudah mendukung server ini {user}.\nSekarang kamu dapat menikmati benefit dari role {juraganRole}.\n\nBenefit role, bonus poin, Soundboard, voice VIP, dan chat Juragan ditampilkan sebagai mention Discord asli.",
         "color": 8240503,
         "footer": {
-          "text": "DESA TULUS • Juragan Desa",
+          "text": "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Juragan Desa",
           "icon_url": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
         },
         "author": {
-          "name": "DESA TULUS • Membership"
+          "name": "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Membership"
         }
       },
       "components": [],
@@ -41,15 +41,15 @@
       "sourceMessageId": "",
       "content": "🆙 Selamat {user} berhasil naik level!",
       "embed": {
-        "title": "<a:rocket_animated:1512884173453529288> Warga Naik Level",
+        "title": "<a:Desa_Tulus2:1518502350363430932> Warga Naik Level",
         "description": "{user} naik menjadi **{rank} — Level {level}**.\n\nTotal poin aktif: **{total} poin**. Tetap rukun dan aktif di desa.",
         "color": 8240503,
         "footer": {
-          "text": "DESA TULUS • Level Warga",
+          "text": "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Level Warga",
           "icon_url": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
         },
         "author": {
-          "name": "DESA TULUS • Level & Poin"
+          "name": "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Level & Poin"
         }
       },
       "components": [],
@@ -71,15 +71,15 @@
       "sourceMessageId": "",
       "content": "{user}",
       "embed": {
-        "title": "<a:loading:1490575251405406299> Data Keaktifan Warga",
+        "title": "<a:Desa_Tulus2:1518502350363430932> Data Keaktifan Warga",
         "description": "{user}\n\n💬 Chat dan 🎙️ Voice ditampilkan lengkap dengan level, poin, sisa poin, progress, total level, dan total poin.",
         "color": 8240503,
         "footer": {
-          "text": "DESA TULUS • Cek Poin",
+          "text": "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Cek Poin",
           "icon_url": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
         },
         "author": {
-          "name": "DESA TULUS • Level & Poin"
+          "name": "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Level & Poin"
         }
       },
       "components": [],
@@ -105,11 +105,11 @@
         "description": "Halo {user}, ini adalah menu khusus untuk role **Donatur DESA TULUS** 🤍\n\nStatus role kamu: **Aktif**\n{expiredText}",
         "color": 8240503,
         "footer": {
-          "text": "DESA TULUS • Donatur System",
+          "text": "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Donatur System",
           "icon_url": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
         },
         "author": {
-          "name": "DESA TULUS • Pak RW"
+          "name": "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Pak RW"
         }
       },
       "components": [],
@@ -135,11 +135,11 @@
         "description": "Punya sesuatu yang ingin kamu ceritakan tanpa menampilkan identitas?\n\nKlik tombol **☁️ Curhat ke Pak RW** di bawah ini. Curhatan kamu akan dikirim sebagai **Anonim** dan warga bisa membalas lewat thread diskusi 🤍",
         "color": 8240503,
         "footer": {
-          "text": "DESA TULUS • Curhat Anonim Aman",
+          "text": "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Curhat Anonim Aman",
           "icon_url": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
         },
         "author": {
-          "name": "DESA TULUS • Pak RW"
+          "name": "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Pak RW"
         }
       },
       "components": [],
@@ -165,11 +165,11 @@
         "description": "{user} resmi menjadi **Member Of The Month** bulan ini.\n\n⭐ Total Poin Bulan Ini: **{total}** poin\n💬 Top Chat: **{chat}** poin\n🎙️ Top Voice: **{voice}** poin\n\nTerima kasih sudah aktif dan ikut menghidupkan server **{server}** 🤍",
         "color": 8240503,
         "footer": {
-          "text": "DESA TULUS • Member Of The Month",
+          "text": "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Member Of The Month",
           "icon_url": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
         },
         "author": {
-          "name": "DESA TULUS • Pak RW"
+          "name": "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Pak RW"
         }
       },
       "components": [],
@@ -195,10 +195,10 @@
         "description": "**👤 Pengirim:**\n{user}\n\n**💬 Isi Saran:**\n{content}",
         "color": 8240503,
         "footer": {
-          "text": "DESA TULUS • Kritik & Saran Warga"
+          "text": "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Kritik & Saran Warga"
         },
         "author": {
-          "name": "DESA TULUS • Kotak Saran"
+          "name": "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Kotak Saran"
         }
       },
       "components": [],
@@ -224,11 +224,11 @@
         "description": "{reply}",
         "color": 8240503,
         "footer": {
-          "text": "DESA TULUS • Curhat System",
+          "text": "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Curhat System",
           "icon_url": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
         },
         "author": {
-          "name": "DESA TULUS • Pak RW"
+          "name": "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Pak RW"
         }
       },
       "components": [],
@@ -254,11 +254,11 @@
         "description": "Update otomatis setiap hari pukul 00.00 WIB",
         "color": 8240503,
         "footer": {
-          "text": "DESA TULUS • Gunakan perintah rwcekpoin untuk melihat poin warga",
+          "text": "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Gunakan perintah rwcekpoin untuk melihat poin warga",
           "icon_url": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
         },
         "author": {
-          "name": "DESA TULUS • Leaderboard"
+          "name": "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Leaderboard"
         }
       },
       "components": [],
@@ -281,14 +281,14 @@
       "content": "🎮 {user} lagi cari teman mabar di **{server}**!",
       "embed": {
         "title": "🎮 CARI MABAR DESA TULUS",
-        "description": "Lagi nyari teman main? Isi info mabar dengan jelas biar warga lain gampang ikut.\n\n<a:Animated_Arrow_Bluelite:1512751559140839576> **Game:** {game}\n<a:Animated_Arrow_Bluelite:1512751559140839576> **Mode:** {mode}\n<a:Animated_Arrow_Bluelite:1512751559140839576> **Jumlah Slot:** {slot}\n<a:Animated_Arrow_Bluelite:1512751559140839576> **Jam Main:** {time}\n<a:Animated_Arrow_Bluelite:1512751559140839576> **Catatan:** {note}",
+        "description": "Lagi nyari teman main? Isi info mabar dengan jelas biar warga lain gampang ikut.\n\n<a:Desa_Tulus2:1518502350363430932> **Game:** {game}\n<a:Desa_Tulus2:1518502350363430932> **Mode:** {mode}\n<a:Desa_Tulus2:1518502350363430932> **Jumlah Slot:** {slot}\n<a:Desa_Tulus2:1518502350363430932> **Jam Main:** {time}\n<a:Desa_Tulus2:1518502350363430932> **Catatan:** {note}",
         "color": 8240503,
         "footer": {
-          "text": "DESA TULUS • Cari Mabar System",
+          "text": "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Cari Mabar System",
           "icon_url": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
         },
         "author": {
-          "name": "DESA TULUS • Cari Mabar"
+          "name": "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Cari Mabar"
         }
       },
       "components": [],
@@ -314,10 +314,10 @@
         "description": "Sambut warga anyar barudak {user} di **{server} 🌾**\n\nPak RW menyambut kamu sebagai bagian dari DESA TULUS. Semoga betah, rukun, dan ikut menjaga suasana desa digital ini tetap hangat.\n\n📌 Baca aturan desa dulu supaya paham tata tertib server.\n💬 Kalau sudah siap, silakan kenalan di chat warga.\n🎫 Kalau butuh bantuan, panggil staff atau hubungi Pak RW.\n\nKamu adalah warga ke-**{memberCount}** di desa ini. Selamat bergabung, semoga betah ya 🤍",
         "color": 8240503,
         "author": {
-          "name": "DESA TULUS • Pak RW"
+          "name": "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Pak RW"
         },
         "footer": {
-          "text": "DESA TULUS • Pak RW",
+          "text": "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Pak RW",
           "icon_url": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
         }
       },
@@ -344,11 +344,11 @@
         "description": "Lifetime point tidak di-reset walaupun siklus level kembali dari awal setelah 100.000 poin.",
         "color": 8240503,
         "footer": {
-          "text": "DESA TULUS • Leaderboard Aktif Warga",
+          "text": "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Leaderboard Aktif Warga",
           "icon_url": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
         },
         "author": {
-          "name": "DESA TULUS • Leaderboard"
+          "name": "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Leaderboard"
         }
       },
       "components": []
@@ -363,15 +363,15 @@
       "dashboardEditable": true,
       "previewMustMatchDiscord": true,
       "embed": {
-        "title": "<a:Boost:1512485430887714866> BOOST POIN DIAKTIFKAN",
+        "title": "<a:Desa_Tulus2:1518502350363430932> BOOST POIN DIAKTIFKAN",
         "description": "Boost poin dimulai:\n\n👤 Oleh: {by}\n💥 Multiplier: {multiplier}\n⏱️ Durasi: {duration} menit\n📍 Channel: {channels}\n🕒 Berakhir: {endsAt}",
         "color": 8240503,
         "footer": {
-          "text": "DESA TULUS • Boost Poin",
+          "text": "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Boost Poin",
           "icon_url": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
         },
         "author": {
-          "name": "DESA TULUS • Boost Poin"
+          "name": "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Boost Poin"
         }
       },
       "components": []
@@ -386,15 +386,15 @@
       "dashboardEditable": true,
       "previewMustMatchDiscord": true,
       "embed": {
-        "title": "<a:Boost:1512485430887714866> BOOST POIN BERAKHIR",
+        "title": "<a:Desa_Tulus2:1518502350363430932> BOOST POIN BERAKHIR",
         "description": "Boost poin untuk channel {channels} telah selesai.\n\n🔄 Status: Kembali ke normal (x1)",
         "color": 8240503,
         "footer": {
-          "text": "DESA TULUS • Boost Poin",
+          "text": "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Boost Poin",
           "icon_url": "https://cdn.discordapp.com/emojis/1516424353934348299.gif?size=44&quality=lossless"
         },
         "author": {
-          "name": "DESA TULUS • Boost Poin"
+          "name": "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Boost Poin"
         }
       },
       "components": []

@@ -70,7 +70,7 @@ function defaultKtpConfig() {
     panelDescription: "Klik tombol **Buat KTP** untuk mengisi data warga. Gunakan nama panggilan dan domisili umum saja—jangan tulis alamat rumah, nomor telepon, kata sandi, atau data pribadi sensitif.",
     buttonLabel: "Buat KTP",
     resultContent: "🪪 Kartu Tanda Penduduk milik {user}",
-    footerText: "DESA TULUS • Ketik perintah rwktp untuk melihat KTP",
+    footerText: "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Ketik perintah rwktp untuk melihat KTP",
     backgroundPath: "assets/ktp-desa-tulus-background.png",
     backgroundFit: "exact",
     design: defaultKtpDesign(),
@@ -838,7 +838,7 @@ function buildKtpPanelEmbed(config = {}) {
       "",
       "Gunakan nama warga atau nama panggilan. Untuk domisili, cukup kota/kabupaten dan provinsi."
     ].join("\n"))
-    .setFooter({ text: "DESA TULUS • Administrasi KTP Warga", iconURL: footerIconUrl(config) })
+    .setFooter({ text: "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Administrasi KTP Warga", iconURL: footerIconUrl(config) })
     .setTimestamp();
 }
 
@@ -847,7 +847,7 @@ function buildKtpCardEmbed(config = {}, attachmentName = "ktp-desa-tulus.png") {
   return new EmbedBuilder()
     .setColor(config.embedColor || "#7DBD77")
     .setImage(`attachment://${attachmentName}`)
-    .setFooter({ text: cfg.footerText || "DESA TULUS • Ketik perintah rwktp untuk melihat KTP", iconURL: footerIconUrl(config) })
+    .setFooter({ text: cfg.footerText || "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Ketik perintah rwktp untuk melihat KTP", iconURL: footerIconUrl(config) })
     .setTimestamp();
 }
 

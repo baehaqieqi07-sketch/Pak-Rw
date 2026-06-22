@@ -160,7 +160,7 @@ function escapeHtml(input = "") {
 
 // Discord tidak merender custom animated emoji jika ditulis sebagai teks di embed footer.
 // Solusi aman: footer text tetap rapi, emoji DESA TULUS dipasang sebagai footer icon dari CDN emoji Discord.
-const OT_FOOTER_EMOJI = "<a:desatulus:1513686597584031804>";
+const OT_FOOTER_EMOJI = "<a:Desa_Tulus2:1518502350363430932>";
 const OT_FOOTER_EMOJI_ID = "1513686597584031804";
 const OT_FOOTER_ICON_URL = `https://cdn.discordapp.com/emojis/${OT_FOOTER_EMOJI_ID}.gif?size=44&quality=lossless`;
 const OT_FOOTER_PREFIX = "DESA TULUS";
@@ -5415,7 +5415,7 @@ function dashboardLayout(inner, active = "dashboard") {
         <div class="premium-topbar">
           <div>
             <b>Pak RW Unified Control Center</b>
-            <span>DESA TULUS • Dashboard premium + Embed Sync Discord ↔ Dashboard</span>
+            <span><a:Desa_Tulus2:1518502350363430932> DESA TULUS | Dashboard premium + Embed Sync Discord ↔ Dashboard</span>
           </div>
           <div class="premium-toolbar" aria-label="Dashboard tools">
             <button class="premium-tool" type="button" id="sidebarCollapseBtn">☰ Sidebar</button>
@@ -5528,7 +5528,7 @@ function renderDashboard(req) {
 
   return dashboardLayout(`
     <section class="${heroClass}"${heroStyle}>
-      <div class="premium-hero-badge">🌾 DESA TULUS • Balai Warga Digital Premium</div>
+      <div class="premium-hero-badge">🌾 <a:Desa_Tulus2:1518502350363430932> DESA TULUS | Balai Warga Digital Premium</div>
       <h2>${escapeHtml(cfg.embeds?.dashboard?.homeTitle || "Pak RW Premium Control Center v10.10.63")}</h2>
       <p>${escapeHtml(cfg.embeds?.dashboard?.homeSubtitle || "Dashboard dibuat lebih rapi, adem, dan modern seperti panel bot Discord besar. Semua fitur lama tetap aman; update ini hanya merapikan web dashboard, navigasi, editor, preview, dan pengalaman edit.")}</p>
       <div class="premium-actions">
@@ -5605,7 +5605,7 @@ function renderDashboard(req) {
             <b>${escapeHtml(embedPreview.authorName || "DESA TULUS")}</b>
             <div class="title">${escapeHtml(embedPreview.title || "Pak RW Embed Preview")}</div>
             <p>${escapeHtml(embedPreview.description || "Preview embed akan tampil di sini. Edit detailnya lewat menu Embed Editor.").slice(0, 360)}</p>
-            <small>${escapeHtml(embedPreview.footer || "DESA TULUS • Dashboard Preview")}</small>
+            <small>${escapeHtml(embedPreview.footer || "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Dashboard Preview")}</small>
           </div>
         </div>
         <div class="premium-banner-preview">
@@ -5967,11 +5967,11 @@ function renderMaxtonMegaControl(req, saved = false, error = "") {
           ${configInput("topActiveBonusPercent", "Persen Bonus Ekstra", topCfg.bonusPercent || 15, "number")}
           ${configInput("topActiveArchiveMinutes", "Durasi Arsip Thread Image (menit)", topCfg.autoImageThreadArchiveMinutes || 1440, "number")}
           ${configInput("topActiveTitle", "Judul Board", topCfg.title || "🏆 TOP AKTIF WARGA DESA TULUS")}
-          ${configInput("topActiveFooter", "Footer Board", topCfg.footer || "DESA TULUS • Top Aktif Warga")}
+          ${configInput("topActiveFooter", "Footer Board", topCfg.footer || "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Top Aktif Warga")}
           ${configInput("topActiveBannerTitle", "Judul Banner", topCfg.bannerTitle || "MEMBER OF THE MONTH")}
           ${configInput("topActiveBannerSubtitle", "Subjudul Banner", topCfg.bannerSubtitle || "TOP CHAT • TOP VOICE • TOP AKTIF")}
           ${configInput("topActiveBannerNameLabel", "Label Nama di Bawah Foto", topCfg.bannerNameLabel || "NAMA MEMBER")}
-          ${configInput("topActiveBannerFooterText", "Teks Bawah Banner", topCfg.bannerFooterText || "DESA TULUS • MEMBER PALING AKTIF")}
+          ${configInput("topActiveBannerFooterText", "Teks Bawah Banner", topCfg.bannerFooterText || "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | MEMBER PALING AKTIF")}
           ${configInput("topActiveBannerAvatarRingText", "Teks Ring Avatar", topCfg.bannerAvatarRingText || "")}
           ${configInput("topActiveThreadName", "Nama Thread Image", topCfg.autoImageThreadName || "🖼️ Diskusi Gambar • {username}")}
           <div><label>Mode Kirim MOTM</label><select name="motmSendMode"><option value="separate_text_image" ${topCfg.motmSendMode !== "combined" ? "selected" : ""}>Teks ucapan + gambar terpisah</option><option value="combined" ${topCfg.motmSendMode === "combined" ? "selected" : ""}>Legacy gabung dalam 1 embed</option></select></div>
@@ -5997,12 +5997,12 @@ function renderMaxtonMegaControl(req, saved = false, error = "") {
           <div class="mega-check">${checkboxInput("motmManualBannerOverlay", "Tulis Nama Member di Banner Manual", topCfg.manualBannerOverlayEnabled !== false && topCfg.manualBannerNameEnabled !== false)}</div>
           <div class="mega-check">${checkboxInput("motmManualBannerAvatar", "Tampilkan Foto Profil di Banner Manual", topCfg.manualBannerAvatarEnabled !== false)}</div>
           <div class="mega-check">${checkboxInput("motmManualBannerDim", "Gelapkan Banner Manual Biar Text Jelas", topCfg.manualBannerDim !== false)}</div>
-          ${configInput("topActiveBoardAuthor", "Author Board", topCfg.boardAuthor || "DESA TULUS • Papan peringkat warga paling aktif")}
+          ${configInput("topActiveBoardAuthor", "Author Board", topCfg.boardAuthor || "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Papan peringkat warga paling aktif")}
           ${configInput("topActiveBoardTitleTemplate", "Template Judul Board", topCfg.boardTitleTemplate || "🏆 TOP AKTIF WARGA BULAN {month}")}
           ${configInput("topActiveTopActiveFieldTitle", "Judul Field Top Aktif", topCfg.topActiveFieldTitle || "🏆 Top Aktif")}
           ${configInput("topActiveTopVoiceFieldTitle", "Judul Field Top Voice", topCfg.topVoiceFieldTitle || "🎙️ Top Voice")}
           ${configInput("topActiveTopChatFieldTitle", "Judul Field Top Chat", topCfg.topChatFieldTitle || "💬 Top Chat")}
-          ${configInput("topActiveRowArrowEmoji", "Emoji/Panah Baris Ranking", topCfg.rowArrowEmoji || "<a:Animated_Arrow_Bluelite:1512751559140839576>")}
+          ${configInput("topActiveRowArrowEmoji", "Emoji/Panah Baris Ranking", topCfg.rowArrowEmoji || "<a:Desa_Tulus2:1518502350363430932>")}
           ${configInput("topActiveDailyPostHourWIB", "Jam Auto Post Harian WIB", topCfg.dailyPostHourWIB ?? 0, "number")}
         </div>
         ${textareaInput("topActiveSubtitle", "Deskripsi Board", topCfg.subtitle || "Update otomatis dari chat dan voice bulan ini. Poin, level, dan rank di board selalu sinkron sesuai poin yang tampil.", 4)}
@@ -6022,7 +6022,7 @@ function renderMaxtonMegaControl(req, saved = false, error = "") {
           ${configInput("motmBannerGold", "Warna Gold Banner", topCfg.bannerGold || "#F6C75A")}
           ${configInput("motmBannerTextColor", "Warna Text Banner", topCfg.bannerTextColor || "#FFFFFF")}
           ${configInput("motmBannerNameLabel", "Label Nama Member", topCfg.bannerNameLabel || "NAMA MEMBER")}
-          ${configInput("motmBannerFooterText", "Teks Footer Banner", topCfg.bannerFooterText || "DESA TULUS • MEMBER PALING AKTIF")}
+          ${configInput("motmBannerFooterText", "Teks Footer Banner", topCfg.bannerFooterText || "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | MEMBER PALING AKTIF")}
           ${configInput("motmBannerAvatarRingText", "Teks Ring Avatar", topCfg.bannerAvatarRingText || "")}
         </div>
         ${textareaInput("motmContentTemplate", "Template Pesan MOTM", texts.motmContentTemplate || "🏆 Selamat {user} Kamu menjadi {role} **TOP AKTIF BULAN INI**!", 3)}
@@ -6037,7 +6037,7 @@ function renderMaxtonMegaControl(req, saved = false, error = "") {
           ${configInput("welcomeTitle", "Judul Welcome", cfg.welcome.title || "🏡 Wilujeung Sumping Warga Anyar! {displayName}")}
           ${configInput("welcomeContent", "Teks di Atas Embed Welcome", cfg.welcome.content || "🤍 Sambut warga anyar barudak {user} {memberRole}")}
           ${configInput("welcomeImageUrl", "Image Welcome URL (opsional)", cfg.welcome.imageUrl || "")}
-          ${configInput("suggestionTitle", "Judul Panel Saran", cfg.suggestion.title || "💡 DESA TULUS • Kritik & Saran")}
+          ${configInput("suggestionTitle", "Judul Panel Saran", cfg.suggestion.title || "💡 <a:Desa_Tulus2:1518502350363430932> DESA TULUS | Kritik & Saran")}
           ${configInput("dashboardBrandTitle", "Dashboard Brand Title", dash.brandTitle || "Pak RW")}
           ${configInput("dashboardBrandSubtitle", "Dashboard Brand Subtitle", dash.brandSubtitle || "Pak RW Control")}
           ${configInput("dashboardHomeTitle", "Dashboard Home Title", dash.homeTitle || "Pak RW Control")}
@@ -6249,7 +6249,7 @@ function applyMaxtonControlPost(body = {}) {
   cfg.welcome.memberRoleName = cfg.welcome.memberRoleName || "Member Tulus";
   cfg.welcome.message = body.welcomeMessage || cfg.welcome.message || "";
   cfg.suggestion.enabled = bool("suggestionEnabled");
-  cfg.suggestion.title = body.suggestionTitle || cfg.suggestion.title || "💡 DESA TULUS • Kritik & Saran";
+  cfg.suggestion.title = body.suggestionTitle || cfg.suggestion.title || "💡 <a:Desa_Tulus2:1518502350363430932> DESA TULUS | Kritik & Saran";
   cfg.suggestion.description = body.suggestionDescription || cfg.suggestion.description || "";
   cfg.panels.sendSuggestionPanelOnReady = bool("sendSuggestionPanelOnReady");
 
@@ -6279,7 +6279,7 @@ function applyMaxtonControlPost(body = {}) {
   cfg.topActive.bannerTitle = body.topActiveBannerTitle || cfg.topActive.bannerTitle || "MEMBER OF THE MONTH";
   cfg.topActive.bannerSubtitle = body.topActiveBannerSubtitle || cfg.topActive.bannerSubtitle || "TOP CHAT • TOP VOICE • TOP AKTIF";
   cfg.topActive.bannerNameLabel = body.topActiveBannerNameLabel || body.motmBannerNameLabel || cfg.topActive.bannerNameLabel || "NAMA MEMBER";
-  cfg.topActive.bannerFooterText = body.topActiveBannerFooterText || body.motmBannerFooterText || cfg.topActive.bannerFooterText || "DESA TULUS • MEMBER PALING AKTIF";
+  cfg.topActive.bannerFooterText = body.topActiveBannerFooterText || body.motmBannerFooterText || cfg.topActive.bannerFooterText || "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | MEMBER PALING AKTIF";
   cfg.topActive.bannerAvatarRingText = body.topActiveBannerAvatarRingText || body.motmBannerAvatarRingText || cfg.topActive.bannerAvatarRingText || "TOP AKTIF";
   cfg.topActive.bannerShowStats = bool("topActiveBannerShowStats");
   cfg.topActive.autoImageThreadName = body.topActiveThreadName || cfg.topActive.autoImageThreadName || "🖼️ Diskusi Gambar • {username}";
@@ -6313,7 +6313,7 @@ function applyMaxtonControlPost(body = {}) {
   cfg.topActive.topActiveFieldTitle = body.topActiveTopActiveFieldTitle || cfg.topActive.topActiveFieldTitle || "🏆 Top Aktif";
   cfg.topActive.topVoiceFieldTitle = body.topActiveTopVoiceFieldTitle || cfg.topActive.topVoiceFieldTitle || "🎙️ Top Voice";
   cfg.topActive.topChatFieldTitle = body.topActiveTopChatFieldTitle || cfg.topActive.topChatFieldTitle || "💬 Top Chat";
-  cfg.topActive.rowArrowEmoji = body.topActiveRowArrowEmoji || cfg.topActive.rowArrowEmoji || "<a:Animated_Arrow_Bluelite:1512751559140839576>";
+  cfg.topActive.rowArrowEmoji = body.topActiveRowArrowEmoji || cfg.topActive.rowArrowEmoji || "<a:Desa_Tulus2:1518502350363430932>";
   cfg.topActive.dailyPostHourWIB = num(body.topActiveDailyPostHourWIB, cfg.topActive.dailyPostHourWIB ?? 0, 0, 23);
   cfg.topActive.motmReactionEmojis = body.motmReactionEmojis || cfg.topActive.motmReactionEmojis || "🔥,👏,🏆,🎉,🥳";
   cfg.topActive.motmThreadArchiveMinutes = num(body.motmThreadArchiveMinutes, cfg.topActive.motmThreadArchiveMinutes ?? 1440, 60);
@@ -6479,7 +6479,7 @@ function renderTopActiveDashboard(req, saved = false, error = "") {
     ${error ? `<div class="alert danger">❌ ${escapeHtml(error)}</div>` : ""}
 
     <section class="max-hero">
-      <div class="max-eyebrow">DESA TULUS • MEMBER OF THE MONTH</div>
+      <div class="max-eyebrow"><a:Desa_Tulus2:1518502350363430932> DESA TULUS | MEMBER OF THE MONTH</div>
       <h2>Papan peringkat aktif yang nyambung ke level warga.</h2>
       <p>Chat, voice, Top Chat, Top Voice, Top Aktif, dan reward Member Of The Month dibuat masuk rapi ke channel Top Aktif. Notifikasi level-up tetap pisah ke Channel Level OT.</p>
       <div class="studio-kpis">
@@ -6525,7 +6525,7 @@ function renderTopActiveDashboard(req, saved = false, error = "") {
         ${configInput("bannerTitle", "Judul Banner", topCfg.bannerTitle || "")}
         ${configInput("bannerSubtitle", "Subjudul Banner", topCfg.bannerSubtitle || "")}
         ${configInput("bannerNameLabel", "Label Nama di Bawah Foto", topCfg.bannerNameLabel || "NAMA MEMBER")}
-        ${configInput("bannerFooterText", "Teks Bawah Banner", topCfg.bannerFooterText || "DESA TULUS • MEMBER PALING AKTIF")}
+        ${configInput("bannerFooterText", "Teks Bawah Banner", topCfg.bannerFooterText || "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | MEMBER PALING AKTIF")}
         ${configInput("bannerAvatarRingText", "Teks Ring Avatar", topCfg.bannerAvatarRingText || "")}
         <div><label>Mode Banner MOTM</label><select name="bannerMode"><option value="manual_image" ${topCfg.bannerMode === "manual_image" || !topCfg.bannerMode ? "selected" : ""}>Manual Image Saja (tanpa generate)</option><option value="manual_background" ${topCfg.bannerMode === "manual_background" ? "selected" : ""}>Manual Background + teks otomatis</option><option value="desa_tulus_template" ${topCfg.bannerMode === "desa_tulus_template" ? "selected" : ""}>Template DESA TULUS + Overlay Otomatis</option><option value="auto" ${topCfg.bannerMode === "auto" ? "selected" : ""}>Auto Premium DESA TULUS</option></select></div>
         ${configInput("manualBannerUrl", "URL Banner Manual MOTM", topCfg.manualBannerUrl || topCfg.bannerImageUrl || "")}
@@ -6549,7 +6549,7 @@ function renderTopActiveDashboard(req, saved = false, error = "") {
         <div><label>Nama Member di Banner Manual</label><select name="manualBannerOverlayEnabled"><option value="on" ${topCfg.manualBannerOverlayEnabled !== false && topCfg.manualBannerNameEnabled !== false ? "selected" : ""}>Aktif - nama tetap muncul</option><option value="off" ${topCfg.manualBannerOverlayEnabled === false || topCfg.manualBannerNameEnabled === false ? "selected" : ""}>Nonaktif</option></select></div>
         <div><label>Foto Profil di Banner Manual</label><select name="manualBannerAvatarEnabled"><option value="on" ${topCfg.manualBannerAvatarEnabled !== false ? "selected" : ""}>Aktif</option><option value="off" ${topCfg.manualBannerAvatarEnabled === false ? "selected" : ""}>Nonaktif</option></select></div>
         <div><label>Gelapkan Banner Manual</label><select name="manualBannerDim"><option value="on" ${topCfg.manualBannerDim !== false ? "selected" : ""}>Aktif - text lebih jelas</option><option value="off" ${topCfg.manualBannerDim === false ? "selected" : ""}>Nonaktif</option></select></div>
-        ${configInput("rowArrowEmoji", "Emoji/Panah Baris Ranking", topCfg.rowArrowEmoji || "<a:Animated_Arrow_Bluelite:1512751559140839576>")}
+        ${configInput("rowArrowEmoji", "Emoji/Panah Baris Ranking", topCfg.rowArrowEmoji || "<a:Desa_Tulus2:1518502350363430932>")}
         ${configInput("autoImageThreadName", "Nama Thread Image", topCfg.autoImageThreadName || "🖼️ Diskusi Gambar • {username}")}
       </div>
       ${textareaInput("subtitle", "Deskripsi Board", topCfg.subtitle || "", 4)}
@@ -9083,7 +9083,7 @@ function renderCariMabarDashboard(req, saved = false, error = "") {
         <div class="formgrid">
           ${configInput("embedColor", "Color HEX", embed.color || "#5865F2")}
           ${configInput("embedTitle", "Title", embed.title || "🎮 CARI MABAR DESA TULUS")}
-          ${configInput("embedFooter", "Footer", embed.footer || "DESA TULUS • Cari Mabar")}
+          ${configInput("embedFooter", "Footer", embed.footer || "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Cari Mabar")}
           ${configInput("embedImage", "Image URL", embed.image || "")}
           ${configInput("embedThumbnail", "Thumbnail URL", embed.thumbnail || "")}
           ${configInput("embedContent", "Normal Content", embed.content || "")}
@@ -9094,7 +9094,7 @@ function renderCariMabarDashboard(req, saved = false, error = "") {
           <div class="premium-embed-demo" style="border-left-color:${escapeHtml(embed.color || "#5865F2")}">
             <div class="title">${escapeHtml(embed.title || "🎮 CARI MABAR DESA TULUS")}</div>
             <p>${escapeHtml(embed.description || "Ada yang mau mabar? Isi data mabar dengan jelas biar warga gampang ikut.")}</p>
-            <small>${escapeHtml(embed.footer || "DESA TULUS • Cari Mabar")}</small>
+            <small>${escapeHtml(embed.footer || "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Cari Mabar")}</small>
           </div>
         </div>
       </div>
@@ -10282,16 +10282,16 @@ function pakRwEmbedForFeature(cfg = readConfigFile(), meta = {}) {
     return { key: "welcome", data: embeds.welcome || {
       color: "#8FBF7F",
       content: cfg.welcome?.content || "🤍 Sambut warga anyar barudak {user} {memberTulusRole}",
-      authorName: "DESA TULUS • Warga Baru",
+      authorName: "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Warga Baru",
       title: cfg.welcome?.title || "🏡 Wilujeung Sumping Warga Anyar! {displayName}",
       description: cfg.welcome?.message || "Pak RW menyambut {user} sebagai bagian dari DESA TULUS.",
       image: cfg.welcome?.imageUrl || "",
       thumbnail: "avatar",
-      footer: "DESA TULUS • Tempat warga baik berkumpul",
+      footer: "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Tempat warga baik berkumpul",
       fields: []
     }};
   }
-  return { key: meta.embedKey || meta.slug || "custom", data: { color: cfg.embedColor || "#7DBD77", content: "", authorName: "DESA TULUS • Pak RW", title: meta.name || "Pak RW Embed", description: meta.desc || "Template embed bisa diedit dari dashboard.", footer: "DESA TULUS • Balai Warga Digital", fields: [] } };
+  return { key: meta.embedKey || meta.slug || "custom", data: { color: cfg.embedColor || "#7DBD77", content: "", authorName: "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Pak RW", title: meta.name || "Pak RW Embed", description: meta.desc || "Template embed bisa diedit dari dashboard.", footer: "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Balai Warga Digital", fields: [] } };
 }
 
 function pakRwPreviewRichText(text = "", guild = null) {
@@ -10693,13 +10693,13 @@ function renderPakRwManagePage(req, slug, opts = {}) {
       ${featureSpecific}
       ${pakRwTextField("embedColor", "Embed Color", embed.color || cfg.embedColor || "#7DBD77", "Contoh: #7DBD77", "text")}
       ${pakRwTextField("content", "Content / teks atas embed", embed.content || "", "Bisa pakai placeholder dan mention aman.")}
-      ${pakRwTextField("authorName", "Author Name", embed.authorName || "", "Contoh: DESA TULUS • Warga Baru")}
+      ${pakRwTextField("authorName", "Author Name", embed.authorName || "", "Contoh: <a:Desa_Tulus2:1518502350363430932> DESA TULUS | Warga Baru")}
       ${pakRwTextField("authorIcon", "Author Icon URL", embed.authorIcon || embed.footerIcon || "", "Opsional URL icon")}
       ${pakRwTextField("title", "Title", embed.title || cfg.welcome?.title || "", "Judul embed")}
       ${pakRwTextarea("description", "Description", embed.description || cfg.welcome?.message || "", "Isi utama embed. Default Bahasa Indonesia jelas, boleh sedikit nuansa Sunda.", 9)}
       ${pakRwTextField("thumbnail", "Thumbnail URL", embed.thumbnail || "", "Opsional. Untuk user avatar isi avatar/custom sesuai logic fitur.")}
       ${pakRwTextField("image", "Image URL", embed.image || cfg.welcome?.imageUrl || "", "Untuk welcome/banner/leaderboard jangan dibiarkan kosong kalau ingin visual.")}
-      ${pakRwTextField("footer", "Footer Text", embed.footer || "DESA TULUS • Balai Warga Digital", "Footer embed")}
+      ${pakRwTextField("footer", "Footer Text", embed.footer || "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Balai Warga Digital", "Footer embed")}
     </div><div class="action-bar"><button class="btn" type="submit">💾 Simpan</button><button class="btn secondary" type="submit" name="testMode" value="1">📨 Simpan & Tandai Test</button><a class="btn ghost" href="/dashboard/manage/${escapeHtml(slug)}?reset=1">Reset ke Template</a><a class="btn ghost" href="/dashboard">Kembali</a></div></form><aside class="preview-card">${pakRwDiscordPreview({ ...embed, color: embed.color || cfg.embedColor, content: embed.content || req.body?.content || "", title: embed.title || cfg.welcome?.title, description: embed.description || cfg.welcome?.message, image: embed.image || cfg.welcome?.imageUrl }, cfg)}${pakRwPlaceholderPanel(guild)}</aside></div>
   `, slug, `Manage ${meta.name}`);
 }
@@ -10847,7 +10847,7 @@ function savePakRwManagePage(req, slug) {
     description: String(req.body.description ?? pack.data?.description ?? ""),
     thumbnail: String(req.body.thumbnail ?? pack.data?.thumbnail ?? ""),
     image: String(req.body.image ?? pack.data?.image ?? ""),
-    footer: String(req.body.footer ?? pack.data?.footer ?? "DESA TULUS • Balai Warga Digital"),
+    footer: String(req.body.footer ?? pack.data?.footer ?? "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Balai Warga Digital"),
     dashboardEditable: true,
     previewMustMatchDiscord: true
   };
@@ -11273,7 +11273,7 @@ app.get("/embed-templates", requireDashboardAuth, (req, res) => {
 app.get("/logs", requireDashboardAuth, (req, res) => {
   const activities = readDashboardActivity(40);
   res.send(dashboardLayout(`
-    <section class="premium-hero"><div class="premium-hero-badge">📜 DESA TULUS • Recent Activity</div><h2>Logs & Activity Pak RW</h2><p>Catatan ringan untuk aksi dashboard: simpan template, import embed, kirim embed, update pesan, duplicate, dan aktivitas penting lain. Tidak menampilkan token/env.</p></section>
+    <section class="premium-hero"><div class="premium-hero-badge">📜 <a:Desa_Tulus2:1518502350363430932> DESA TULUS | Recent Activity</div><h2>Logs & Activity Pak RW</h2><p>Catatan ringan untuk aksi dashboard: simpan template, import embed, kirim embed, update pesan, duplicate, dan aktivitas penting lain. Tidak menampilkan token/env.</p></section>
     <section class="premium-section"><div class="premium-section-head"><div><h3>Recent Activity</h3><div class="premium-muted">Aktivitas terbaru dashboard Pak RW Unified Control Center.</div></div><a class="btn secondary" href="/embed-sync">Embed Sync</a></div><div class="control-activity">
       ${activities.length ? activities.map((a)=>`<div class="activity-row"><span>${escapeHtml(formatActivityTime(a.at))}</span><div><b>${escapeHtml(a.title || "Activity")}</b><span>${escapeHtml(a.detail || "")}</span></div><em class="activity-tag">${escapeHtml(a.type || "info")}</em></div>`).join("") : `<div class="premium-muted">Belum ada aktivitas tersimpan.</div>`}
     </div></section>
@@ -11598,7 +11598,7 @@ app.post("/top-active", requireDashboardAuth, (req, res) => {
     cfg.topActive.bannerTitle = req.body.bannerTitle || "MEMBER OF THE MONTH";
     cfg.topActive.bannerSubtitle = req.body.bannerSubtitle || "TOP CHAT • TOP VOICE • TOP AKTIF";
     cfg.topActive.bannerNameLabel = req.body.bannerNameLabel || cfg.topActive.bannerNameLabel || "NAMA MEMBER";
-    cfg.topActive.bannerFooterText = req.body.bannerFooterText || cfg.topActive.bannerFooterText || "DESA TULUS • MEMBER PALING AKTIF";
+    cfg.topActive.bannerFooterText = req.body.bannerFooterText || cfg.topActive.bannerFooterText || "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | MEMBER PALING AKTIF";
     cfg.topActive.bannerAvatarRingText = req.body.bannerAvatarRingText || cfg.topActive.bannerAvatarRingText || "TOP AKTIF";
     cfg.topActive.bannerMode = req.body.bannerMode || cfg.topActive.bannerMode || (req.body.manualBannerUrl ? "manual_background" : "auto");
     cfg.topActive.manualBannerUrl = req.body.manualBannerUrl || cfg.topActive.manualBannerUrl || "";
@@ -11623,7 +11623,7 @@ app.post("/top-active", requireDashboardAuth, (req, res) => {
     cfg.topActive.manualBannerNameEnabled = req.body.manualBannerOverlayEnabled !== "off";
     cfg.topActive.manualBannerAvatarEnabled = req.body.manualBannerAvatarEnabled !== "off";
     cfg.topActive.manualBannerDim = req.body.manualBannerDim !== "off";
-    cfg.topActive.rowArrowEmoji = req.body.rowArrowEmoji || cfg.topActive.rowArrowEmoji || "<a:Animated_Arrow_Bluelite:1512751559140839576>";
+    cfg.topActive.rowArrowEmoji = req.body.rowArrowEmoji || cfg.topActive.rowArrowEmoji || "<a:Desa_Tulus2:1518502350363430932>";
 
   writeConfigFile(cfg);
     res.send(renderTopActiveDashboard(req, true));
@@ -11766,7 +11766,7 @@ function renderOwoAutoRoleDashboard(req, saved = false, error = "") {
 
   return dashboardLayout(`
     <section class="premium-hero">
-      <div class="premium-hero-badge">🎮 DESA TULUS • OwO Auto Role</div>
+      <div class="premium-hero-badge">🎮 <a:Desa_Tulus2:1518502350363430932> DESA TULUS | OwO Auto Role</div>
       <h2>OwO Auto Role Prefix W</h2>
       <p>Deteksi command OwO prefix <b>w</b> di channel yang kamu tentukan, lalu kasih role otomatis tanpa notice supaya channel tetap bersih. Fitur lain Pak RW tidak diubah.</p>
       <div class="premium-actions">
@@ -11829,7 +11829,7 @@ function renderActiveVoiceRoleDashboard(req, saved = false, error = "") {
 
   return dashboardLayout(`
     <section class="premium-hero">
-      <div class="premium-hero-badge">🎙️ DESA TULUS • Voice Role</div>
+      <div class="premium-hero-badge">🎙️ <a:Desa_Tulus2:1518502350363430932> DESA TULUS | Voice Role</div>
       <h2>Voice Role Otomatis</h2>
       <p>Member yang sedang berada di voice server otomatis mendapat role <b>Member Aktif</b>. Saat keluar dari semua voice, role dicabut lagi supaya statusnya selalu rapi dan real-time.</p>
       <div class="premium-actions">
@@ -11899,7 +11899,7 @@ function renderBoostPoinDashboard(req, saved = false, error = "", notice = "") {
     </style>
 
     <section class="premium-hero">
-      <div class="premium-hero-badge">⚡ DESA TULUS • Boost Poin Simple Mode</div>
+      <div class="premium-hero-badge">⚡ <a:Desa_Tulus2:1518502350363430932> DESA TULUS | Boost Poin Simple Mode</div>
       <h2>Boost Poin Dibikin Gampang</h2>
       <p>Dashboard ini sekarang cuma fokus ke hal penting: <b>aktifkan event</b>, <b>pilih channel</b>, <b>tulis teks panel manual</b>, lalu <b>kirim embed ke Discord</b>. Tidak banyak setting kecil yang bikin pusing.</p>
       <div class="premium-actions">
@@ -11990,7 +11990,7 @@ function renderBoostPoinDashboard(req, saved = false, error = "", notice = "") {
               <div class="discord-description">${escapeHtml(descPreview)}</div>
               <div class="discord-field"><b>🎯 Mode Event</b><br>${escapeHtml(getBoostPoinModeText(boost.eventMode || "chat_voice"))}</div>
               <div class="discord-field"><b>📍 Channel Event</b><br>${escapeHtml(getBoostPoinTargetChannelsText(getBoostPoinConfig()))}</div>
-              <small>DESA TULUS • Boost Poin</small>
+              <small><a:Desa_Tulus2:1518502350363430932> DESA TULUS | Boost Poin</small>
             </div>
           </div>
           <div class="boost-checklist">
@@ -12269,7 +12269,7 @@ app.post("/cari-mabar", requireDashboardAuth, (req, res) => {
     cfg.embeds.cariMabar.color = req.body.embedColor || cfg.embeds.cariMabar.color || "#5865F2";
     cfg.embeds.cariMabar.title = req.body.embedTitle || cfg.embeds.cariMabar.title || "🎮 CARI MABAR DESA TULUS";
     cfg.embeds.cariMabar.description = req.body.embedDescription || cfg.embeds.cariMabar.description || "Ada yang mau mabar? Isi data mabar dengan jelas biar warga gampang ikut.";
-    cfg.embeds.cariMabar.footer = req.body.embedFooter || cfg.embeds.cariMabar.footer || "DESA TULUS • Cari Mabar";
+    cfg.embeds.cariMabar.footer = req.body.embedFooter || cfg.embeds.cariMabar.footer || "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Cari Mabar";
     cfg.embeds.cariMabar.image = req.body.embedImage || "";
     cfg.embeds.cariMabar.thumbnail = req.body.embedThumbnail || "";
     cfg.embeds.cariMabar.content = req.body.embedContent || "";
@@ -13622,7 +13622,7 @@ function buildBoostPoinPublicPayload(guild, state = "active") {
     .setColor(hexColor(isEnd ? ac.endColor : ac.color, isEnd ? 0xff5c7a : 0xf5c542))
     .setTitle(title)
     .setDescription(description)
-    .setFooter({ text: `DESA TULUS • Boost Poin` })
+    .setFooter({ text: `<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Boost Poin` })
     .setTimestamp();
 
   const payload = { content: contentParts.join("\n") || undefined, embeds: [embed] };
@@ -13856,7 +13856,7 @@ function buildLevelUpEmbed(member, userData) {
 
   const embed = new EmbedBuilder()
     .setColor(hexColor(e.color || "#2ECC71", 0x2ecc71))
-    .setTitle(applyTemplate(e.title || "<a:rocket_animated:1512884173453529288> WARGA NAIK LEVEL!", data))
+    .setTitle(applyTemplate(e.title || "<a:Desa_Tulus2:1518502350363430932> WARGA NAIK LEVEL!", data))
     .setDescription(applyTemplate(e.description || "Sekarang menjadi **{rank} (Lvl. {level})** 🔥", data))
     .addFields(
       {
@@ -13935,7 +13935,7 @@ function getTopActiveConfig() {
     leaderboardActiveTopLimit: Math.max(3, Math.min(25, Number(t.leaderboardActiveTopLimit || t.topLimit || 10))),
     leaderboardActiveTitleTemplate: t.leaderboardActiveTitleTemplate || "🏆 PAPAN AKTIF WARGA SEPANJANG WAKTU",
     leaderboardActiveSubtitle: t.leaderboardActiveSubtitle || "Papan ini mencatat total poin warga dari awal bergabung sampai seterusnya. Data ini tidak di-reset meskipun siklus level kembali dari awal setelah 100.000 poin.",
-    leaderboardActiveFooter: t.leaderboardActiveFooter || "DESA TULUS • Leaderboard Aktif Warga",
+    leaderboardActiveFooter: t.leaderboardActiveFooter || "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Leaderboard Aktif Warga",
     leaderboardActiveImageUrl: t.leaderboardActiveImageUrl || config.embeds?.dashboard?.media?.topActiveBoardImageUrl || "",
     chatPointPerMessage: Number(t.chatPointPerMessage || 5),
     voicePointPerMinute: Number(t.voicePointPerMinute || 2),
@@ -13956,7 +13956,7 @@ function getTopActiveConfig() {
     bannerTitle: t.bannerTitle || "MEMBER OF THE MONTH",
     bannerSubtitle: t.bannerSubtitle || "TOP CHAT • TOP VOICE • TOP AKTIF",
     bannerNameLabel: t.bannerNameLabel || "NAMA MEMBER",
-    bannerFooterText: t.bannerFooterText || "DESA TULUS • MEMBER PALING AKTIF",
+    bannerFooterText: t.bannerFooterText || "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | MEMBER PALING AKTIF",
     bannerAvatarRingText: t.bannerAvatarRingText || "",
     bannerShowStats: t.bannerShowStats !== false,
     bannerMode: t.bannerMode || "manual_image",
@@ -13991,7 +13991,7 @@ function getTopActiveConfig() {
     topActiveFieldTitle: t.topActiveFieldTitle || "🏆 Top Aktif",
     topVoiceFieldTitle: t.topVoiceFieldTitle || "🎙️ Top Voice",
     topChatFieldTitle: t.topChatFieldTitle || "💬 Top Chat",
-    rowArrowEmoji: t.rowArrowEmoji || "<a:Animated_Arrow_Bluelite:1512751559140839576>",
+    rowArrowEmoji: t.rowArrowEmoji || "<a:Desa_Tulus2:1518502350363430932>",
     motmReactionEmojis: t.motmReactionEmojis || "🔥,👏,🏆,🎉,🥳",
     motmThreadArchiveMinutes: Number(t.motmThreadArchiveMinutes || 1440),
     bannerBgStart: t.bannerBgStart || "#080704",
@@ -14100,7 +14100,7 @@ function topMedal(index) {
 }
 
 function getTopActiveArrowEmoji() {
-  return String(getTopActiveConfig().rowArrowEmoji || "<a:Animated_Arrow_Bluelite:1512751559140839576>").trim();
+  return String(getTopActiveConfig().rowArrowEmoji || "<a:Desa_Tulus2:1518502350363430932>").trim();
 }
 
 function getTopRankLabel(index) {
@@ -15062,7 +15062,7 @@ async function buildMotmBannerAttachment(member, userData) {
     ctx.fillStyle = "#fff0ba";
     ctx.fillText(`${server} • BULAN ${monthLabel}`, 68, 584);
     ctx.textAlign = "right";
-    ctx.fillText(String(cfg.bannerFooterText || "DESA TULUS • MEMBER PALING AKTIF"), width - 68, 584);
+    ctx.fillText(String(cfg.bannerFooterText || "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | MEMBER PALING AKTIF"), width - 68, 584);
 
     const buffer = canvas.toBuffer("image/png");
     return new AttachmentBuilder(buffer, { name: "orang-tulus-member-of-the-month.png" });
@@ -15481,7 +15481,7 @@ function renderMotmSvg(query = {}) {
   const title = escapeSvgText(query.title || config.topActive?.bannerTitle || "MEMBER OF THE MONTH");
   const subtitle = escapeSvgText(query.subtitle || config.topActive?.bannerSubtitle || "TOP CHAT • TOP VOICE • TOP AKTIF");
   const nameLabel = escapeSvgText(query.nameLabel || config.topActive?.bannerNameLabel || "NAMA MEMBER");
-  const footerText = escapeSvgText(query.footerText || config.topActive?.bannerFooterText || "DESA TULUS • MEMBER PALING AKTIF");
+  const footerText = escapeSvgText(query.footerText || config.topActive?.bannerFooterText || "<a:Desa_Tulus2:1518502350363430932> DESA TULUS | MEMBER PALING AKTIF");
   const initial = escapeSvgText(String(name).trim().charAt(0).toUpperCase() || "O");
 
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -16411,7 +16411,7 @@ client.once(Events.ClientReady, async () => {
     if (channel) {
       const embed = new EmbedBuilder()
         .setColor(color())
-        .setTitle(config.suggestion?.title || "💡 DESA TULUS • Kritik & Saran")
+        .setTitle(config.suggestion?.title || "💡 <a:Desa_Tulus2:1518502350363430932> DESA TULUS | Kritik & Saran")
         .setDescription(config.suggestion?.description || "Klik tombol di bawah untuk mengirim saran.")
         .setFooter({ text: makeOTFooter("Pak RW • Sistem Saran") })
         .setTimestamp();
@@ -16486,7 +16486,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
       .setTitle(welcomeTitle)
       .setDescription(description)
       .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 512 }))
-      .setFooter({ text: makeOTFooter("DESA TULUS • Tempat warga baik berkumpul") })
+      .setFooter({ text: makeOTFooter("<a:Desa_Tulus2:1518502350363430932> DESA TULUS | Tempat warga baik berkumpul") })
       .setTimestamp();
 
     if (config.welcome.imageUrl) {
@@ -17868,7 +17868,7 @@ function featureChannelKey(feature) {
 async function sendSuggestionPanelCommand(channel) {
   const embed = new EmbedBuilder()
     .setColor(hexColor(config.suggestion?.color || config.embedColor || "#FFFFFF", color()))
-    .setTitle(config.suggestion?.title || "💡 DESA TULUS • Kritik & Saran")
+    .setTitle(config.suggestion?.title || "💡 <a:Desa_Tulus2:1518502350363430932> DESA TULUS | Kritik & Saran")
     .setDescription(config.suggestion?.description || "Punya ide, kritik, saran, atau masukan buat server? Klik tombol di bawah dan tulis dengan jelas ya 🤍")
     .setFooter({ text: makeOTFooter(`${config.serverName || "DESA TULUS"} • Kritik & Saran`) })
     .setTimestamp();
@@ -19429,7 +19429,7 @@ client.on(Events.MessageCreate, async (message) => {
 
         const embed = new EmbedBuilder()
           .setColor(color())
-          .setTitle(config.suggestion?.title || "💡 DESA TULUS • Kritik & Saran")
+          .setTitle(config.suggestion?.title || "💡 <a:Desa_Tulus2:1518502350363430932> DESA TULUS | Kritik & Saran")
           .setDescription(config.suggestion?.description || "Klik tombol di bawah untuk mengirim saran.")
           .setFooter({ text: makeOTFooter("Pak RW • Sistem Saran") })
           .setTimestamp();
