@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Archive, CheckCircle2, CircleAlert, DatabaseBackup, FileImage, Hash, Headphones, IdCard, RefreshCcw, Save, Search, Server, Settings, Shield, ShieldCheck, TerminalSquare, Users } from "lucide-react";
+import { Activity, Archive, CheckCircle2, CircleAlert, DatabaseBackup, FileImage, Hash, Headphones, IdCard, RefreshCcw, Save, Server, Settings, Shield, ShieldCheck, TerminalSquare, Users } from "lucide-react";
 import { useDashboard } from "../app/DashboardContext";
 import { Card, CardHeader } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";

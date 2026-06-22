@@ -121,10 +121,8 @@ export function ManagePage() {
   const [leaderboardUploading, setLeaderboardUploading] = useState(false);
   const [aiModel, setAiModel] = useState("openai/gpt-4o-mini");
   const [aiMaxTokens, setAiMaxTokens] = useState(460);
-  const [welcomeTitle, setWelcomeTitle] = useState("");
   const [welcomeMessage, setWelcomeMessage] = useState("Wilujeung sumping, {user}!\n\nAkhirnya mampir juga ke {server}\nDisini tempatnya ngobrol santai, saling kenal, curhat, bercanda, dan jadi bagian dari warga Desa Tulus.\n\nJangan sungkan buat mulai ngobrol ya. Semoga betah disini!\n{memberTulusRole}");
   const [welcomeDelayMs, setWelcomeDelayMs] = useState(5500);
-  const [welcomeContent, setWelcomeContent] = useState("");
   const [suggestionTitle, setSuggestionTitle] = useState("📬 Kotak Saran DESA TULUS");
   const [suggestionDescription, setSuggestionDescription] = useState("Klik tombol di bawah untuk mengirim kritik atau saran. Setelah terkirim, warga bisa memberi tanggapan lewat reaction dan thread.");
   const [suggestionButtonText, setSuggestionButtonText] = useState("📬 Kirim Saran");
@@ -187,10 +185,8 @@ export function ManagePage() {
     setLeaderboardDarken(Number(leaderboardCfg.backgroundDarken ?? 0.45));
     setAiModel(String(readPath(cfg, "ai.openRouterModel") || "openai/gpt-4o-mini"));
     setAiMaxTokens(Number(readPath(cfg, "ai.maxTokens") || 460));
-    setWelcomeTitle("");
     setWelcomeMessage(String(readPath(cfg, "welcome.message") || "Wilujeung sumping, {user}!\n\nAkhirnya mampir juga ke {server}\nDisini tempatnya ngobrol santai, saling kenal, curhat, bercanda, dan jadi bagian dari warga Desa Tulus.\n\nJangan sungkan buat mulai ngobrol ya. Semoga betah disini!\n{memberTulusRole}"));
     setWelcomeDelayMs(Number(readPath(cfg, "welcome.delayMs") || 5500));
-    setWelcomeContent(String(readPath(cfg, "welcome.content") || ""));
     setSuggestionTitle(String(readPath(cfg, "suggestion.title") || "📬 Kotak Saran DESA TULUS"));
     setSuggestionDescription(String(readPath(cfg, "suggestion.description") || "Klik tombol di bawah untuk mengirim kritik atau saran. Setelah terkirim, warga bisa memberi tanggapan lewat reaction dan thread."));
     setSuggestionButtonText(String(readPath(cfg, "suggestion.buttonText") || "📬 Kirim Saran"));

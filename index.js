@@ -33,6 +33,8 @@ const {
 } = require("discord.js");
 
 const config = require("./config.json");
+const packageMetadata = require("./package.json");
+const PAKRW_VERSION = String(packageMetadata.version || "10.10.127");
 const {
   MAX_LEVEL: PAK_RW_MAX_LEVEL,
   LEVEL_ROLE_TIER_DEFINITIONS,
@@ -280,9 +282,10 @@ app.use(express.json({ limit: "8mb" }));
 const isDashboardEnabled = String(process.env.DASHBOARD_ENABLED || "false").toLowerCase() === "true";
 
 
-const dashboardSecret = process.env.DASHBOARD_SECRET || process.env.DISCORD_TOKEN || "pak-rw-dashboard-secret";
-const dashboardPassword = process.env.DASHBOARD_PASSWORD || "desatulus";
-const dashboardSessions = new Set();
+const isProduction = String(process.env.NODE_ENV || "").toLowerCase() === "production";
+const dashboardPassword = String(process.env.DASHBOARD_PASSWORD || (isProduction ? "" : "desatulus"));
+const dashboardSessions = new Map();
+const DASHBOARD_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 
 function makeSessionToken() {
   return crypto.randomBytes(24).toString("hex");
@@ -297,7 +300,18 @@ function getCookie(req, name) {
 
 function isDashboardAuth(req) {
   const token = getCookie(req, "pakrw_dashboard");
-  return Boolean(token && dashboardSessions.has(token));
+  const expiresAt = token ? dashboardSessions.get(token) : 0;
+  if (!expiresAt || expiresAt <= Date.now()) {
+    if (token) dashboardSessions.delete(token);
+    return false;
+  }
+  return true;
+}
+
+function dashboardPasswordsMatch(input) {
+  const supplied = Buffer.from(String(input || ""));
+  const expected = Buffer.from(dashboardPassword);
+  return supplied.length === expected.length && crypto.timingSafeEqual(supplied, expected);
 }
 
 function requireDashboardAuth(req, res, next) {
@@ -8641,7 +8655,7 @@ function renderControlCenter(req, saved = false, error = "", actionMessage = "")
         <div class="cmd"><b>Level System</b><span>${cfg.levelChannelId ? "Aktif" : "Belum isi channel"}</span></div>
         <div class="cmd"><b>Juragan Boost</b><span>${cfg.juragan?.enabled ? "Aktif" : "Nonaktif"}</span></div>
         <div class="cmd"><b>Curhat Anonim</b><span>${cfg.anonymousCurhatChannelId ? "Aktif" : "Belum isi channel"}</span></div>
-        <div class="cmd"><b>Dashboard Password</b><span>${process.env.DASHBOARD_PASSWORD ? "Custom" : "Default"}</span></div>
+        <div class="cmd"><b>Dashboard Password</b><span>${process.env.DASHBOARD_PASSWORD ? "Custom" : (isProduction ? "Belum disetel" : "Default lokal")}</span></div>
       </div>
     </section>
   `, "control");
@@ -9064,7 +9078,7 @@ function smartDashboardAnalyze() {
   checks.push({
     key: "Dashboard Password",
     ok: process.env.DASHBOARD_PASSWORD ? true : null,
-    desc: process.env.DASHBOARD_PASSWORD ? "Sudah pakai password custom." : "Masih pakai password default."
+    desc: process.env.DASHBOARD_PASSWORD ? "Sudah pakai password custom." : (isProduction ? "Belum disetel; login dashboard production dikunci." : "Masih memakai password default lokal.")
   });
 
   if (guild && cfg.juragan?.roleId && checkIdValue(cfg.juragan.roleId)) {
@@ -11578,7 +11592,7 @@ app.get("/api/dashboard/bootstrap", requireDashboardAuth, (req, res) => {
       dashboardEnabled: isDashboardEnabled,
       activeFeatureCount: featureCount.active,
       totalFeatureCount: featureCount.total,
-      version: String(cfg.version || "10.10.81"),
+      version: String(cfg.version || PAKRW_VERSION),
       prefix: String(cfg.prefix || "rw"),
       environment: String(process.env.NODE_ENV || "development")
     },
@@ -11703,7 +11717,7 @@ app.post("/api/dashboard/leaderboard/upload", requireDashboardAuth, async (req, 
     cfg.leaderboard.backgroundUploadPath = relativePath;
     cfg.leaderboard.backgroundOverlay = Number.isFinite(Number(cfg.leaderboard.backgroundOverlay)) ? cfg.leaderboard.backgroundOverlay : 0.55;
     cfg.leaderboard.backgroundDarken = Number.isFinite(Number(cfg.leaderboard.backgroundDarken)) ? cfg.leaderboard.backgroundDarken : 0.45;
-    cfg.version = "10.10.115";
+    cfg.version = PAKRW_VERSION;
     writeConfigFile(cfg);
     appendDashboardActivity("leaderboard", "Background leaderboard diunggah", `${savedName} (${image.width}x${image.height})`);
     syncLiveConfig(readConfigFile());
@@ -11739,7 +11753,7 @@ app.put("/api/dashboard/settings", requireDashboardAuth, (req, res) => {
       if (!isSafeDashboardPath(pathText)) return res.status(400).json({ ok: false, error: `Path config tidak diizinkan: ${pathText}` });
       setDashboardPath(cfg, pathText, patch.value);
     }
-    cfg.version = "10.10.115";
+    cfg.version = PAKRW_VERSION;
     writeConfigFile(cfg);
     appendDashboardActivity("settings", "Setting dashboard disimpan", `${patches.length} field diperbarui melalui adapter aman.`);
     if (levelRoleConfigChanged) {
@@ -11759,7 +11773,7 @@ app.put("/api/dashboard/embed/:key", requireDashboardAuth, (req, res) => {
     const cfg = readConfigFile();
     cfg.embeds = cfg.embeds || {};
     cfg.embeds[key] = mergeDashboardEmbed(cfg.embeds[key] || {}, req.body?.embed || {});
-    cfg.version = "10.10.115";
+    cfg.version = PAKRW_VERSION;
     writeConfigFile(cfg);
     appendDashboardActivity("embed", "Template embed disimpan", `Template ${key} diperbarui dari Embed Builder.`);
     return res.json({ ok: true, embed: cfg.embeds[key] });
@@ -11846,7 +11860,7 @@ app.put("/api/afk-voice/config", requireDashboardAuth, async (req, res) => {
       if (!valid.ok) return res.status(400).json({ success: false, message: valid.message, errorCode: valid.errorCode });
     }
     cfg.afkVoice = next;
-    cfg.version = "10.10.115";
+    cfg.version = PAKRW_VERSION;
     writeConfigFile(cfg);
     appendDashboardActivity("afk-voice", "AFK Voice diperbarui", next.enabled ? `Channel voice ${next.channelId} diterapkan.` : "Fitur dinonaktifkan.");
 
@@ -11888,7 +11902,7 @@ app.post("/api/afk-voice/disconnect", requireDashboardAuth, async (req, res) => 
   if (!checkActionRateLimit()) return res.status(429).json({ success: false, message: "Tunggu sebentar sebelum memutus koneksi.", errorCode: "RATE_LIMITED" });
   const cfg = readConfigFile();
   cfg.afkVoice = { ...(cfg.afkVoice || {}), enabled: false, updatedAt: new Date().toISOString(), updatedBy: "dashboard" };
-  cfg.version = "10.10.115";
+  cfg.version = PAKRW_VERSION;
   writeConfigFile(cfg);
   const result = await disconnectAfkVoice({ disable: true });
   return res.json(result);
@@ -11945,12 +11959,20 @@ app.get("/login", (req, res) => {
 
 app.post("/login", (req, res) => {
   const password = String(req.body?.password || "");
-  if (password !== dashboardPassword) {
+  if (!dashboardPassword) {
+    return res.status(503).send(renderPakRwDashboardLogin("DASHBOARD_PASSWORD wajib diisi sebelum dashboard production dapat digunakan."));
+  }
+  if (!dashboardPasswordsMatch(password)) {
     return res.status(401).send(renderPakRwDashboardLogin("Password dashboard tidak cocok."));
   }
   const token = makeSessionToken();
-  dashboardSessions.add(token);
-  res.setHeader("Set-Cookie", `pakrw_dashboard=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=Lax; Max-Age=86400`);
+  const now = Date.now();
+  for (const [sessionToken, expiresAt] of dashboardSessions) {
+    if (expiresAt <= now) dashboardSessions.delete(sessionToken);
+  }
+  dashboardSessions.set(token, now + DASHBOARD_SESSION_TTL_MS);
+  const secureCookie = isProduction ? "; Secure" : "";
+  res.setHeader("Set-Cookie", `pakrw_dashboard=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=Lax; Max-Age=86400${secureCookie}`);
   return res.redirect("/dashboard");
 });
 

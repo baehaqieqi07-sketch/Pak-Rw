@@ -1,10 +1,11 @@
 {
   "name": "pak-rw-desa-tulus",
-  "version": "10.10.117",
+  "version": "10.10.127",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "check": "node --check index.js && node --check services/afkVoiceManager.js && node --check services/serverIdExporter.js && node --check services/ktpWarga.js && node --check ai/brain.js && node --check utils/cooldown.js && node --check db/mongoStore.js && node --check level/levelRoleTiers.js && node tests/levelRoleTiers.test.js && node tests/ktpWarga.test.js && node tests/dashboardAllowedPaths.test.js && node tests/afkVoice.test.js && node tests/aiBrain.test.js && node tests/ktpCommandScope.test.js && node tests/ktpDesigner.test.js && node tests/leaderboardFormat.test.js",
+    "test": "npm run check",
+    "check": "node --check index.js && node --check services/afkVoiceManager.js && node --check services/serverIdExporter.js && node --check services/ktpWarga.js && node --check ai/brain.js && node --check utils/cooldown.js && node --check db/mongoStore.js && node --check level/levelRoleTiers.js && node tests/projectIntegrity.test.js && node tests/levelRoleTiers.test.js && node tests/ktpWarga.test.js && node tests/dashboardAllowedPaths.test.js && node tests/afkVoice.test.js && node tests/aiBrain.test.js && node tests/ktpCommandScope.test.js && node tests/ktpDesigner.test.js && node tests/leaderboardFormat.test.js",
     "dashboard:build": "npm --prefix dashboard run build",
     "dashboard:dev": "npm --prefix dashboard run dev",
     "test:level-roles": "node tests/levelRoleTiers.test.js",
@@ -13,7 +14,7 @@
   },
   "dependencies": {
     "@discordjs/voice": "0.19.2",
-    "@napi-rs/canvas": "latest",
+    "@napi-rs/canvas": "0.1.100",
     "axios": "^1.7.9",
     "dejavu-fonts-ttf": "2.37.3",
     "discord.js": "^14.17.3",
@@ -24,5 +25,8 @@
   "engines": {
     "node": ">=22.12.0 <23"
   },
-  "description": "Pak RW DESA TULUS v10.10.115 - KTP leaderboard image hard text renderer and attachment cache bust"
+  "overrides": {
+    "undici": "6.27.0"
+  },
+  "description": "Pak RW DESA TULUS v10.10.127"
 }

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
-  Bell, ChevronDown, ChevronRight, Command, LogOut, Menu, PanelLeftClose,
+  Bell, ChevronRight, Command, LogOut, Menu, PanelLeftClose,
   PanelLeftOpen, Plus, Search, Server, X
 } from "lucide-react";
 import { featureGroups } from "../lib/features";
