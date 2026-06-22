@@ -24,6 +24,7 @@ const userB = {
 };
 
 assert.notEqual(__test.scopedUserKey(userA), __test.scopedUserKey(userB));
+assert.equal(__test.getAiBaseUrl(), "https://openrouter.ai/api/v1");
 
 __test.persistUserTurn(userA, "Pak RW, aku sedang belajar JavaScript", "Baik nak, kita mulai dari dasar JavaScript.", "normal");
 __test.persistUserTurn(userB, "Pak RW, aku mau membahas desain banner", "Siap nak, kita rapikan konsep bannernya.", "normal");
@@ -35,6 +36,10 @@ assert.match(memoryA, /JavaScript/i);
 assert.doesNotMatch(memoryA, /desain banner/i);
 assert.match(memoryB, /desain banner/i);
 assert.doesNotMatch(memoryB, /belajar JavaScript/i);
+assert.equal(__test.getMemoryStats().anonymousMemory, false);
+assert.equal(__test.forgetUserMemory(userA.guildId, userA.userId), true);
+assert.equal(__test.getUserMemory(userA), null);
+__test.persistUserTurn(userA, "Pak RW, aku sedang belajar JavaScript", "Baik nak, kita mulai dari dasar JavaScript.", "normal");
 
 const simpleQueue = __test.getModelQueue("halo pak rw", "normal");
 assert.equal(simpleQueue[0], "openai/gpt-4o-mini");

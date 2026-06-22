@@ -45,5 +45,8 @@ assert.match(source, /assetFoldersReady:/, "Bootstrap dashboard wajib melaporkan
 assert.match(source, /permissionStatus: permissions \? \{/, "Discord picker wajib menyertakan status izin channel.");
 assert.match(source, /app\.post\("\/api\/dashboard\/assets\/upload", requireDashboardAuth, async \(req, res\) => \{/, "Upload asset dashboard wajib terproteksi auth.");
 assert.match(source, /assets\/dashboard-uploads\//, "Upload asset dashboard wajib dibatasi ke folder khusus.");
+assert.match(source, /app\.get\("\/api\/dashboard\/ai\/status", requireDashboardAuth/, "Status AI dashboard wajib terproteksi auth.");
+assert.match(source, /app\.post\("\/api\/dashboard\/ai\/memory\/reset", requireDashboardAuth/, "Reset memori AI wajib terproteksi auth.");
+assert.match(source, /getAiDashboardStatus\(\)/, "Status AI tidak boleh mengirim key ke frontend.");
 
 console.log("✅ Dashboard KTP allowlist tests berhasil.");

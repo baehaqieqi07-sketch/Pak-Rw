@@ -72,7 +72,20 @@ export type DashboardHealth = {
   pingMs: number | null;
   configReadable: boolean;
   assetFoldersReady: boolean;
+  ai?: AiDashboardStatus;
   checkedAt: string;
+};
+
+export type AiDashboardStatus = {
+  enabled: boolean;
+  providerName: string;
+  baseUrl: string;
+  apiKeyConfigured: boolean;
+  smartModel: string;
+  economyModel: string;
+  limit: { status?: string; reason?: string; retryAfterAt?: number | null; modelActive?: string };
+  memory: { users: number; summaries: number; recentTurns: number; enabled: boolean; anonymousMemory: boolean };
+  budget: { tokenBudget: number; maxReplyTokens: number; safeReplyTokens: number; cooldownUserSeconds: number; dailyLimitPerUser: number; cacheEnabled: boolean; cacheTtlMs: number };
 };
 
 export type LeaderboardPreviewRow = {

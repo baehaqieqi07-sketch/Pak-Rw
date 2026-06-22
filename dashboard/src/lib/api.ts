@@ -1,4 +1,4 @@
-import type { BootstrapData, DashboardHealth, LeaderboardPreviewRow, PickerData } from "../app/types";
+import type { AiDashboardStatus, BootstrapData, DashboardHealth, LeaderboardPreviewRow, PickerData } from "../app/types";
 
 async function parseJson<T>(res: Response): Promise<T> {
   if (res.status === 401 || res.redirected && res.url.includes("/login")) {
@@ -32,6 +32,8 @@ export const api = {
     body: JSON.stringify({ channelId, embed })
   })),
   health: async () => parseJson<DashboardHealth>(await fetch("/api/dashboard/health", { credentials: "same-origin", cache: "no-store" })),
+  aiStatus: async () => parseJson<{ ok: boolean; status: AiDashboardStatus }>(await fetch("/api/dashboard/ai/status", { credentials: "same-origin", cache: "no-store" })),
+  resetAiMemory: async (userId: string) => parseJson<{ ok: boolean; removed: boolean; status: AiDashboardStatus }>(await fetch("/api/dashboard/ai/memory/reset", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId }) })),
   leaderboardDataPreview: async () => parseJson<{ ok: boolean; generatedAt: string; rows: LeaderboardPreviewRow[] }>(await fetch("/api/dashboard/leaderboard/data-preview", { credentials: "same-origin", cache: "no-store" })),
   boostStatus: async () => parseJson<any>(await fetch("/api/dashboard/boost-poin/status", { credentials: "same-origin", cache: "no-store" })),
   startBoost: async () => parseJson<{ ok: boolean; message: string; config?: Record<string, any> }>(await fetch("/api/dashboard/boost-poin/start", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: "{}" })),

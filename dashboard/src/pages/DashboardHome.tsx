@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  Activity, ArrowRight, Bot, CheckCircle2, Clock3, Database, DatabaseBackup,
+  Activity, ArrowRight, Bot, BrainCircuit, CheckCircle2, Clock3, Database, DatabaseBackup,
   FileText, Gauge, HeartPulse, RefreshCcw, Save, Search, Settings2, UserPlus, Users
 } from "lucide-react";
 import type { BootstrapData, DashboardHealth } from "../app/types";
@@ -55,6 +55,7 @@ export function DashboardHome({ data }: { data: BootstrapData }) {
     { label: "Ping / uptime", value: data.status.pingMs != null ? `${data.status.pingMs} ms` : formatUptime(data.status.uptimeSeconds), helper: `Uptime ${formatUptime(data.status.uptimeSeconds)}`, icon: Clock3, tone: data.status.botOnline ? "success" : "neutral" },
     { label: "Members", value: data.guild ? data.guild.memberCount.toLocaleString("id-ID") : "—", helper: data.guild?.name || "Server belum terbaca", icon: Users, tone: "neutral" },
     { label: "Active modules", value: `${data.status.activeFeatureCount}/${data.status.totalFeatureCount}`, helper: "Konfigurasi berjalan", icon: Gauge, tone: "success" },
+    { label: "Pak RW AI", value: health?.ai?.enabled ? "Ready" : health?.ai ? "Off" : "Checking", helper: health?.ai ? `${health.ai.providerName} • ${health.ai.limit.status || "normal"}` : "Provider status", icon: BrainCircuit, tone: health?.ai?.enabled ? "success" : "warning" },
     { label: "Database / config", value: data.status.databaseMode.includes("Mongo") ? "Connected" : "Local", helper: data.status.databaseMode, icon: Database, tone: data.status.databaseMode.includes("Mongo") ? "success" : "warning" },
     { label: "Dashboard health", value: health?.ok && health.dashboardBuild ? "Healthy" : health ? "Needs check" : "Checking", helper: health?.checkedAt ? `Checked ${formatTimestamp(health.checkedAt)}` : "Health endpoint", icon: HeartPulse, tone: health?.ok && health.dashboardBuild ? "success" : "warning" },
     { label: "Last config save", value: formatTimestamp(data.status.lastConfigSaveAt), helper: "Config file update", icon: Save, tone: data.status.lastConfigSaveAt ? "neutral" : "warning" },
@@ -73,6 +74,7 @@ export function DashboardHome({ data }: { data: BootstrapData }) {
     { label: "Database / config", ready: Boolean(data.status.databaseMode), to: "/logs" },
     { label: "Dashboard health", ready: Boolean(health?.ok && health.dashboardBuild), to: "/logs" },
     { label: "Asset folders", ready: Boolean(data.status.assetFoldersReady), to: "/banner-manager" },
+    { label: "AI memory privacy", ready: Boolean(health?.ai?.memory.enabled && !health?.ai?.memory.anonymousMemory), to: "/manage/ai" },
     { label: "Embed test", ready: data.status.botOnline && Boolean(data.embeds && Object.keys(data.embeds).length), to: "/manage/embed" }
   ];
   const warnings = readiness.filter((item) => !item.ready);
@@ -83,6 +85,7 @@ export function DashboardHome({ data }: { data: BootstrapData }) {
     { to: "/backup", label: "Backup Center", helper: "Read-only status", icon: DatabaseBackup },
     { to: "/manage/embed", label: "Test embed", helper: "Builder & send test", icon: FileText },
     { to: "/manage/papan-aktif", label: "Leaderboard", helper: "Format & preview", icon: Gauge },
+    { to: "/manage/ai", label: "AI Control", helper: "Brain & memory", icon: BrainCircuit },
     { to: "/manage/welcome", label: "Welcome", helper: "Message & role", icon: UserPlus }
   ];
 

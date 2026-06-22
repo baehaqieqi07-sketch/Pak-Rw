@@ -143,7 +143,7 @@ const {
   initializeAfkVoiceManager, connectAfkVoice, disconnectAfkVoice, reconnectAfkVoice,
   getAfkVoiceStatus, validateAfkVoiceChannel, shutdownAfkVoice, checkActionRateLimit
 } = require("./services/afkVoiceManager");
-const { askAI, getAiLimitState, resetAiLimitState, classifyAiError, estimateTokens } = require("./ai/brain");
+const { askAI, getAiLimitState, getAiDashboardStatus, forgetUserMemory, resetAiLimitState, classifyAiError, estimateTokens } = require("./ai/brain");
 const { isCooldown, getRemaining } = require("./utils/cooldown");
 const {
   initMongoStore,
@@ -11953,8 +11953,23 @@ app.get("/api/dashboard/health", requireDashboardAuth, (req, res) => {
     pingMs: client?.isReady?.() ? Math.max(0, Math.round(Number(client.ws?.ping || 0))) : null,
     configReadable: fs.existsSync(getDashboardConfigPath()),
     assetFoldersReady: fs.existsSync(path.join(__dirname, "assets")) && fs.existsSync(path.join(__dirname, "dashboard", "public")),
+    ai: getAiDashboardStatus(),
     checkedAt: new Date().toISOString()
   });
+});
+
+app.get("/api/dashboard/ai/status", requireDashboardAuth, (req, res) => {
+  res.set("Cache-Control", "no-store");
+  return res.json({ ok: true, status: getAiDashboardStatus() });
+});
+
+app.post("/api/dashboard/ai/memory/reset", requireDashboardAuth, (req, res) => {
+  const guild = getDashboardGuild ? getDashboardGuild() : client.guilds.cache.first();
+  const userId = String(req.body?.userId || "").match(/^\d{15,25}$/)?.[0] || "";
+  if (!guild || !userId) return res.status(400).json({ ok: false, error: "Pilih warga Discord yang valid sebelum menghapus memorinya." });
+  const removed = forgetUserMemory(guild.id, userId);
+  appendDashboardActivity("ai-memory", removed ? "Memori AI warga dihapus" : "Memori AI warga tidak ditemukan", `User ID ${userId} • tanpa menampilkan isi memori.`);
+  return res.json({ ok: true, removed, status: getAiDashboardStatus() });
 });
 
 app.get("/api/afk-voice/config", requireDashboardAuth, async (req, res) => {

@@ -107,6 +107,12 @@ function aiBudgetConfig() {
     providerRetryMax: envOrConfigNumber("providerRetryMax", "AI_PROVIDER_RETRY_MAX", DEFAULT_AI_LIMITS.providerRetryMax, 0, 2),
     storeLimitFallbackMemory: envOrConfigBool("storeLimitFallbackMemory", "AI_STORE_LIMIT_FALLBACK_MEMORY", DEFAULT_AI_LIMITS.storeLimitFallbackMemory),
     memorySummaryOnly: envOrConfigBool("memorySummaryOnly", "AI_MEMORY_SUMMARY_ONLY", DEFAULT_AI_LIMITS.memorySummaryOnly),
+    memoryEnabled: envOrConfigBool("memoryEnabled", "AI_MEMORY_ENABLED", true),
+    memorySensitiveScrub: envOrConfigBool("memorySensitiveScrub", "AI_MEMORY_SENSITIVE_SCRUB", true),
+    anonymousMemory: envOrConfigBool("anonymousMemory", "AI_ANONYMOUS_MEMORY", false),
+    maxMemoryUsers: envOrConfigNumber("maxMemoryUsers", "AI_MAX_MEMORY_USERS", MAX_MEMORY_USERS, 10, 5000),
+    maxMemoryTurns: envOrConfigNumber("maxMemoryTurns", "AI_MAX_MEMORY_TURNS", MAX_MEMORY_TURNS, 2, 40),
+    maxMemoryTopics: envOrConfigNumber("maxMemoryTopics", "AI_MAX_MEMORY_TOPICS", 8, 1, 20),
     showResetTime: envOrConfigBool("showResetTime", "AI_SHOW_RESET_TIME", DEFAULT_AI_LIMITS.showResetTime)
   };
 }
@@ -551,9 +557,14 @@ function scopedUserKey(context = {}) {
 }
 
 function scrubMemoryText(text = "") {
-  return cleanText(text)
+  const source = cleanText(text);
+  if (!aiBudgetConfig().memorySensitiveScrub) return source.slice(0, MAX_MEMORY_TEXT);
+  return source
     .replace(/(?:mfa\.|[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{20,})/g, "[TOKEN DISEMBUNYIKAN]")
     .replace(/(?:sk-[A-Za-z0-9_-]{16,}|AIza[A-Za-z0-9_-]{20,})/g, "[KUNCI DISEMBUNYIKAN]")
+    .replace(/\b(?:\+?62|0)8\d{8,13}\b/g, "[NOMOR DISEMBUNYIKAN]")
+    .replace(/\b\d{16}\b/g, "[ID SENSITIF DISEMBUNYIKAN]")
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[EMAIL DISEMBUNYIKAN]")
     .slice(0, MAX_MEMORY_TEXT);
 }
 
@@ -565,16 +576,17 @@ function getMemoryRoot() {
 }
 
 function getUserMemory(context = {}) {
-  if (config.ai?.memoryEnabled === false) return null;
+  const cfg = aiBudgetConfig();
+  if (!cfg.memoryEnabled) return null;
   const ctx = normalizeAiContext(context);
-  if (!ctx.userId || ctx.userId === "anonymous") return null;
+  if (!ctx.userId || (ctx.userId === "anonymous" && !cfg.anonymousMemory)) return null;
   const root = getMemoryRoot();
   const entry = root.users[scopedUserKey(ctx)];
   if (!entry || typeof entry !== "object") return null;
   return {
     ...entry,
-    recent: Array.isArray(entry.recent) ? entry.recent.slice(-MAX_MEMORY_TURNS) : [],
-    topics: Array.isArray(entry.topics) ? entry.topics.slice(-8) : []
+    recent: Array.isArray(entry.recent) ? entry.recent.slice(-cfg.maxMemoryTurns) : [],
+    topics: Array.isArray(entry.topics) ? entry.topics.slice(-cfg.maxMemoryTopics) : []
   };
 }
 
@@ -586,15 +598,16 @@ function inferMemoryTopic(text = "", mode = "normal") {
 }
 
 function persistUserTurn(context = {}, userText = "", assistantText = "", mode = "normal") {
-  if (config.ai?.memoryEnabled === false) return false;
+  const cfg = aiBudgetConfig();
+  if (!cfg.memoryEnabled) return false;
   const ctx = normalizeAiContext(context);
-  if (!ctx.userId || ctx.userId === "anonymous") return false;
+  if (!ctx.userId || (ctx.userId === "anonymous" && !cfg.anonymousMemory)) return false;
 
   const root = getMemoryRoot();
   const key = scopedUserKey(ctx);
   const previous = root.users[key] || {};
   const now = Date.now();
-  const recent = Array.isArray(previous.recent) ? previous.recent.slice(-MAX_MEMORY_TURNS + 2) : [];
+  const recent = Array.isArray(previous.recent) ? previous.recent.slice(-Math.max(0, cfg.maxMemoryTurns - 2)) : [];
   const safeUser = scrubMemoryText(userText);
   const safeAssistant = scrubMemoryText(assistantText);
 
@@ -611,21 +624,45 @@ function persistUserTurn(context = {}, userText = "", assistantText = "", mode =
     displayName: ctx.displayName,
     username: ctx.username,
     lastMode: mode,
-    topics: topics.slice(-8),
-    recent: recent.slice(-MAX_MEMORY_TURNS),
+    topics: topics.slice(-cfg.maxMemoryTopics),
+    recent: recent.slice(-cfg.maxMemoryTurns),
     updatedAt: now
   };
 
   const entries = Object.entries(root.users);
-  if (entries.length > MAX_MEMORY_USERS) {
+  if (entries.length > cfg.maxMemoryUsers) {
     entries
       .sort((a, b) => Number(a[1]?.updatedAt || 0) - Number(b[1]?.updatedAt || 0))
-      .slice(0, entries.length - MAX_MEMORY_USERS)
+      .slice(0, entries.length - cfg.maxMemoryUsers)
       .forEach(([oldKey]) => delete root.users[oldKey]);
   }
 
   volatileMemoryRoot = root;
   return writeStore("memory", root) || true;
+}
+
+function forgetUserMemory(guildId = "", userId = "") {
+  const safeGuildId = cleanText(guildId);
+  const safeUserId = cleanText(userId);
+  if (!safeGuildId || !safeUserId) return false;
+  const root = getMemoryRoot();
+  const key = `${safeGuildId}:${safeUserId}`;
+  if (!root.users[key]) return false;
+  delete root.users[key];
+  volatileMemoryRoot = root;
+  return writeStore("memory", root) || true;
+}
+
+function getMemoryStats() {
+  const root = getMemoryRoot();
+  const entries = Object.values(root.users || {});
+  return {
+    users: entries.length,
+    summaries: entries.reduce((total, entry) => total + (Array.isArray(entry?.topics) ? entry.topics.length : 0), 0),
+    recentTurns: entries.reduce((total, entry) => total + (Array.isArray(entry?.recent) ? entry.recent.length : 0), 0),
+    enabled: aiBudgetConfig().memoryEnabled,
+    anonymousMemory: aiBudgetConfig().anonymousMemory
+  };
 }
 
 function buildMemoryPrompt(context = {}) {
@@ -1178,6 +1215,46 @@ function getApiKey() {
   return process.env.AI_KEY || process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_KEY || "";
 }
 
+function getAiBaseUrl() {
+  const candidate = cleanText(process.env.AI_BASE_URL || config.ai?.baseUrl || "");
+  const fallback = "https://openrouter.ai/api/v1";
+  if (!candidate) return fallback;
+  try {
+    const parsed = new URL(candidate);
+    if (!["http:", "https:"].includes(parsed.protocol)) return fallback;
+    return candidate.replace(/\/+$/, "");
+  } catch {
+    return fallback;
+  }
+}
+
+function getAiProviderName() {
+  return cleanText(config.ai?.providerName || process.env.AI_PROVIDER_NAME || (getAiBaseUrl().includes("openrouter.ai") ? "openrouter" : "custom")) || "openrouter";
+}
+
+function getAiDashboardStatus() {
+  const cfg = aiBudgetConfig();
+  return {
+    enabled: config.ai?.enabled !== false,
+    providerName: getAiProviderName(),
+    baseUrl: getAiBaseUrl(),
+    apiKeyConfigured: Boolean(getApiKey()),
+    smartModel: getSmartModel(),
+    economyModel: getEconomyModel(),
+    limit: summarizeAiLimitStatus(),
+    memory: getMemoryStats(),
+    budget: {
+      tokenBudget: cfg.tokenBudget,
+      maxReplyTokens: cfg.maxReplyTokens,
+      safeReplyTokens: cfg.safeReplyTokens,
+      cooldownUserSeconds: cfg.cooldownUserSeconds,
+      dailyLimitPerUser: cfg.dailyLimitPerUser,
+      cacheEnabled: config.ai?.localCacheEnabled !== false,
+      cacheTtlMs: getAiCacheTtlMs()
+    }
+  };
+}
+
 function normalizeModelName(value = "", fallback = "") {
   const model = cleanText(value);
   if (!model || LEGACY_MODELS.has(model)) return fallback;
@@ -1301,16 +1378,20 @@ async function finalizeReply(userText, mode, context, reply, source = "unknown",
 }
 
 async function callOpenRouter(model, payload, apiKey, userText, mode) {
+  const baseUrl = getAiBaseUrl();
+  const headers = {
+    Authorization: `Bearer ${apiKey}`,
+    "Content-Type": "application/json"
+  };
+  if (baseUrl.includes("openrouter.ai")) {
+    headers["HTTP-Referer"] = "https://github.com/baehaqieqi07-sketch/Pak-Rw";
+    headers["X-Title"] = "Pak RW Smart AI DESA TULUS";
+  }
   return axios.post(
-    "https://openrouter.ai/api/v1/chat/completions",
+    `${baseUrl}/chat/completions`,
     payload,
     {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://github.com/baehaqieqi07-sketch/Pak-Rw",
-        "X-Title": "Pak RW Smart AI DESA TULUS"
-      },
+      headers,
       timeout: isComplexRequest(userText, mode) ? 45000 : 30000
     }
   );
@@ -1423,11 +1504,17 @@ async function askAI(text, mode = "normal", context = {}) {
 module.exports = {
   askAI,
   getAiLimitState: summarizeAiLimitStatus,
+  getAiDashboardStatus,
+  forgetUserMemory,
   resetAiLimitState,
   classifyAiError,
   estimateTokens,
   __test: {
     normalizeAiContext,
+    getAiBaseUrl,
+    getAiDashboardStatus,
+    forgetUserMemory,
+    getMemoryStats,
     scopedUserKey,
     getUserMemory,
     persistUserTurn,
