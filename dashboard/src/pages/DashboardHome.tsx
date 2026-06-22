@@ -1,28 +1,27 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  Activity, ArrowRight, BarChart3, Bot, BrainCircuit, CheckCircle2, Clock3, Database,
-  FileText, Gauge, Medal, Search, Server, Settings2, Trophy, UserPlus, Users
+  Activity, ArrowRight, Bot, BrainCircuit, CheckCircle2, Database,
+  FileText, Gauge, Search, Server, Settings2, ShieldCheck, UserPlus, Users
 } from "lucide-react";
 import type { BootstrapData } from "../app/types";
 import { Card, CardHeader } from "../components/ui/Card";
-import { StatusBadge } from "../components/ui/StatusBadge";
 import { features } from "../lib/features";
 
 function formatUptime(totalSeconds: number) {
   const days = Math.floor(totalSeconds / 86400);
   const hours = Math.floor((totalSeconds % 86400) / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
-  if (days) return `${days} hari ${hours} jam`;
-  if (hours) return `${hours} jam ${minutes} menit`;
-  return `${minutes} menit`;
+  if (days) return `${days}d ${hours}h`;
+  if (hours) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
 }
 
 const quickActions = [
-  { to: "/manage/welcome", label: "Kelola Welcome", helper: "Channel, role, dan embed", icon: UserPlus },
-  { to: "/manage/ai", label: "Kelola AI Pak RW", helper: "Model hemat dan channel AI", icon: BrainCircuit },
-  { to: "/manage/embed", label: "Buka Embed Builder", helper: "Edit dan kirim tes", icon: FileText },
-  { to: "/channel-manager", label: "Sinkronkan Discord", helper: "Pilih channel berdasarkan nama", icon: Server }
+  { to: "/manage/welcome", label: "Welcome", helper: "Pesan & role", icon: UserPlus },
+  { to: "/manage/ai", label: "AI Pak RW", helper: "Model & channel", icon: BrainCircuit },
+  { to: "/manage/embed", label: "Embed Builder", helper: "Buat & preview", icon: FileText },
+  { to: "/channel-manager", label: "Discord", helper: "Sinkronkan target", icon: Server }
 ];
 
 const GROUPS = ["Semua", "Komunitas", "Keterlibatan", "Level & Aktivitas", "Keanggotaan", "Konten", "Administrasi", "Sistem"];
@@ -31,15 +30,12 @@ export function DashboardHome({ data }: { data: BootstrapData }) {
   const cfg = data.config || {};
   const [featureQuery, setFeatureQuery] = useState("");
   const [featureGroup, setFeatureGroup] = useState("Semua");
+
   const stats = [
-    { label: "Bot Status", value: data.status.botOnline ? "Online" : "Offline", helper: data.status.botTag || "Discord belum terhubung", icon: Bot, tone: data.status.botOnline ? "success" : "danger" },
-    { label: "Total Warga", value: data.guild ? data.guild.memberCount.toLocaleString("id-ID") : "Belum tersedia", helper: data.guild?.name || "Menunggu server", icon: Users, tone: "neutral" },
-    { label: "Fitur Aktif", value: `${data.status.activeFeatureCount}/${data.status.totalFeatureCount}`, helper: "Berdasarkan config saat ini", icon: Gauge, tone: "success" },
-    { label: "Database", value: data.status.databaseMode, helper: data.status.databaseMode.includes("Mongo") ? "Penyimpanan utama aktif" : "Periksa koneksi MongoDB", icon: Database, tone: data.status.databaseMode.includes("Mongo") ? "success" : "warning" },
-    { label: "Uptime", value: formatUptime(data.status.uptimeSeconds), helper: "Sejak proses terakhir dimulai", icon: Clock3, tone: "neutral" },
-    { label: "Top Aktif", value: cfg.topActive?.enabled === false ? "Nonaktif" : "Aktif", helper: `${String(cfg.topActive?.dailyPostHourWIB ?? 0).padStart(2, "0")}.00 WIB`, icon: Trophy, tone: cfg.topActive?.enabled === false ? "warning" : "success" },
-    { label: "Papan Aktif", value: cfg.leaderboardAktif?.enabled === false ? "Nonaktif" : "Lifetime", helper: "Tidak ikut reset siklus", icon: Medal, tone: cfg.leaderboardAktif?.enabled === false ? "warning" : "success" },
-    { label: "MOTM Threshold", value: Number(cfg.level?.cycleResetAtPoints || cfg.topActive?.pointsThreshold || 100000).toLocaleString("id-ID"), helper: "Poin siklus untuk role MOTM", icon: BarChart3, tone: "neutral" }
+    { label: "Bot", value: data.status.botOnline ? "Online" : "Offline", helper: data.status.botTag || "Belum terhubung", icon: Bot, tone: data.status.botOnline ? "success" : "danger" },
+    { label: "Members", value: data.guild ? data.guild.memberCount.toLocaleString("id-ID") : "—", helper: data.guild?.name || "Server belum terbaca", icon: Users, tone: "neutral" },
+    { label: "Fitur aktif", value: `${data.status.activeFeatureCount}/${data.status.totalFeatureCount}`, helper: "Konfigurasi berjalan", icon: Gauge, tone: "success" },
+    { label: "Database", value: data.status.databaseMode.includes("Mongo") ? "Connected" : "Local", helper: data.status.databaseMode, icon: Database, tone: data.status.databaseMode.includes("Mongo") ? "success" : "warning" }
   ];
 
   const visibleFeatures = useMemo(() => features
@@ -48,89 +44,78 @@ export function DashboardHome({ data }: { data: BootstrapData }) {
     .filter((feature) => `${feature.name} ${feature.description}`.toLowerCase().includes(featureQuery.trim().toLowerCase())), [featureGroup, featureQuery]);
 
   const warnings = [
-    !cfg.welcome?.channelId ? "Channel Welcome belum dipilih" : null,
-    !cfg.welcome?.memberRoleId ? "Role Member Tulus belum dipilih" : null,
-    !cfg.leaderboardAktif?.channelId ? "Channel Papan Aktif Lifetime belum dipilih" : null,
-    data.status.databaseMode.includes("Mongo") ? null : "MongoDB belum menjadi penyimpanan utama"
-  ].filter(Boolean) as string[];
+    !cfg.welcome?.channelId ? { label: "Channel Welcome", to: "/manage/welcome" } : null,
+    !cfg.welcome?.memberRoleId ? { label: "Role Member", to: "/manage/welcome" } : null,
+    !cfg.leaderboardAktif?.channelId ? { label: "Channel Papan Aktif", to: "/manage/papan-aktif" } : null,
+    data.status.databaseMode.includes("Mongo") ? null : { label: "Koneksi MongoDB", to: "/logs" }
+  ].filter(Boolean) as Array<{ label: string; to: string }>;
 
   return (
-    <div className="page-stack page-enter">
-      <section className="home-hero home-hero-final">
+    <div className="page-stack page-enter dashboard-premium-home">
+      <section className="home-hero premium-hero">
         <div className="hero-content">
-          <div className="hero-eyebrow">Village Control Center</div>
-          <h1>Pak RW Control Center</h1>
-          <p>Balai Warga Digital DESA TULUS untuk mengatur fitur, channel, role, embed, dan kesehatan bot dari satu tempat yang tenang dan jelas.</p>
-          <div className="hero-badges">
-            <StatusBadge label={data.status.botOnline ? "Bot online" : "Bot offline"} tone={data.status.botOnline ? "success" : "danger"} />
-            <StatusBadge label={data.guild?.name || "DESA TULUS"} />
-            <StatusBadge label={`Prefix ${data.status.prefix}`} />
-            <StatusBadge label={data.status.databaseMode} tone={data.status.databaseMode.includes("Mongo") ? "success" : "warning"} />
-          </div>
+          <div className="hero-eyebrow"><span /> PAK RW CONTROL CENTER</div>
+          <h1>Kelola semuanya.<br /><em>Tetap sederhana.</em></h1>
+          <p>Fitur, member, dan operasional DESA TULUS dalam satu dashboard.</p>
           <div className="hero-actions">
-            <Link to="/manage/welcome" className="button button-primary"><Settings2 size={18} />Mulai kelola</Link>
-            <Link to="/channel-manager" className="button button-secondary"><Server size={18} />Pilih channel Discord</Link>
+            <Link to="/manage/welcome" className="button button-primary"><Settings2 size={17} />Kelola bot</Link>
+            <Link to="/activity" className="button button-secondary"><Activity size={17} />Lihat aktivitas</Link>
           </div>
         </div>
-        <div className="hero-runtime-panel hero-runtime-panel-final">
-          <div className="runtime-panel-head"><span>Ringkasan server</span><StatusBadge label={data.status.environment} /></div>
-          <dl>
-            <div><dt>Server</dt><dd>{data.guild?.name || "Belum terbaca"}</dd></div>
-            <div><dt>Bot</dt><dd>{data.status.botTag || "Belum login"}</dd></div>
-            <div><dt>Versi</dt><dd>v{data.status.version}</dd></div>
-            <div><dt>Prefix</dt><dd>{data.status.prefix}</dd></div>
-          </dl>
-          <div className="hero-health"><CheckCircle2 size={17} /><span>{warnings.length ? `${warnings.length} setting perlu diperiksa` : "Semua setting utama siap"}</span></div>
+
+        <div className="premium-ops-card">
+          <div className="premium-ops-head"><div><span>System status</span><strong>{warnings.length ? `${warnings.length} perlu dicek` : "All systems operational"}</strong></div><span className={`ops-pulse ${warnings.length ? "is-warning" : ""}`} /></div>
+          <div className="premium-ops-list">
+            <div><span>Runtime</span><strong>{formatUptime(data.status.uptimeSeconds)}</strong></div>
+            <div><span>Environment</span><strong>{data.status.environment}</strong></div>
+            <div><span>Version</span><strong>v{data.status.version}</strong></div>
+            <div><span>Prefix</span><strong>{data.status.prefix}</strong></div>
+          </div>
         </div>
       </section>
 
-      <section>
-        <div className="section-heading"><div><span>Overview</span><h2>Status Balai Warga Digital</h2></div><p>Semua nilai dibaca dari proses Pak RW dan config aktif.</p></div>
-        <div className="stats-grid">
-          {stats.map((stat) => {
-            const Icon = stat.icon;
-            return <Card key={stat.label} className="stat-card"><div className="stat-icon"><Icon size={20} /></div><div className="stat-copy"><span>{stat.label}</span><strong>{stat.value}</strong><small>{stat.helper}</small></div><span className={`stat-signal stat-${stat.tone}`} /></Card>;
-          })}
-        </div>
-      </section>
+      <div className="stats-grid premium-stats-grid">
+        {stats.map((stat) => {
+          const Icon = stat.icon;
+          return <Card key={stat.label} className="stat-card premium-stat-card"><div className="stat-icon"><Icon size={19} /></div><div className="stat-copy"><span>{stat.label}</span><strong>{stat.value}</strong><small>{stat.helper}</small></div><span className={`stat-signal stat-${stat.tone}`} /></Card>;
+        })}
+      </div>
 
-      <section className="home-grid-two home-grid-balanced">
-        <Card>
-          <CardHeader title="Aksi cepat" description="Buka pekerjaan paling sering tanpa mencari menu." />
-          <div className="quick-action-grid quick-action-grid-final">
-            {quickActions.map((action) => { const Icon = action.icon; return <Link key={action.to} to={action.to} className="quick-action quick-action-final"><span><Icon size={19} /></span><div><strong>{action.label}</strong><small>{action.helper}</small></div><ArrowRight size={16} /></Link>; })}
+      <section className="premium-command-grid">
+        <Card className="premium-quick-card">
+          <CardHeader title="Quick actions" description="Akses yang paling sering digunakan." />
+          <div className="quick-action-grid premium-quick-grid">
+            {quickActions.map((action) => { const Icon = action.icon; return <Link key={action.to} to={action.to} className="quick-action premium-quick-action"><span><Icon size={18} /></span><div><strong>{action.label}</strong><small>{action.helper}</small></div><ArrowRight size={15} /></Link>; })}
           </div>
         </Card>
-        <Card>
-          <CardHeader title={warnings.length ? "Perlu diperiksa" : "Konfigurasi utama siap"} description={warnings.length ? "Lengkapi bagian berikut agar semua fitur bekerja." : "Tidak ada peringatan utama pada config."} />
-          {warnings.length ? <div className="attention-list">{warnings.map((warning) => <Link key={warning} to={warning.includes("Welcome") || warning.includes("Member") ? "/manage/welcome" : warning.includes("Papan") ? "/manage/papan-aktif" : "/logs"}><span /><strong>{warning}</strong><ArrowRight size={15} /></Link>)}</div> : <div className="success-empty"><CheckCircle2 size={28} /><strong>Semua siap</strong><span>Channel utama, role, dan database sudah terbaca.</span></div>}
+
+        <Card className="premium-readiness-card">
+          <CardHeader title="Readiness" description={warnings.length ? "Beberapa konfigurasi belum lengkap." : "Konfigurasi utama siap."} />
+          {warnings.length ? <div className="attention-list premium-attention-list">{warnings.map((warning) => <Link key={warning.label} to={warning.to}><span /><strong>{warning.label}</strong><ArrowRight size={15} /></Link>)}</div> : <div className="premium-ready"><ShieldCheck size={25} /><div><strong>Ready</strong><span>Konfigurasi utama lengkap.</span></div></div>}
         </Card>
       </section>
 
-      <section>
-        <div className="section-heading"><div><span>Feature Center</span><h2>Kelola fitur Pak RW</h2></div><p>Cari atau pilih kelompok supaya daftar fitur tidak menumpuk.</p></div>
-        <div className="feature-toolbar">
-          <div className="feature-search"><Search size={18} /><input value={featureQuery} onChange={(event) => setFeatureQuery(event.target.value)} placeholder="Cari fitur, misalnya Welcome atau Top Aktif" /></div>
+      <section className="premium-feature-section">
+        <div className="section-heading premium-section-heading"><div><span>Modules</span><h2>Kelola fitur</h2></div><p>{visibleFeatures.length} modul tersedia</p></div>
+        <div className="feature-toolbar premium-feature-toolbar">
+          <div className="feature-search"><Search size={17} /><input value={featureQuery} onChange={(event) => setFeatureQuery(event.target.value)} placeholder="Cari modul" /></div>
           <div className="feature-filters">{GROUPS.map((group) => <button key={group} className={featureGroup === group ? "is-active" : ""} onClick={() => setFeatureGroup(group)}>{group}</button>)}</div>
         </div>
-        <div className="feature-grid feature-grid-final">
+        <div className="feature-grid premium-feature-grid">
           {visibleFeatures.map((feature) => {
             const Icon = feature.icon;
             const enabled = feature.configPath ? readPath(cfg, feature.configPath) !== false : true;
             const path = feature.slug === "channel-manager" ? "/channel-manager" : feature.slug === "role-manager" ? "/role-manager" : feature.slug === "command-center" ? "/command-center" : feature.slug === "permission-center" ? "/permission-center" : feature.slug === "logs-health" ? "/logs" : feature.slug === "backup-center" ? "/backup" : feature.slug === "banner" ? "/banner-manager" : `/manage/${feature.slug}`;
-            return <Card key={feature.slug} className="feature-card feature-card-final"><div className="feature-card-top"><span className="feature-icon"><Icon size={21} /></span><StatusBadge label={enabled ? "Aktif" : "Nonaktif"} tone={enabled ? "success" : "warning"} /></div><h3>{feature.name}</h3><p>{feature.description}</p><div className="feature-card-foot"><small>{feature.group}</small><Link to={path} className="manage-link">Kelola<ArrowRight size={15} /></Link></div></Card>;
+            return <Link to={path} key={feature.slug} className="premium-feature-card"><div className="feature-card-top"><span className="feature-icon"><Icon size={20} /></span><span className={`module-state ${enabled ? "is-active" : ""}`}>{enabled ? "Active" : "Off"}</span></div><div><h3>{feature.name}</h3><p>{feature.description}</p></div><div className="feature-card-foot"><small>{feature.group}</small><ArrowRight size={15} /></div></Link>;
           })}
-          {!visibleFeatures.length ? <div className="empty-state feature-empty"><Search size={26} /><strong>Fitur tidak ditemukan</strong><span>Coba kata kunci atau kelompok lain.</span></div> : null}
+          {!visibleFeatures.length ? <div className="empty-state feature-empty"><Search size={24} /><strong>Modul tidak ditemukan</strong><span>Coba kata kunci lain.</span></div> : null}
         </div>
       </section>
 
-      <section className="home-grid-two">
-        <Card>
-          <CardHeader title="Aktivitas terakhir" description="Perubahan dashboard dan aksi terbaru." action={<Link to="/activity" className="text-link">Lihat semua</Link>} />
-          <div className="activity-list">{data.activity?.length ? data.activity.slice(0, 6).map((item, index) => <div className="activity-item" key={`${item.at}-${index}`}><span className="activity-marker" /><div><strong>{item.title}</strong><small>{item.detail || "Perubahan dashboard"}</small></div><time>{new Date(item.at).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</time></div>) : <div className="empty-state"><Activity size={24} /><strong>Belum ada aktivitas</strong><span>Aktivitas simpan dan kirim tes akan tampil di sini.</span></div>}</div>
-        </Card>
-        <Card><CardHeader title="Panduan singkat" description="Alur yang sama dipakai di semua Manage Page." /><div className="flow-list flow-list-final"><div><span>1</span><p><strong>Pilih target</strong>Channel dan role langsung dari Discord.</p></div><div><span>2</span><p><strong>Edit konten</strong>Gunakan placeholder dan sisipkan data.</p></div><div><span>3</span><p><strong>Preview dan tes</strong>Simpan setelah hasilnya sesuai.</p></div></div></Card>
-      </section>
+      <Card className="premium-activity-card">
+        <CardHeader title="Recent activity" description="Perubahan terbaru di dashboard." action={<Link to="/activity" className="text-link">Lihat semua</Link>} />
+        <div className="activity-list">{data.activity?.length ? data.activity.slice(0, 5).map((item, index) => <div className="activity-item" key={`${item.at}-${index}`}><span className="activity-marker" /><div><strong>{item.title}</strong><small>{item.detail || "Perubahan dashboard"}</small></div><time>{new Date(item.at).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</time></div>) : <div className="empty-state premium-empty"><CheckCircle2 size={22} /><strong>Belum ada aktivitas</strong><span>Perubahan baru akan tampil di sini.</span></div>}</div>
+      </Card>
     </div>
   );
 }

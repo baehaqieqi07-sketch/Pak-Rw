@@ -10,7 +10,7 @@ import { StatusBadge } from "../components/ui/StatusBadge";
 import type { BootstrapData } from "../app/types";
 
 function pageTitle(pathname: string) {
-  if (pathname === "/") return ["Overview", "Dashboard"];
+  if (pathname === "/") return ["Control Center", "Overview"];
   const match = featureGroups.flatMap((group) => group.items.map((item) => ({ ...item, group: group.label }))).find((item) => pathname === item.path);
   if (match) return [match.group, match.name];
   if (pathname.startsWith("/manage/")) {
@@ -41,7 +41,7 @@ export function AppShell({ data }: { data: BootstrapData }) {
         <div className="sidebar-top">
           <Link to="/" className="brand-lockup" onClick={closeMobile}>
             <img src="/dashboard/pak-rw-mark.svg" alt="Logo Pak RW" />
-            <span className="brand-copy"><strong>Pak RW</strong><small>DESA TULUS</small></span>
+            <span className="brand-copy"><strong>Pak RW</strong><small>CONTROL CENTER</small></span>
           </Link>
           <button className="icon-button desktop-collapse" aria-label={collapsed ? "Buka sidebar" : "Tutup sidebar"} onClick={() => setCollapsed(!collapsed)}>
             {collapsed ? <PanelLeftOpen size={19} /> : <PanelLeftClose size={19} />}
@@ -51,12 +51,12 @@ export function AppShell({ data }: { data: BootstrapData }) {
 
         <div className="server-card" aria-label="Server aktif">
           <span className="server-mark"><Server size={18} /></span>
-          <span className="server-card-copy"><strong>{data.guild?.name || "DESA TULUS"}</strong><small>{data.guild ? `${data.guild.memberCount.toLocaleString("id-ID")} warga` : "Menunggu koneksi server"}</small></span>
-          <StatusBadge label={data.status.botOnline ? "Terhubung" : "Offline"} tone={data.status.botOnline ? "success" : "danger"} />
+          <span className="server-card-copy"><strong>{data.guild?.name || "DESA TULUS"}</strong><small>{data.guild ? `${data.guild.memberCount.toLocaleString("id-ID")} members` : "Server belum terhubung"}</small></span>
+          <span className={`server-state ${data.status.botOnline ? "is-online" : ""}`} title={data.status.botOnline ? "Online" : "Offline"} />
         </div>
 
         <button className="sidebar-search" onClick={() => setSearchOpen(true)}>
-          <Search size={17} /><span>Cari menu</span><kbd>Ctrl K</kbd>
+          <Search size={17} /><span>Search</span><kbd>Ctrl K</kbd>
         </button>
 
         <nav className="sidebar-nav">
@@ -80,7 +80,7 @@ export function AppShell({ data }: { data: BootstrapData }) {
         <div className="sidebar-footer">
           <div className="runtime-card">
             <span className={`runtime-indicator ${data.status.botOnline ? "is-online" : ""}`} />
-            <span><strong>{data.status.botOnline ? "Pak RW online" : "Pak RW offline"}</strong><small>{data.status.databaseMode}</small></span>
+            <span><strong>{data.status.botOnline ? "Systems operational" : "Bot offline"}</strong><small>{data.status.databaseMode}</small></span>
           </div>
           <a className="nav-item logout-link" href="/logout"><LogOut size={18} /><span>Keluar Dashboard</span></a>
         </div>
@@ -95,11 +95,10 @@ export function AppShell({ data }: { data: BootstrapData }) {
             <div className="breadcrumb"><span>{section}</span><ChevronRight size={15} /><strong>{title}</strong></div>
           </div>
           <div className="topbar-actions">
-            <button className="topbar-search-button" onClick={() => setSearchOpen(true)}><Search size={17} /><span>Cari fitur atau setting</span><kbd>Ctrl K</kbd></button>
-            <StatusBadge label={data.status.environment} tone="neutral" />
+            <button className="topbar-search-button" onClick={() => setSearchOpen(true)}><Search size={17} /><span>Cari fitur</span><kbd>Ctrl K</kbd></button>
             <StatusBadge label={data.status.botOnline ? "Bot online" : "Bot offline"} tone={data.status.botOnline ? "success" : "danger"} />
             <button className="icon-button" aria-label="Buka aktivitas terbaru" title="Aktivitas terbaru" onClick={() => navigate("/activity")}><Bell size={19} /></button>
-            <button className="quick-create" onClick={() => navigate("/manage/embed")}><Plus size={17} /><span>Buat Embed</span></button>
+            <button className="quick-create" onClick={() => navigate("/manage/embed")}><Plus size={17} /><span>Embed baru</span></button>
           </div>
         </header>
 
@@ -109,7 +108,7 @@ export function AppShell({ data }: { data: BootstrapData }) {
       {searchOpen ? (
         <div className="command-overlay" onMouseDown={() => setSearchOpen(false)}>
           <div className="command-dialog" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="command-input"><Search size={19} /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cari fitur, channel, role, atau pengaturan" /><button aria-label="Tutup" onClick={() => setSearchOpen(false)}><X size={18} /></button></div>
+            <div className="command-input"><Search size={19} /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cari fitur atau pengaturan" /><button aria-label="Tutup" onClick={() => setSearchOpen(false)}><X size={18} /></button></div>
             <div className="command-results">
               {searchResults.map((item) => {
                 const Icon = item.icon;

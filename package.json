@@ -1,6 +1,6 @@
 {
   "name": "pak-rw-desa-tulus",
-  "version": "10.10.127",
+  "version": "10.10.128",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -28,5 +28,5 @@
   "overrides": {
     "undici": "6.27.0"
   },
-  "description": "Pak RW DESA TULUS v10.10.127"
+  "description": "Pak RW DESA TULUS v10.10.128"
 }
