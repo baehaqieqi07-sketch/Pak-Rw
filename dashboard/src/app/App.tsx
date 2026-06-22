@@ -64,8 +64,8 @@ export function App() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  if (loading) return <div className="app-loading"><LoaderCircle className="spin" size={28} /><strong>Menyiapkan Balai Warga Digital</strong><span>Membaca config dan data Discord.</span></div>;
-  if (!data || error) return <div className="app-error"><AlertTriangle size={30} /><strong>Dashboard belum dapat dimuat</strong><span>{error || "Data bootstrap tidak tersedia."}</span><button className="button button-primary" onClick={() => window.location.reload()}>Muat ulang</button></div>;
+  if (loading) return <div className="app-loading"><LoaderCircle className="spin" size={28} /><strong>Pak RW Control Center</strong><span>Memuat konfigurasi Desa Tulus.</span></div>;
+  if (!data || error) return <div className="app-error"><AlertTriangle size={30} /><strong>Dashboard tidak tersedia</strong><span>{error || "Data bootstrap tidak dapat dibaca."}</span><button className="button button-primary" onClick={() => window.location.reload()}>Coba lagi</button></div>;
 
   return (
     <DashboardContext.Provider value={{ data, picker, pickerLoading, refresh, refreshPicker, notify }}>

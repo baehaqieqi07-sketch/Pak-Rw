@@ -42,7 +42,10 @@ function PickerIcon({ kind, item }: { kind: PickerKind; item?: Item }) {
     const meta = String(channel?.typeLabel || channel?.meta || "").toLowerCase();
     return meta.includes("voice") || meta.includes("stage") ? <Volume2 size={18} /> : <Hash size={18} />;
   }
-  if (kind === "role") return <Shield size={18} />;
+  if (kind === "role") {
+    const role = item as DiscordRole | undefined;
+    return <span className="role-color-dot" style={{ backgroundColor: role?.color && role.color !== "#000000" ? role.color : undefined }}><Shield size={16} /></span>;
+  }
   return <UserRound size={18} />;
 }
 
@@ -73,6 +76,17 @@ export function DiscordPicker({
   const searchRef = useRef<HTMLInputElement>(null);
   const selected = items.find((item) => item.id === value);
   const hasStoredValue = Boolean(value && !selected);
+  const selectedChannel = kind === "channel" ? selected as DiscordChannel | undefined : undefined;
+  const selectedRole = kind === "role" ? selected as DiscordRole | undefined : undefined;
+  const selectedChannelMeta = String(selectedChannel?.typeLabel || selectedChannel?.meta || "").toLowerCase();
+  const permissionRelevant = selectedChannel && !/voice|stage|category/i.test(selectedChannelMeta);
+  const missingPermissions = permissionRelevant && selectedChannel?.permissionStatus ? [
+    !selectedChannel.permissionStatus.view ? "View Channel" : null,
+    !selectedChannel.permissionStatus.send ? "Send Messages" : null,
+    !selectedChannel.permissionStatus.embed ? "Embed Links" : null,
+    !selectedChannel.permissionStatus.attach ? "Attach Files" : null,
+    !selectedChannel.permissionStatus.history ? "Read Message History" : null
+  ].filter(Boolean) as string[] : [];
 
   const grouped = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -168,7 +182,7 @@ export function DiscordPicker({
                       aria-selected={item.id === value}
                     >
                       <span className="picker-option-icon"><PickerIcon kind={kind} item={item} /></span>
-                      <span className="picker-option-copy"><strong>{labelOf(kind, item)}</strong><small>{metaOf(kind, item)}</small></span>
+                      <span className="picker-option-copy"><strong>{labelOf(kind, item)}</strong><small>{metaOf(kind, item)}</small><span className="picker-option-id">ID {item.id}</span>{kind === "role" && (item as DiscordRole).managed ? <span className="picker-option-warning">Managed / bot role</span> : null}{kind === "role" && (item as DiscordRole).aboveBot ? <span className="picker-option-warning">Di atas role bot</span> : null}{kind === "role" && (item as DiscordRole).sensitivePermissions?.length ? <span className="picker-option-warning">{(item as DiscordRole).sensitivePermissions!.join(", ")}</span> : null}</span>
                       {item.id === value ? <Check size={18} /> : null}
                     </button>
                   ))}
@@ -179,6 +193,9 @@ export function DiscordPicker({
           </div>
         </>
       ) : null}
+      {selectedRole?.aboveBot ? <small className="field-warning">Role bot berada di bawah role ini. Pak RW tidak dapat mengelolanya sampai hierarchy diperbaiki.</small> : null}
+      {selectedRole?.sensitivePermissions?.length ? <small className="field-warning">Role memiliki izin sensitif: {selectedRole.sensitivePermissions.join(", ")}.</small> : null}
+      {missingPermissions.length ? <small className="field-warning">Bot kehilangan izin: {missingPermissions.join(", ")}.</small> : null}
       {helper ? <small className="field-helper">{helper}</small> : null}
     </div>
   );

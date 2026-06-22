@@ -7,6 +7,7 @@ export type DiscordChannel = {
   category?: string;
   rawName?: string;
   mention?: string;
+  permissionStatus?: { view: boolean; send: boolean; embed: boolean; attach: boolean; history: boolean } | null;
 };
 
 export type DiscordRole = {
@@ -17,6 +18,8 @@ export type DiscordRole = {
   managed?: boolean;
   rawName?: string;
   mention?: string;
+  aboveBot?: boolean;
+  sensitivePermissions?: string[];
 };
 
 export type DiscordUser = {
@@ -52,6 +55,35 @@ export type DashboardStatus = {
   version: string;
   prefix: string;
   environment: string;
+  pingMs: number | null;
+  lastConfigSaveAt: string | null;
+  lastBackupAt: string | null;
+  dashboardBuildReady: boolean;
+  assetFoldersReady: boolean;
+};
+
+export type DashboardHealth = {
+  ok: boolean;
+  botOnline: boolean;
+  databaseMode: string;
+  dashboardBuild: boolean;
+  dashboardEnabled: boolean;
+  uptimeSeconds: number;
+  pingMs: number | null;
+  configReadable: boolean;
+  assetFoldersReady: boolean;
+  checkedAt: string;
+};
+
+export type LeaderboardPreviewRow = {
+  rank: number;
+  userId: string;
+  displayName: string;
+  username: string;
+  points: number;
+  level: number;
+  avatarUrl: string;
+  avatarReady: boolean;
 };
 
 export type BootstrapData = {

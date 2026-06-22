@@ -8,6 +8,7 @@ import { useDashboard } from "../../app/DashboardContext";
 import type { EmbedDraft } from "../../app/types";
 import { DiscordPicker } from "../../components/pickers/DiscordPicker";
 import { EmbedBuilder } from "../../components/embed/EmbedBuilder";
+import { LeaderboardPreview } from "../../components/leaderboard/LeaderboardPreview";
 import { Button } from "../../components/ui/Button";
 import { Card, CardHeader } from "../../components/ui/Card";
 import { StatusBadge } from "../../components/ui/StatusBadge";
@@ -25,6 +26,18 @@ const tabs = [
 ] as const;
 
 type TabId = typeof tabs[number]["id"];
+const TAB_LABELS: Record<string, Partial<Record<TabId, string>>> = {
+  welcome: { general: "General", content: "Message", targets: "Role & Channel", embed: "Preview" },
+  level: { general: "General & XP", targets: "Level Channel", content: "Variables", embed: "Level Up Embed", permissions: "Tools & Izin" },
+  "top-aktif": { general: "General & Schedule", targets: "Target", content: "Format", embed: "Preview" },
+  "papan-aktif": { general: "General & Image", targets: "Target", content: "Preview & Data", embed: "Embed Format", permissions: "Advanced" },
+  donatur: { general: "General", targets: "Roles", content: "Variables", embed: "Embed Info" },
+  juragan: { general: "General", targets: "Roles & Channels", content: "Variables", embed: "Embed Info" },
+  saran: { general: "General & Panel", targets: "Target", content: "Variables", embed: "Result & Preview" },
+  curhat: { general: "General", targets: "Target", content: "Safety", embed: "Panel & Preview" },
+  "curhat-anonim": { general: "General", targets: "Target", content: "Safety", embed: "Panel & Preview" },
+  embed: { general: "Template", targets: "Test Channel", content: "Variables", embed: "Builder & Preview" }
+};
 type Binding = {
   key: string;
   path?: string;
@@ -146,6 +159,7 @@ export function ManagePage() {
   const requiredBindings = bindings.filter((binding) => binding.required);
   const completedRequired = requiredBindings.filter((binding) => Boolean(targets[binding.key])).length;
   const configComplete = requiredBindings.length === completedRequired;
+  const visibleTabs = useMemo(() => tabs.map((item) => ({ ...item, label: TAB_LABELS[slug]?.[item.id] || item.label })), [slug]);
 
   useEffect(() => {
     setTab(slug === "embed" ? "embed" : "general");
@@ -456,7 +470,7 @@ export function ManagePage() {
       </section>
 
       <div className="manage-tabs" role="tablist">
-        {tabs.map((item) => {
+        {visibleTabs.map((item) => {
           const Icon = item.icon;
           return <button key={item.id} className={tab === item.id ? "is-active" : ""} onClick={() => setTab(item.id)}><Icon size={17} />{item.label}</button>;
         })}
@@ -596,7 +610,7 @@ export function ManagePage() {
         </div>
       ) : null}
 
-      {tab === "content" ? (
+      {tab === "content" ? (<>
         <div className="manage-layout">
           <Card><CardHeader title="Template aktif" description="Pilih template yang akan diedit." />
             {slug === "embed" ? <div className="form-field"><label>Template embed</label><select value={embedKey} onChange={(event) => setEmbedKey(event.target.value)}>{availableEmbedKeys.map((key) => <option key={key} value={key}>{key}</option>)}</select></div> : <div className="template-summary"><span>Template</span><strong>{embedKey}</strong><small>Disimpan pada config.embeds.{embedKey}</small></div>}
@@ -604,7 +618,8 @@ export function ManagePage() {
           <Card><CardHeader title="Placeholder cepat" description="Klik token untuk menyalin, lalu tempel ke editor." /><div className="placeholder-shortcuts">{["{user}", "{displayName}", "{memberTulusRole}", "{rulesChannel}", "{chatWargaChannel}", "{memberCount}", "{level}", "{lifetimeTotal}", "{month}", "{year}"].map((token) => <button key={token} onClick={() => navigator.clipboard.writeText(token)}>{token}</button>)}</div><a className="text-link" href="/dashboard/placeholder-center">Buka Placeholder Center lengkap</a></Card>
           <Card className="full-span-card"><CardHeader title="Langsung edit di pratinjau" description="Semua field konten tersedia pada tab Embed & Preview." action={<Button icon={<Wand2 size={16} />} onClick={() => setTab("embed")}>Buka editor</Button>} /><div className="info-panel"><Sparkles size={19} /><p>Gunakan menu Sisipkan Data pada editor untuk memilih channel, role, user, atau placeholder tanpa mengetik manual.</p></div></Card>
         </div>
-      ) : null}
+        {slug === "papan-aktif" ? <LeaderboardPreview /> : null}
+      </>) : null}
 
       {tab === "embed" ? <EmbedBuilder value={embed} onChange={(next) => { setEmbed(next); setDirty(true); }} picker={picker} onSave={saveSettings} onTest={testEmbed} saving={saving} channelMissing={!primaryChannelId && bindings.some((binding) => binding.kind === "channel" && binding.required)} /> : null}
 

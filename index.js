@@ -10573,6 +10573,7 @@ function pakRwRoleSelect(name, label, selected = "", guild, helper = "") {
 
 
 function pakRwDiscordPickerPayload(guild) {
+  const botMember = guild?.members?.me || null;
   const channelTypeLabel = (type) => ({
     [ChannelType.GuildText]: "Text Channel",
     [ChannelType.GuildVoice]: "Voice Channel",
@@ -10592,7 +10593,9 @@ function pakRwDiscordPickerPayload(guild) {
           if (aParent !== bParent) return aParent - bParent;
           return (a.rawPosition || 0) - (b.rawPosition || 0);
         })
-        .map((ch) => ({
+        .map((ch) => {
+          const permissions = botMember && ch.permissionsFor ? ch.permissionsFor(botMember) : null;
+          return ({
           id: ch.id,
           name: ch.name,
           rawName: ch.name,
@@ -10602,8 +10605,15 @@ function pakRwDiscordPickerPayload(guild) {
           meta: channelTypeLabel(ch.type),
           category: ch.parent?.name || (ch.type === ChannelType.GuildCategory ? "Category" : "Tanpa kategori"),
           parentId: ch.parentId || "",
-          position: ch.rawPosition || 0
-        }))
+          position: ch.rawPosition || 0,
+          permissionStatus: permissions ? {
+            view: permissions.has(PermissionsBitField.Flags.ViewChannel),
+            send: permissions.has(PermissionsBitField.Flags.SendMessages),
+            embed: permissions.has(PermissionsBitField.Flags.EmbedLinks),
+            attach: permissions.has(PermissionsBitField.Flags.AttachFiles),
+            history: permissions.has(PermissionsBitField.Flags.ReadMessageHistory)
+          } : null
+        }); })
     : [];
 
   const roles = guild
@@ -10618,7 +10628,13 @@ function pakRwDiscordPickerPayload(guild) {
           meta: role.managed ? "Managed role" : "Role server",
           managed: Boolean(role.managed),
           color: role.hexColor || "",
-          position: role.position || 0
+          position: role.position || 0,
+          aboveBot: botMember ? role.position >= botMember.roles.highest.position : false,
+          sensitivePermissions: [
+            role.permissions.has(PermissionsBitField.Flags.Administrator) ? "Administrator" : null,
+            role.permissions.has(PermissionsBitField.Flags.ManageGuild) ? "Manage Server" : null,
+            role.permissions.has(PermissionsBitField.Flags.ManageRoles) ? "Manage Roles" : null
+          ].filter(Boolean)
         }))
     : [];
 
@@ -11568,6 +11584,27 @@ function dashboardSafeUrl(input = "") {
   }
 }
 
+function dashboardFileModifiedAt(filePath) {
+  try {
+    return fs.statSync(filePath).mtime.toISOString();
+  } catch {
+    return null;
+  }
+}
+
+function latestDashboardBackupAt() {
+  const backupDir = path.join(__dirname, "backups");
+  try {
+    const timestamps = fs.readdirSync(backupDir, { withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => fs.statSync(path.join(backupDir, entry.name)).mtimeMs)
+      .filter(Number.isFinite);
+    return timestamps.length ? new Date(Math.max(...timestamps)).toISOString() : null;
+  } catch {
+    return null;
+  }
+}
+
 app.use("/dashboard-public", express.static(path.join(__dirname, "dashboard", "public"), { maxAge: "1d" }));
 
 app.use("/dashboard", requireDashboardAuth, express.static(pakRwDashboardDist, {
@@ -11579,6 +11616,7 @@ app.use("/dashboard", requireDashboardAuth, express.static(pakRwDashboardDist, {
 
 app.get("/api/dashboard/bootstrap", requireDashboardAuth, (req, res) => {
   const cfg = readConfigFile();
+  const configPath = getDashboardConfigPath();
   const guild = getDashboardGuild ? getDashboardGuild() : client.guilds.cache.first();
   const featureCount = countDashboardFeatures(cfg);
   res.set("Cache-Control", "no-store");
@@ -11594,7 +11632,12 @@ app.get("/api/dashboard/bootstrap", requireDashboardAuth, (req, res) => {
       totalFeatureCount: featureCount.total,
       version: String(cfg.version || PAKRW_VERSION),
       prefix: String(cfg.prefix || "rw"),
-      environment: String(process.env.NODE_ENV || "development")
+      environment: String(process.env.NODE_ENV || "development"),
+      pingMs: client?.isReady?.() ? Math.max(0, Math.round(Number(client.ws?.ping || 0))) : null,
+      lastConfigSaveAt: dashboardFileModifiedAt(configPath),
+      lastBackupAt: latestDashboardBackupAt(),
+      dashboardBuildReady: fs.existsSync(pakRwDashboardIndex),
+      assetFoldersReady: fs.existsSync(path.join(__dirname, "assets")) && fs.existsSync(path.join(__dirname, "dashboard", "public"))
     },
     guild: guild ? { id: guild.id, name: guild.name, memberCount: guild.memberCount } : null,
     config: cfg,
@@ -11655,6 +11698,64 @@ app.post("/api/dashboard/ktp/upload", requireDashboardAuth, async (req, res) => 
     writeStore("ktpDesignAssets", assetStore);
     appendDashboardActivity("ktp", "Asset KTP diunggah", `${kind}: ${savedName} (${image.width}x${image.height})`);
     return res.json({ ok: true, path: relativePath, width: image.width, height: image.height });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message || String(err) });
+  }
+});
+
+const DASHBOARD_UPLOAD_DIR = path.join(__dirname, "assets", "dashboard-uploads");
+function safeDashboardAssetPath(input = "") {
+  const relative = String(input || "").replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!relative.startsWith("assets/dashboard-uploads/")) return "";
+  const resolved = path.resolve(__dirname, relative);
+  const root = path.resolve(DASHBOARD_UPLOAD_DIR) + path.sep;
+  return resolved.startsWith(root) ? resolved : "";
+}
+
+app.get("/api/dashboard/assets/file", requireDashboardAuth, (req, res) => {
+  const relativePath = String(req.query.path || "");
+  const filePath = safeDashboardAssetPath(relativePath);
+  if (!filePath) return res.status(404).send("Asset dashboard tidak valid.");
+  if (!fs.existsSync(filePath)) {
+    const stored = readStore("dashboardAssets", { files: {} })?.files?.[relativePath];
+    if (stored?.data) {
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, Buffer.from(stored.data, "base64"));
+    }
+  }
+  if (!fs.existsSync(filePath)) return res.status(404).send("Asset dashboard tidak ditemukan.");
+  res.setHeader("Cache-Control", "private, no-store");
+  return res.sendFile(filePath);
+});
+
+app.post("/api/dashboard/assets/upload", requireDashboardAuth, async (req, res) => {
+  try {
+    const fileName = String(req.body?.fileName || "asset.png").replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 80);
+    const dataUrl = String(req.body?.dataUrl || "");
+    const match = dataUrl.match(/^data:image\/(png|jpeg|webp|gif);base64,([A-Za-z0-9+/=]+)$/i);
+    if (!match) return res.status(400).json({ ok: false, error: "Format tidak valid. Gunakan PNG, JPG, WebP, atau GIF." });
+    const bytes = Buffer.from(match[2], "base64");
+    if (!bytes.length || bytes.length > 8 * 1024 * 1024) return res.status(400).json({ ok: false, error: "Ukuran asset harus antara 1 byte dan 8 MB." });
+    const type = match[1].toLowerCase();
+    if (type === "gif") {
+      if (bytes.subarray(0, 4).toString("ascii") !== "GIF8") return res.status(400).json({ ok: false, error: "File GIF tidak valid." });
+    } else {
+      const image = CanvasKit?.loadImage ? await CanvasKit.loadImage(bytes).catch(() => null) : null;
+      if (!image?.width || !image?.height) return res.status(400).json({ ok: false, error: "File tidak dapat dibaca sebagai gambar." });
+    }
+    fs.mkdirSync(DASHBOARD_UPLOAD_DIR, { recursive: true });
+    const extension = type === "jpeg" ? "jpg" : type;
+    const base = path.basename(fileName, path.extname(fileName)).replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 48) || "asset";
+    const savedName = `${Date.now()}-${base}.${extension}`;
+    const savedPath = path.join(DASHBOARD_UPLOAD_DIR, savedName);
+    const relativePath = `assets/dashboard-uploads/${savedName}`;
+    fs.writeFileSync(savedPath, bytes);
+    const assetStore = readStore("dashboardAssets", { files: {} }) || { files: {} };
+    assetStore.files = assetStore.files && typeof assetStore.files === "object" ? assetStore.files : {};
+    assetStore.files[relativePath] = { data: bytes.toString("base64"), mime: `image/${type}`, size: bytes.length, updatedAt: Date.now() };
+    writeStore("dashboardAssets", assetStore);
+    appendDashboardActivity("asset", "Asset dashboard diunggah", `${savedName} (${Math.ceil(bytes.length / 1024)} KB)`);
+    return res.json({ ok: true, path: relativePath, fileName: savedName, size: bytes.length, mime: `image/${type}` });
   } catch (err) {
     return res.status(500).json({ ok: false, error: err.message || String(err) });
   }
@@ -11742,6 +11843,33 @@ app.get("/api/dashboard/leaderboard/preview.png", requireDashboardAuth, async (r
   }
 });
 
+app.get("/api/dashboard/leaderboard/data-preview", requireDashboardAuth, async (req, res) => {
+  try {
+    const guild = getDashboardGuild ? getDashboardGuild() : client.guilds.cache.first();
+    if (!guild) return res.status(503).json({ ok: false, error: "Server DESA TULUS belum terbaca." });
+    const cfg = getTopActiveConfig();
+    const rawRows = getLeaderboardActiveRows(guild.id, cfg.leaderboardActiveTopLimit, guild.ownerId);
+    const rows = await hydrateLeaderboardUsers(guild, normalizeLeaderboardUsers(rawRows));
+    res.setHeader("Cache-Control", "no-store");
+    return res.json({
+      ok: true,
+      generatedAt: new Date().toISOString(),
+      rows: rows.slice(0, 10).map((row, index) => ({
+        rank: index + 1,
+        userId: String(row.userId || ""),
+        displayName: String(row.displayName || row.username || "Warga Desa").slice(0, 80),
+        username: String(row.username || "").slice(0, 80),
+        points: Math.max(0, Number(row.points || 0)),
+        level: Math.max(0, Number(row.level || 0)),
+        avatarUrl: dashboardSafeUrl(row.avatarURL || ""),
+        avatarReady: Boolean(row.avatarURL)
+      }))
+    });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message || String(err) });
+  }
+});
+
 app.put("/api/dashboard/settings", requireDashboardAuth, (req, res) => {
   try {
     const patches = Array.isArray(req.body?.patches) ? req.body.patches.slice(0, 80) : [];
@@ -11821,7 +11949,11 @@ app.get("/api/dashboard/health", requireDashboardAuth, (req, res) => {
     databaseMode: isMongoActive() ? "MongoDB" : "Local JSON fallback",
     dashboardBuild: fs.existsSync(pakRwDashboardIndex),
     dashboardEnabled: isDashboardEnabled,
-    uptimeSeconds: Math.floor(process.uptime())
+    uptimeSeconds: Math.floor(process.uptime()),
+    pingMs: client?.isReady?.() ? Math.max(0, Math.round(Number(client.ws?.ping || 0))) : null,
+    configReadable: fs.existsSync(getDashboardConfigPath()),
+    assetFoldersReady: fs.existsSync(path.join(__dirname, "assets")) && fs.existsSync(path.join(__dirname, "dashboard", "public")),
+    checkedAt: new Date().toISOString()
   });
 });
 

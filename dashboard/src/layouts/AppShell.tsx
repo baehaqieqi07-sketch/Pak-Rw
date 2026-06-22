@@ -1,13 +1,21 @@
 import { useMemo, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
-  Bell, ChevronRight, Command, LogOut, Menu, PanelLeftClose,
-  PanelLeftOpen, Plus, Search, Server, X
+  Bell, ChevronRight, Clock3, Command, LogOut, Menu, PanelLeftClose,
+  PanelLeftOpen, Plus, RefreshCcw, Search, Server, UserRound, X
 } from "lucide-react";
 import { featureGroups } from "../lib/features";
 import { VillageBackdrop } from "../components/background/VillageBackdrop";
 import { StatusBadge } from "../components/ui/StatusBadge";
 import type { BootstrapData } from "../app/types";
+import { useDashboard } from "../app/DashboardContext";
+
+function compactUptime(totalSeconds: number) {
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  return days ? `${days}d ${hours}h` : hours ? `${hours}h ${minutes}m` : `${minutes}m`;
+}
 
 function pageTitle(pathname: string) {
   if (pathname === "/") return ["Control Center", "Overview"];
@@ -22,10 +30,12 @@ function pageTitle(pathname: string) {
 }
 
 export function AppShell({ data }: { data: BootstrapData }) {
+  const { refresh } = useDashboard();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const [section, title] = pageTitle(location.pathname);
@@ -33,6 +43,10 @@ export function AppShell({ data }: { data: BootstrapData }) {
   const searchResults = allItems.filter((item) => `${item.name} ${item.group}`.toLowerCase().includes(query.toLowerCase())).slice(0, 10);
 
   const closeMobile = () => setMobileOpen(false);
+  const refreshDashboard = async () => {
+    setRefreshing(true);
+    try { await refresh(); } finally { setRefreshing(false); }
+  };
 
   return (
     <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""}`}>
@@ -92,13 +106,18 @@ export function AppShell({ data }: { data: BootstrapData }) {
         <header className="topbar">
           <div className="topbar-left">
             <button className="icon-button mobile-menu" aria-label="Buka menu" onClick={() => setMobileOpen(true)}><Menu size={21} /></button>
+            <div className="topbar-product"><img src="/dashboard/pak-rw-mark.svg" alt="" /><span><strong>Pak RW Control Center</strong><small>{data.guild?.name || "DESA TULUS"}</small></span></div>
+            <span className="topbar-divider" />
             <div className="breadcrumb"><span>{section}</span><ChevronRight size={15} /><strong>{title}</strong></div>
           </div>
           <div className="topbar-actions">
             <button className="topbar-search-button" onClick={() => setSearchOpen(true)}><Search size={17} /><span>Cari fitur</span><kbd>Ctrl K</kbd></button>
             <StatusBadge label={data.status.botOnline ? "Bot online" : "Bot offline"} tone={data.status.botOnline ? "success" : "danger"} />
+            <span className="runtime-summary"><Clock3 size={14} />{data.status.pingMs != null ? `${data.status.pingMs} ms` : compactUptime(data.status.uptimeSeconds)}</span>
+            <button className="icon-button" aria-label="Refresh dashboard" title="Refresh dashboard" onClick={refreshDashboard} disabled={refreshing}><RefreshCcw className={refreshing ? "spin" : ""} size={18} /></button>
             <button className="icon-button" aria-label="Buka aktivitas terbaru" title="Aktivitas terbaru" onClick={() => navigate("/activity")}><Bell size={19} /></button>
             <button className="quick-create" onClick={() => navigate("/manage/embed")}><Plus size={17} /><span>Embed baru</span></button>
+            <div className="admin-session" title="Sesi dashboard aktif"><UserRound size={15} /><span>{String(data.config.ownerName || "Admin")}</span></div>
           </div>
         </header>
 

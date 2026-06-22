@@ -1,12 +1,14 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  Activity, ArrowRight, Bot, BrainCircuit, CheckCircle2, Database,
-  FileText, Gauge, Search, Server, Settings2, ShieldCheck, UserPlus, Users
+  Activity, ArrowRight, Bot, CheckCircle2, Clock3, Database, DatabaseBackup,
+  FileText, Gauge, HeartPulse, RefreshCcw, Save, Search, Settings2, UserPlus, Users
 } from "lucide-react";
-import type { BootstrapData } from "../app/types";
+import type { BootstrapData, DashboardHealth } from "../app/types";
 import { Card, CardHeader } from "../components/ui/Card";
 import { features } from "../lib/features";
+import { api } from "../lib/api";
+import { useDashboard } from "../app/DashboardContext";
 
 function formatUptime(totalSeconds: number) {
   const days = Math.floor(totalSeconds / 86400);
@@ -17,25 +19,46 @@ function formatUptime(totalSeconds: number) {
   return `${minutes}m`;
 }
 
-const quickActions = [
-  { to: "/manage/welcome", label: "Welcome", helper: "Pesan & role", icon: UserPlus },
-  { to: "/manage/ai", label: "AI Pak RW", helper: "Model & channel", icon: BrainCircuit },
-  { to: "/manage/embed", label: "Embed Builder", helper: "Buat & preview", icon: FileText },
-  { to: "/channel-manager", label: "Discord", helper: "Sinkronkan target", icon: Server }
-];
-
 const GROUPS = ["Semua", "Komunitas", "Keterlibatan", "Level & Aktivitas", "Keanggotaan", "Konten", "Administrasi", "Sistem"];
 
+function formatTimestamp(value: string | null) {
+  if (!value) return "No record";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "No record" : date.toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
 export function DashboardHome({ data }: { data: BootstrapData }) {
+  const { refresh, notify } = useDashboard();
   const cfg = data.config || {};
   const [featureQuery, setFeatureQuery] = useState("");
   const [featureGroup, setFeatureGroup] = useState("Semua");
+  const [health, setHealth] = useState<DashboardHealth | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const refreshStatus = async () => {
+    setRefreshing(true);
+    try {
+      const [, nextHealth] = await Promise.all([refresh(), api.health()]);
+      setHealth(nextHealth);
+      notify("Status dashboard diperbarui.", "info");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : String(error), "error");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => { api.health().then(setHealth).catch(() => setHealth(null)); }, []);
 
   const stats = [
     { label: "Bot", value: data.status.botOnline ? "Online" : "Offline", helper: data.status.botTag || "Belum terhubung", icon: Bot, tone: data.status.botOnline ? "success" : "danger" },
+    { label: "Ping / uptime", value: data.status.pingMs != null ? `${data.status.pingMs} ms` : formatUptime(data.status.uptimeSeconds), helper: `Uptime ${formatUptime(data.status.uptimeSeconds)}`, icon: Clock3, tone: data.status.botOnline ? "success" : "neutral" },
     { label: "Members", value: data.guild ? data.guild.memberCount.toLocaleString("id-ID") : "—", helper: data.guild?.name || "Server belum terbaca", icon: Users, tone: "neutral" },
-    { label: "Fitur aktif", value: `${data.status.activeFeatureCount}/${data.status.totalFeatureCount}`, helper: "Konfigurasi berjalan", icon: Gauge, tone: "success" },
-    { label: "Database", value: data.status.databaseMode.includes("Mongo") ? "Connected" : "Local", helper: data.status.databaseMode, icon: Database, tone: data.status.databaseMode.includes("Mongo") ? "success" : "warning" }
+    { label: "Active modules", value: `${data.status.activeFeatureCount}/${data.status.totalFeatureCount}`, helper: "Konfigurasi berjalan", icon: Gauge, tone: "success" },
+    { label: "Database / config", value: data.status.databaseMode.includes("Mongo") ? "Connected" : "Local", helper: data.status.databaseMode, icon: Database, tone: data.status.databaseMode.includes("Mongo") ? "success" : "warning" },
+    { label: "Dashboard health", value: health?.ok && health.dashboardBuild ? "Healthy" : health ? "Needs check" : "Checking", helper: health?.checkedAt ? `Checked ${formatTimestamp(health.checkedAt)}` : "Health endpoint", icon: HeartPulse, tone: health?.ok && health.dashboardBuild ? "success" : "warning" },
+    { label: "Last config save", value: formatTimestamp(data.status.lastConfigSaveAt), helper: "Config file update", icon: Save, tone: data.status.lastConfigSaveAt ? "neutral" : "warning" },
+    { label: "Last backup", value: formatTimestamp(data.status.lastBackupAt), helper: data.status.lastBackupAt ? "Backup file detected" : "Backend belum aktif", icon: DatabaseBackup, tone: data.status.lastBackupAt ? "success" : "warning" }
   ];
 
   const visibleFeatures = useMemo(() => features
@@ -43,20 +66,33 @@ export function DashboardHome({ data }: { data: BootstrapData }) {
     .filter((feature) => featureGroup === "Semua" || feature.group === featureGroup)
     .filter((feature) => `${feature.name} ${feature.description}`.toLowerCase().includes(featureQuery.trim().toLowerCase())), [featureGroup, featureQuery]);
 
-  const warnings = [
-    !cfg.welcome?.channelId ? { label: "Channel Welcome", to: "/manage/welcome" } : null,
-    !cfg.welcome?.memberRoleId ? { label: "Role Member", to: "/manage/welcome" } : null,
-    !cfg.leaderboardAktif?.channelId ? { label: "Channel Papan Aktif", to: "/manage/papan-aktif" } : null,
-    data.status.databaseMode.includes("Mongo") ? null : { label: "Koneksi MongoDB", to: "/logs" }
-  ].filter(Boolean) as Array<{ label: string; to: string }>;
+  const readiness = [
+    { label: "Welcome channel", ready: Boolean(cfg.welcome?.channelId), to: "/manage/welcome" },
+    { label: "Warga role", ready: Boolean(cfg.welcome?.memberRoleId), to: "/manage/welcome" },
+    { label: "Leaderboard channel", ready: Boolean(cfg.leaderboardAktif?.channelId), to: "/manage/papan-aktif" },
+    { label: "Database / config", ready: Boolean(data.status.databaseMode), to: "/logs" },
+    { label: "Dashboard health", ready: Boolean(health?.ok && health.dashboardBuild), to: "/logs" },
+    { label: "Asset folders", ready: Boolean(data.status.assetFoldersReady), to: "/banner-manager" },
+    { label: "Embed test", ready: data.status.botOnline && Boolean(data.embeds && Object.keys(data.embeds).length), to: "/manage/embed" }
+  ];
+  const warnings = readiness.filter((item) => !item.ready);
+
+  const quickActions = [
+    { label: refreshing ? "Refreshing" : "Refresh status", helper: "Runtime & health", icon: RefreshCcw, action: refreshStatus },
+    { to: "/logs", label: "Open logs", helper: "Health checks", icon: Activity },
+    { to: "/backup", label: "Backup Center", helper: "Read-only status", icon: DatabaseBackup },
+    { to: "/manage/embed", label: "Test embed", helper: "Builder & send test", icon: FileText },
+    { to: "/manage/papan-aktif", label: "Leaderboard", helper: "Format & preview", icon: Gauge },
+    { to: "/manage/welcome", label: "Welcome", helper: "Message & role", icon: UserPlus }
+  ];
 
   return (
     <div className="page-stack page-enter dashboard-premium-home">
       <section className="home-hero premium-hero">
         <div className="hero-content">
-          <div className="hero-eyebrow"><span /> PAK RW CONTROL CENTER</div>
-          <h1>Kelola semuanya.<br /><em>Tetap sederhana.</em></h1>
-          <p>Fitur, member, dan operasional DESA TULUS dalam satu dashboard.</p>
+          <div className="hero-eyebrow"><span /> DESA TULUS BOT MANAGEMENT</div>
+          <h1>Pak RW<br /><em>Control Center</em></h1>
+          <p>Fitur, member, dan operasional server dalam satu dashboard.</p>
           <div className="hero-actions">
             <Link to="/manage/welcome" className="button button-primary"><Settings2 size={17} />Kelola bot</Link>
             <Link to="/activity" className="button button-secondary"><Activity size={17} />Lihat aktivitas</Link>
@@ -85,13 +121,13 @@ export function DashboardHome({ data }: { data: BootstrapData }) {
         <Card className="premium-quick-card">
           <CardHeader title="Quick actions" description="Akses yang paling sering digunakan." />
           <div className="quick-action-grid premium-quick-grid">
-            {quickActions.map((action) => { const Icon = action.icon; return <Link key={action.to} to={action.to} className="quick-action premium-quick-action"><span><Icon size={18} /></span><div><strong>{action.label}</strong><small>{action.helper}</small></div><ArrowRight size={15} /></Link>; })}
+            {quickActions.map((action) => { const Icon = action.icon; return action.to ? <Link key={action.label} to={action.to} className="quick-action premium-quick-action"><span><Icon size={18} /></span><div><strong>{action.label}</strong><small>{action.helper}</small></div><ArrowRight size={15} /></Link> : <button key={action.label} type="button" className="quick-action premium-quick-action" onClick={action.action} disabled={refreshing}><span><Icon className={refreshing ? "spin" : ""} size={18} /></span><div><strong>{action.label}</strong><small>{action.helper}</small></div><ArrowRight size={15} /></button>; })}
           </div>
         </Card>
 
         <Card className="premium-readiness-card">
-          <CardHeader title="Readiness" description={warnings.length ? "Beberapa konfigurasi belum lengkap." : "Konfigurasi utama siap."} />
-          {warnings.length ? <div className="attention-list premium-attention-list">{warnings.map((warning) => <Link key={warning.label} to={warning.to}><span /><strong>{warning.label}</strong><ArrowRight size={15} /></Link>)}</div> : <div className="premium-ready"><ShieldCheck size={25} /><div><strong>Ready</strong><span>Konfigurasi utama lengkap.</span></div></div>}
+          <CardHeader title="Readiness" description={warnings.length ? `${warnings.length} item perlu diperiksa.` : "Konfigurasi utama siap."} />
+          <div className="readiness-checklist">{readiness.map((item) => <Link key={item.label} to={item.to} className={item.ready ? "is-ready" : "is-warning"}><span>{item.ready ? <CheckCircle2 size={15} /> : "!"}</span><strong>{item.label}</strong><small>{item.ready ? "Ready" : "Check"}</small></Link>)}</div>
         </Card>
       </section>
 

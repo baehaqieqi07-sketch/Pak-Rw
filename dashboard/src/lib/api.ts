@@ -1,4 +1,4 @@
-import type { BootstrapData, PickerData } from "../app/types";
+import type { BootstrapData, DashboardHealth, LeaderboardPreviewRow, PickerData } from "../app/types";
 
 async function parseJson<T>(res: Response): Promise<T> {
   if (res.status === 401 || res.redirected && res.url.includes("/login")) {
@@ -31,7 +31,8 @@ export const api = {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ channelId, embed })
   })),
-  health: async () => parseJson<any>(await fetch("/api/dashboard/health", { credentials: "same-origin", cache: "no-store" })),
+  health: async () => parseJson<DashboardHealth>(await fetch("/api/dashboard/health", { credentials: "same-origin", cache: "no-store" })),
+  leaderboardDataPreview: async () => parseJson<{ ok: boolean; generatedAt: string; rows: LeaderboardPreviewRow[] }>(await fetch("/api/dashboard/leaderboard/data-preview", { credentials: "same-origin", cache: "no-store" })),
   boostStatus: async () => parseJson<any>(await fetch("/api/dashboard/boost-poin/status", { credentials: "same-origin", cache: "no-store" })),
   startBoost: async () => parseJson<{ ok: boolean; message: string; config?: Record<string, any> }>(await fetch("/api/dashboard/boost-poin/start", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: "{}" })),
   afkVoiceStatus: async () => parseJson<any>(await fetch("/api/afk-voice/status", { credentials: "same-origin", cache: "no-store" })),
@@ -41,5 +42,6 @@ export const api = {
   disconnectAfkVoice: async () => parseJson<any>(await fetch("/api/afk-voice/disconnect", { method: "POST", credentials: "same-origin" })),
   stopBoost: async () => parseJson<{ ok: boolean; message: string; config?: Record<string, any> }>(await fetch("/api/dashboard/boost-poin/stop", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: "{}" })),
   uploadKtpAsset: async (kind: "background" | "decoration", fileName: string, dataUrl: string) => parseJson<{ ok: boolean; path: string; width?: number; height?: number }>(await fetch("/api/dashboard/ktp/upload", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, fileName, dataUrl }) })),
+  uploadDashboardAsset: async (fileName: string, dataUrl: string) => parseJson<{ ok: boolean; path: string; fileName: string; size: number; mime: string }>(await fetch("/api/dashboard/assets/upload", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fileName, dataUrl }) })),
   uploadLeaderboardBackground: async (fileName: string, dataUrl: string) => parseJson<{ ok: boolean; path: string; width?: number; height?: number; config?: Record<string, any> }>(await fetch("/api/dashboard/leaderboard/upload", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fileName, dataUrl }) }))
 };

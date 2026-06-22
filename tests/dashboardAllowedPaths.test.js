@@ -38,4 +38,12 @@ for (const blocked of [
   assert.equal(isSafeDashboardPath(blocked), false, `${blocked} seharusnya ditolak`);
 }
 
+assert.match(source, /app\.get\("\/api\/dashboard\/leaderboard\/data-preview", requireDashboardAuth, async \(req, res\) => \{/, "Leaderboard data preview wajib read-only dan terproteksi auth.");
+assert.match(source, /displayName: String\(row\.displayName/, "Leaderboard preview hanya mengirim display name yang sudah dinormalisasi.");
+assert.match(source, /pingMs: client\?\.isReady/, "Bootstrap dashboard wajib memakai ping runtime nyata.");
+assert.match(source, /assetFoldersReady:/, "Bootstrap dashboard wajib melaporkan kesiapan asset tanpa membuka path rahasia.");
+assert.match(source, /permissionStatus: permissions \? \{/, "Discord picker wajib menyertakan status izin channel.");
+assert.match(source, /app\.post\("\/api\/dashboard\/assets\/upload", requireDashboardAuth, async \(req, res\) => \{/, "Upload asset dashboard wajib terproteksi auth.");
+assert.match(source, /assets\/dashboard-uploads\//, "Upload asset dashboard wajib dibatasi ke folder khusus.");
+
 console.log("✅ Dashboard KTP allowlist tests berhasil.");
